@@ -2,23 +2,35 @@
 package main
 
 import (
+	"flag"
 	"log"
-	"net/http"
+	"os"
 
-	"github.com/adam/lxcon/internal/ui"
-	"github.com/adam/lxcon/static"
-
-	"github.com/a-h/templ"
+	"github.com/adam/lxcon/internal/backend/incus"
+	"github.com/adam/lxcon/internal/server"
 )
 
 func main() {
-	mux := http.NewServeMux()
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static.FS)))
-	mux.Handle("GET /", templ.Handler(ui.InstancesPage()))
+	addr := flag.String("addr", ":8080", "address to listen on")
+	incusRemote := flag.String("incus-remote", "", "Incus CLI remote to use (defaults to current remote)")
+	flag.Parse()
 
-	const addr = ":8080"
-	log.Printf("lxcon listening on http://localhost%s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		log.Fatalf("lxcon: serve on %s: %v", addr, err)
+	if *incusRemote != "" {
+		if err := os.Setenv("LXCON_INCUS_REMOTE", *incusRemote); err != nil {
+			log.Fatalf("lxcon: set incus remote: %v", err)
+		}
+	}
+
+	b, err := incus.New()
+	if err != nil {
+		log.Fatalf("lxcon: initialize incus backend: %v", err)
+	}
+
+	srv := server.New(b)
+	srv.Addr = *addr
+
+	log.Printf("lxcon listening on http://localhost%s", *addr)
+	if err := srv.ListenAndServe(); err != nil {
+		log.Fatalf("lxcon: serve on %s: %v", *addr, err)
 	}
 }

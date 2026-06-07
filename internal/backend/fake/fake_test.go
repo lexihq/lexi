@@ -125,6 +125,30 @@ func TestSnapshots(t *testing.T) {
 	if err := b.CreateSnapshot(ctx(), "ghost", "s"); err == nil {
 		t.Fatal("expected error snapshotting missing instance")
 	}
+	if _, err := b.ListSnapshots(ctx(), "ghost"); err == nil {
+		t.Fatal("expected error listing snapshots of missing instance")
+	}
+}
+
+func TestSnapshotErrors(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	if err := b.CreateSnapshot(ctx(), "demo", "snap1"); err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+
+	// Duplicate snapshot name is rejected.
+	if err := b.CreateSnapshot(ctx(), "demo", "snap1"); err == nil {
+		t.Fatal("expected error creating duplicate snapshot")
+	}
+
+	// Restore/delete of a non-existent snapshot on an existing instance error.
+	if err := b.RestoreSnapshot(ctx(), "demo", "nope"); err == nil {
+		t.Fatal("expected error restoring missing snapshot")
+	}
+	if err := b.DeleteSnapshot(ctx(), "demo", "nope"); err == nil {
+		t.Fatal("expected error deleting missing snapshot")
+	}
 }
 
 func TestClone(t *testing.T) {

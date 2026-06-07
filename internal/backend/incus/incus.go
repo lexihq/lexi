@@ -36,4 +36,5 @@ func New() (*incusBackend, error) {
 	}, nil
 }
 
+// Capabilities reports the server info and feature flags probed at New().
 func (b *incusBackend) Capabilities() backend.Capabilities { return b.caps }

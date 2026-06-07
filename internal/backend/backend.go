@@ -14,6 +14,7 @@ type Tier string
 const (
 	TierIncus  Tier = "incus"
 	TierLiblxc Tier = "liblxc"
+	TierFake   Tier = "fake" // in-memory test double
 )
 
 // Capabilities lets the UI gracefully hide what a tier can't do.

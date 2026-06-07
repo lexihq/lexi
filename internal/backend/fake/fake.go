@@ -44,7 +44,7 @@ func (f *Fake) now() time.Time {
 
 func (f *Fake) Capabilities() backend.Capabilities {
 	return backend.Capabilities{
-		Tier:       "fake",
+		Tier:       backend.TierFake,
 		ServerInfo: "fake backend",
 		Snapshots:  true,
 		Clone:      true,
@@ -219,7 +219,9 @@ func (f *Fake) CloneInstance(_ context.Context, src, dst string) error {
 	return nil
 }
 
-// curatedImages mirrors the incus driver's v1 curated alias set.
+// curatedImages is the fake's stand-in for the v1 curated alias set the incus
+// driver will expose (debian/12, ubuntu/24.04, alpine/edge). Arch is fixed here
+// since the fake has no host to probe.
 var curatedImages = []backend.Image{
 	{Alias: "debian/12", Description: "Debian 12 (bookworm)", Arch: "arm64"},
 	{Alias: "ubuntu/24.04", Description: "Ubuntu 24.04 LTS", Arch: "arm64"},

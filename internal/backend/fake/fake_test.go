@@ -1,0 +1,200 @@
+package fake
+
+import (
+	"context"
+	"testing"
+
+	"github.com/adam/lxcon/internal/backend"
+)
+
+func ctx() context.Context { return context.Background() }
+
+func TestCapabilitiesAdvertisesSnapshotAndClone(t *testing.T) {
+	caps := New().Capabilities()
+	if !caps.Snapshots || !caps.Clone {
+		t.Fatalf("fake should support snapshots and clone, got %+v", caps)
+	}
+	if caps.ServerInfo == "" {
+		t.Fatal("ServerInfo should be set")
+	}
+}
+
+func TestCreateListGet(t *testing.T) {
+	b := New()
+
+	if list, err := b.ListInstances(ctx()); err != nil || len(list) != 0 {
+		t.Fatalf("fresh backend should be empty: list=%v err=%v", list, err)
+	}
+
+	if err := b.CreateInstance(ctx(), backend.CreateOptions{Name: "demo", Image: "debian/12"}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	list, err := b.ListInstances(ctx())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("want 1 instance, got %d", len(list))
+	}
+	got := list[0]
+	if got.Name != "demo" || got.Status != "Stopped" || got.Image != "debian/12" {
+		t.Fatalf("unexpected instance: %+v", got)
+	}
+
+	// Duplicate name is rejected.
+	if err := b.CreateInstance(ctx(), backend.CreateOptions{Name: "demo", Image: "x"}); err == nil {
+		t.Fatal("expected error creating duplicate name")
+	}
+
+	// Get on missing instance errors.
+	if _, err := b.GetInstance(ctx(), "ghost"); err == nil {
+		t.Fatal("expected error getting missing instance")
+	}
+}
+
+func TestCreateWithStartIsRunning(t *testing.T) {
+	b := New()
+	if err := b.CreateInstance(ctx(), backend.CreateOptions{Name: "web", Image: "alpine/edge", Start: true}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	inst, err := b.GetInstance(ctx(), "web")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if inst.Status != "Running" {
+		t.Fatalf("want Running, got %q", inst.Status)
+	}
+}
+
+func TestStartStop(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	if err := b.StartInstance(ctx(), "demo"); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if inst, _ := b.GetInstance(ctx(), "demo"); inst.Status != "Running" {
+		t.Fatalf("want Running after start, got %q", inst.Status)
+	}
+
+	if err := b.StopInstance(ctx(), "demo"); err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	if inst, _ := b.GetInstance(ctx(), "demo"); inst.Status != "Stopped" {
+		t.Fatalf("want Stopped after stop, got %q", inst.Status)
+	}
+
+	if err := b.StartInstance(ctx(), "missing"); err == nil {
+		t.Fatal("expected error starting missing instance")
+	}
+}
+
+func TestSnapshots(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	if err := b.CreateSnapshot(ctx(), "demo", "snap1"); err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	snaps, err := b.ListSnapshots(ctx(), "demo")
+	if err != nil {
+		t.Fatalf("list snapshots: %v", err)
+	}
+	if len(snaps) != 1 || snaps[0].Name != "snap1" {
+		t.Fatalf("unexpected snapshots: %+v", snaps)
+	}
+
+	// Snapshot count surfaces on the instance.
+	if inst, _ := b.GetInstance(ctx(), "demo"); inst.Snapshots != 1 {
+		t.Fatalf("want snapshot count 1, got %d", inst.Snapshots)
+	}
+
+	if err := b.RestoreSnapshot(ctx(), "demo", "snap1"); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	if err := b.DeleteSnapshot(ctx(), "demo", "snap1"); err != nil {
+		t.Fatalf("delete snapshot: %v", err)
+	}
+	if snaps, _ := b.ListSnapshots(ctx(), "demo"); len(snaps) != 0 {
+		t.Fatalf("want 0 snapshots after delete, got %d", len(snaps))
+	}
+
+	// Snapshot operations on a missing instance error.
+	if err := b.CreateSnapshot(ctx(), "ghost", "s"); err == nil {
+		t.Fatal("expected error snapshotting missing instance")
+	}
+}
+
+func TestClone(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	if err := b.CloneInstance(ctx(), "demo", "demo-copy"); err != nil {
+		t.Fatalf("clone: %v", err)
+	}
+	list, _ := b.ListInstances(ctx())
+	if len(list) != 2 {
+		t.Fatalf("want 2 instances after clone, got %d", len(list))
+	}
+	cp, err := b.GetInstance(ctx(), "demo-copy")
+	if err != nil {
+		t.Fatalf("get clone: %v", err)
+	}
+	if cp.Status != "Stopped" {
+		t.Fatalf("clone should be Stopped, got %q", cp.Status)
+	}
+
+	// Cloning onto an existing name errors; cloning a missing source errors.
+	if err := b.CloneInstance(ctx(), "demo", "demo-copy"); err == nil {
+		t.Fatal("expected error cloning onto existing name")
+	}
+	if err := b.CloneInstance(ctx(), "ghost", "x"); err == nil {
+		t.Fatal("expected error cloning missing source")
+	}
+}
+
+func TestDelete(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	if err := b.DeleteInstance(ctx(), "demo"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if list, _ := b.ListInstances(ctx()); len(list) != 0 {
+		t.Fatalf("want 0 instances after delete, got %d", len(list))
+	}
+
+	if err := b.DeleteInstance(ctx(), "demo"); err == nil {
+		t.Fatal("expected error deleting missing instance")
+	}
+}
+
+func TestListImagesCurated(t *testing.T) {
+	imgs, err := New().ListImages(ctx())
+	if err != nil {
+		t.Fatalf("list images: %v", err)
+	}
+	if len(imgs) == 0 {
+		t.Fatal("expected a curated image set, got none")
+	}
+	want := map[string]bool{"debian/12": false, "ubuntu/24.04": false, "alpine/edge": false}
+	for _, img := range imgs {
+		if _, ok := want[img.Alias]; ok {
+			want[img.Alias] = true
+		}
+	}
+	for alias, found := range want {
+		if !found {
+			t.Errorf("curated image %q missing from %+v", alias, imgs)
+		}
+	}
+}
+
+func mustCreate(t *testing.T, b *Fake, name string) {
+	t.Helper()
+	if err := b.CreateInstance(ctx(), backend.CreateOptions{Name: name, Image: "debian/12"}); err != nil {
+		t.Fatalf("create %s: %v", name, err)
+	}
+}

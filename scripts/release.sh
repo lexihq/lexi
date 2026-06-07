@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-# Build the single self-contained lxcon binary:
-#   templ generate -> tailwind build -> go build (CGO disabled, assets embedded).
+# Cross-build release binaries for Linux targets.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 GOPATH_BIN="$(go env GOPATH)/bin"
 export PATH="$GOPATH_BIN:$PATH"
 
-# Locate a Tailwind CLI: prefer the vendored standalone binary, then one on
-# PATH, else fall back to the node package (npx) since node is a dev dep.
 if [ -x ./bin/tailwindcss ]; then
 	TAILWIND=(./bin/tailwindcss)
 elif command -v tailwindcss >/dev/null 2>&1; then
@@ -17,13 +14,26 @@ else
 	TAILWIND=(npx --yes @tailwindcss/cli)
 fi
 
+DIST_DIR="${DIST_DIR:-dist}"
+TARGETS=("linux/amd64" "linux/arm64")
+
+mkdir -p "$DIST_DIR"
+
 echo "==> templ generate"
 templ generate
 
 echo "==> tailwind build"
 "${TAILWIND[@]}" -i internal/ui/input.css -o static/css/app.css --minify
 
-echo "==> go build"
-CGO_ENABLED=0 go build -o lxcon ./cmd/lxcon
+for target in "${TARGETS[@]}"; do
+	GOOS="${target%/*}"
+	GOARCH="${target#*/}"
+	OUT="$DIST_DIR/lxcon-$GOOS-$GOARCH"
 
-echo "built ./lxcon"
+	echo "==> build $OUT"
+	CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
+		-o "$OUT" ./cmd/lxcon
+	chmod +x "$OUT"
+done
+
+echo "built release binaries in $DIST_DIR"

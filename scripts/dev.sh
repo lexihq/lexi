@@ -4,7 +4,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export PATH="$(go env GOPATH)/bin:$PATH"
+GOPATH_BIN="$(go env GOPATH)/bin"
+export PATH="$GOPATH_BIN:$PATH"
 
 if [ -x ./bin/tailwindcss ]; then
 	TAILWIND=(./bin/tailwindcss)

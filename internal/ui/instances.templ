@@ -1,15 +1,89 @@
 package ui
 
-import "github.com/adam/lxcon/internal/components/button"
+import (
+	"fmt"
+	"strings"
 
-// InstancesPage is a Task 0 toolchain-proof placeholder: it renders a styled
-// templui Button inside the base layout. Replaced with the real list in Task 8.
-templ InstancesPage() {
-	@Layout("Instances") {
-		<h1 class="text-2xl font-semibold mb-2">lxcon</h1>
-		<p class="text-muted-foreground mb-6">Incus container management — toolchain check.</p>
-		@button.Button(button.Props{Variant: button.VariantDefault}) {
-			It works
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/components/badge"
+	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/table"
+)
+
+templ InstancesPage(caps backend.Capabilities, instances []backend.Instance) {
+	@Layout("Instances", caps) {
+		<div class="mb-6 flex items-center justify-between">
+			<div>
+				<h1 class="text-2xl font-semibold">Instances</h1>
+				<p class="text-muted-foreground">Create and manage Incus containers on this node.</p>
+			</div>
+			@button.Button(button.Props{Href: "/instances/new"}) {
+				Create instance
+			}
+		</div>
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() { Name }
+					@table.Head() { Status }
+					@table.Head() { IPv4 }
+					@table.Head() { Snapshots }
+					@table.Head() { Actions }
+				}
+			}
+			@table.Body() {
+				for _, inst := range instances {
+					@InstanceRow(caps, inst)
+				}
+			}
 		}
 	}
+}
+
+templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
+	@table.Row(table.RowProps{ID: "instance-" + inst.Name}) {
+		@table.Cell() {
+			<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/instances/" + inst.Name) }>{ inst.Name }</a>
+		}
+		@table.Cell() {
+			@badge.Badge(badge.Props{Variant: statusVariant(inst.Status)}) {
+				{ inst.Status }
+			}
+		}
+		@table.Cell() { { strings.Join(inst.IPv4, ", ") } }
+		@table.Cell() { { fmt.Sprint(inst.Snapshots) } }
+		@table.Cell() {
+			<div class="flex flex-wrap gap-2">
+				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/start", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
+					Start
+				}
+				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/stop", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
+					Stop
+				}
+				if caps.Snapshots {
+					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/snapshots", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
+						Snapshot
+					}
+				}
+				if caps.Clone {
+					<form method="post" action={ templ.URL("/instances/" + inst.Name + "/clone") } class="flex gap-2">
+						<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="dst" placeholder="clone name"/>
+						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+							Clone
+						}
+					</form>
+				}
+				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/delete", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
+					Delete
+				}
+			</div>
+		}
+	}
+}
+
+func statusVariant(status string) badge.Variant {
+	if status == "Running" {
+		return badge.VariantDefault
+	}
+	return badge.VariantSecondary
 }

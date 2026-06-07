@@ -1,8 +1,10 @@
 package ui
 
+import "github.com/adam/lxcon/internal/backend"
+
 // Layout is the base HTML shell: embedded CSS + htmx, and a centered content
 // column. Page-specific component scripts are appended by pages as needed.
-templ Layout(title string) {
+templ Layout(title string, caps backend.Capabilities) {
 	<!DOCTYPE html>
 	<html lang="en" class="h-full">
 		<head>
@@ -13,7 +15,16 @@ templ Layout(title string) {
 			<script src="/static/js/htmx.min.js" defer></script>
 		</head>
 		<body class="h-full bg-background text-foreground">
-			<main class="mx-auto max-w-5xl p-6">
+			<header class="border-b bg-card">
+				<div class="mx-auto flex max-w-6xl items-center justify-between p-4">
+					<a href="/" class="text-xl font-semibold">lxcon</a>
+					<div class="flex items-center gap-3 text-sm text-muted-foreground">
+						<span>{ caps.ServerInfo }</span>
+						<span class="rounded-md border px-2 py-1">{ string(caps.Tier) }</span>
+					</div>
+				</div>
+			</header>
+			<main class="mx-auto max-w-6xl p-6">
 				{ children... }
 			</main>
 		</body>

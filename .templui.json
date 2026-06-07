@@ -1,0 +1,7 @@
+{
+  "componentsDir": "internal/components",
+  "utilsDir": "internal/utils",
+  "moduleName": "github.com/adam/lxcon",
+  "jsDir": "static/js",
+  "jsPublicPath": "/static/js"
+}

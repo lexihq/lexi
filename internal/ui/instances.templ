@@ -1,0 +1,15 @@
+package ui
+
+import "github.com/adam/lxcon/internal/components/button"
+
+// InstancesPage is a Task 0 toolchain-proof placeholder: it renders a styled
+// templui Button inside the base layout. Replaced with the real list in Task 8.
+templ InstancesPage() {
+	@Layout("Instances") {
+		<h1 class="text-2xl font-semibold mb-2">lxcon</h1>
+		<p class="text-muted-foreground mb-6">Incus container management — toolchain check.</p>
+		@button.Button(button.Props{Variant: button.VariantDefault}) {
+			It works
+		}
+	}
+}

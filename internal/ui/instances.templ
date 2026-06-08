@@ -7,6 +7,7 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/badge"
 	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/icon"
 	"github.com/adam/lxcon/internal/components/table"
 )
 
@@ -20,10 +21,12 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance) {
 			<div class="flex gap-2">
 				if caps.Backup {
 					@button.Button(button.Props{Href: "/instances/import", Variant: button.VariantOutline}) {
+						@icon.Icon("upload")(icon.Props{Class: "size-4"})
 						Import
 					}
 				}
 				@button.Button(button.Props{Href: "/instances/new"}) {
+					@icon.Icon("plus")(icon.Props{Class: "size-4"})
 					Create instance
 				}
 			</div>
@@ -62,30 +65,36 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 		@table.Cell() {
 			<div class="flex flex-wrap gap-2">
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/start", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
+					@icon.Icon("circle-play")(icon.Props{Class: "size-4"})
 					Start
 				}
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/stop", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
+					@icon.Icon("circle-stop")(icon.Props{Class: "size-4"})
 					Stop
 				}
 				if caps.Clone {
 					<form method="post" action={ templ.URL("/instances/" + inst.Name + "/clone") } hx-boost="false" class="flex gap-2">
 						<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="dst" placeholder="clone name"/>
 						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+							@icon.Icon("copy")(icon.Props{Class: "size-4"})
 							Clone
 						}
 					</form>
 				}
 				if caps.Console {
 					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+						@icon.Icon("square-terminal")(icon.Props{Class: "size-4"})
 						Console
 					}
 				}
 				if caps.Backup {
 					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/export", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+						@icon.Icon("download")(icon.Props{Class: "size-4"})
 						Export
 					}
 				}
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/delete", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
+					@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 					Delete
 				}
 			</div>

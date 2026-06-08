@@ -1,6 +1,9 @@
 package ui
 
-import "github.com/adam/lxcon/internal/backend"
+import (
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/components/icon"
+)
 
 // Sidebar is the persistent left navigation: a static section list plus a
 // live instance list (the signature Proxmox trait). The list is rendered
@@ -14,7 +17,10 @@ templ Sidebar(nav Nav) {
 			class={ "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium",
 				templ.KV("bg-accent text-accent-foreground", nav.Section == NavInstances),
 				templ.KV("text-muted-foreground hover:text-foreground", nav.Section != NavInstances) }
-		>Instances</a>
+		>
+			@icon.Icon("server")(icon.Props{Class: "size-4"})
+			Instances
+		</a>
 	</nav>
 	<div class="mt-4">
 		<p class="px-3 pb-1 text-xs font-medium uppercase text-muted-foreground">Instances</p>

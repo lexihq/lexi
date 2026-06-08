@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/icon"
 )
 
 templ CreatePage(caps backend.Capabilities, images []backend.Image) {
@@ -52,6 +53,7 @@ templ CreatePage(caps backend.Capabilities, images []backend.Image) {
 				Start after create
 			</label>
 			@button.Button(button.Props{Type: button.TypeSubmit}) {
+				@icon.Icon("plus")(icon.Props{Class: "size-4"})
 				Create instance
 			}
 		</form>
@@ -78,6 +80,7 @@ templ ImportPage(caps backend.Capabilities) {
 				<input id="backup" name="backup" type="file" accept=".tar,.tar.gz,.gz,application/octet-stream" class="w-full rounded-md border bg-background px-3 py-2 text-sm" required/>
 			</div>
 			@button.Button(button.Props{Type: button.TypeSubmit}) {
+				@icon.Icon("upload")(icon.Props{Class: "size-4"})
 				Import instance
 			}
 		</form>

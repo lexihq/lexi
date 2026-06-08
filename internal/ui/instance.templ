@@ -5,6 +5,7 @@ import (
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/icon"
 	"github.com/adam/lxcon/internal/components/table"
 )
 
@@ -21,6 +22,7 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 			</div>
 			if caps.Backup {
 				@button.Button(button.Props{Href: "/instances/" + inst.Name + "/export", Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-boost": "false"}}) {
+					@icon.Icon("download")(icon.Props{Class: "size-4"})
 					Export
 				}
 			}
@@ -37,22 +39,25 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 	{{ active := effectiveTab(caps, tab) }}
 	<div id="instance-body">
 		<div class="mb-4 flex gap-1 border-b">
-			@tabLink(inst.Name, "summary", "Summary", active)
+			@tabLink(inst.Name, "summary", "Summary", "info", active)
 			if caps.Snapshots {
-				@tabLink(inst.Name, "snapshots", "Snapshots", active)
+				@tabLink(inst.Name, "snapshots", "Snapshots", "camera", active)
 			}
 			if caps.Console {
 				<a
 					href={ templ.URL("/instances/" + inst.Name + "/console") }
 					hx-boost="false"
-					class="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
-				>Console</a>
+					class="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+				>
+					@icon.Icon("square-terminal")(icon.Props{Class: "size-4"})
+					Console
+				</a>
 			}
 			if caps.Metrics {
-				@tabLink(inst.Name, "metrics", "Metrics", active)
+				@tabLink(inst.Name, "metrics", "Metrics", "activity", active)
 			}
 			if caps.Console {
-				@tabLink(inst.Name, "logs", "Logs", active)
+				@tabLink(inst.Name, "logs", "Logs", "scroll-text", active)
 			}
 		</div>
 		switch active {
@@ -113,17 +118,20 @@ func effectiveTab(caps backend.Capabilities, tab string) string {
 // tabLink is a deep-linkable tab: a plain href for reload/back-forward plus an
 // HTMX swap of #instance-body for in-place switching, with the active tab
 // underlined.
-templ tabLink(name, tab, label, active string) {
+templ tabLink(name, tab, label, iconName, active string) {
 	<a
 		href={ templ.URL("/instances/" + name + "?tab=" + tab) }
 		hx-get={ "/instances/" + name + "?tab=" + tab }
 		hx-target="#instance-body"
 		hx-swap="outerHTML"
 		hx-push-url="true"
-		class={ "border-b-2 px-3 py-2 text-sm",
+		class={ "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm",
 			templ.KV("border-primary font-medium", active == tab),
 			templ.KV("border-transparent text-muted-foreground hover:text-foreground", active != tab) }
-	>{ label }</a>
+	>
+		@icon.Icon(iconName)(icon.Props{Class: "size-4"})
+		{ label }
+	</a>
 }
 
 templ SnapshotTable(name string, snapshots []backend.Snapshot) {
@@ -133,6 +141,7 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 			<form method="post" action={ templ.URL("/instances/" + name + "/snapshots") } hx-post={ "/instances/" + name + "/snapshots" } hx-target="#snapshots" hx-swap="outerHTML" class="flex gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="snapshot" placeholder="snapshot name"/>
 				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					@icon.Icon("camera")(icon.Props{Class: "size-4"})
 					Create snapshot
 				}
 			</form>
@@ -151,9 +160,11 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 						@table.Cell() {
 							<div class="flex gap-2">
 								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + name + "/snapshots/" + snap.Name + "/restore", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
+									@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
 									Restore
 								}
 								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/instances/" + name + "/snapshots/" + snap.Name + "/delete", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
+									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 									Delete
 								}
 							</div>
@@ -187,6 +198,7 @@ templ LimitsForm(inst backend.Instance) {
 				<input id="memory" name="memory" value={ inst.LimitsMemory } placeholder="e.g. 2GiB" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
 			</div>
 			@button.Button(button.Props{Type: button.TypeSubmit}) {
+				@icon.Icon("save")(icon.Props{Class: "size-4"})
 				Apply limits
 			}
 		</form>
@@ -223,6 +235,7 @@ templ LogsPanel(name string, log string) {
 		<div class="mb-3 flex items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Console log</h2>
 			@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-get": "/instances/" + name + "/logs", "hx-target": "#logs", "hx-swap": "outerHTML"}}) {
+				@icon.Icon("refresh-cw")(icon.Props{Class: "size-4"})
 				Refresh
 			}
 		</div>

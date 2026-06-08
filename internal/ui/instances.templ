@@ -60,11 +60,6 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/stop", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
 					Stop
 				}
-				if caps.Snapshots {
-					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/snapshots", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
-						Snapshot
-					}
-				}
 				if caps.Clone {
 					<form method="post" action={ templ.URL("/instances/" + inst.Name + "/clone") } class="flex gap-2">
 						<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="dst" placeholder="clone name"/>

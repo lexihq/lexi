@@ -14,6 +14,7 @@ import (
 var (
 	ErrNotFound    = errors.New("not found")
 	ErrConflict    = errors.New("already exists")
+	ErrInvalid     = errors.New("invalid")
 	ErrUnsupported = errors.New("unsupported")
 )
 
@@ -35,6 +36,7 @@ type Capabilities struct {
 	Backup     bool // false in v1
 	Console    bool // false in v1
 	Metrics    bool // live resource metrics
+	Limits     bool // CPU and memory limits
 }
 
 // Instance is a system container or virtual machine.

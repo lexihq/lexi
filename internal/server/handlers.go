@@ -330,6 +330,8 @@ func statusFor(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, backend.ErrConflict):
 		return http.StatusConflict
+	case errors.Is(err, backend.ErrInvalid):
+		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
 	}

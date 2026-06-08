@@ -12,14 +12,14 @@ dev:
 generate:
 	templ generate
 
-test:
+test: generate
 	go test ./...
 
 # Requires a reachable Incus daemon; uses the current incus remote.
 test-integration:
 	go test -tags integration ./internal/backend/incus -v
 
-vet:
+vet: generate
 	go vet ./...
 
 clean:

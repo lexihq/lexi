@@ -22,6 +22,10 @@ const imagesRemote = "https://images.linuxcontainers.org"
 // a refetch, so per-keystroke filtering never hits the network.
 const imageCacheTTL = time.Hour
 
+// cpuSampleTTL bounds stale metric state for instances deleted outside lxcon or
+// requests that finish racing with deletion.
+const cpuSampleTTL = 10 * time.Minute
+
 // Compile-time proof that incusBackend satisfies the Backend contract.
 var _ backend.Backend = (*incusBackend)(nil)
 
@@ -36,6 +40,7 @@ type incusBackend struct {
 
 	cpuMu      sync.Mutex
 	cpuSamples map[string]cpuSample
+	cpuEpoch   uint64
 }
 
 // cpuSample records a cumulative CPU-time reading so the next Metrics call can
@@ -64,6 +69,7 @@ func New() (*incusBackend, error) {
 			Snapshots:  true,
 			Clone:      true,
 			Metrics:    true,
+			Limits:     true,
 		},
 		cpuSamples: make(map[string]cpuSample),
 	}, nil
@@ -99,6 +105,7 @@ func (b *incusBackend) GetInstance(_ context.Context, name string) (backend.Inst
 // Disk usage is summed across devices and network counters across every
 // interface except loopback. CPUPercent reads 0 until a prior sample exists.
 func (b *incusBackend) Metrics(_ context.Context, name string) (backend.Metrics, error) {
+	epoch := b.cpuEpochSnapshot()
 	state, _, err := b.srv.GetInstanceState(name)
 	if err != nil {
 		return backend.Metrics{}, fmt.Errorf("get state of %q: %w", name, mapErr(err))
@@ -107,7 +114,7 @@ func (b *incusBackend) Metrics(_ context.Context, name string) (backend.Metrics,
 		MemoryUsage: state.Memory.Usage,
 		MemoryTotal: state.Memory.Total,
 		Processes:   state.Processes,
-		CPUPercent:  b.cpuPercent(name, state.CPU.Usage),
+		CPUPercent:  b.cpuPercent(name, state.CPU.Usage, epoch),
 	}
 	for _, d := range state.Disk {
 		m.DiskUsage += d.Usage
@@ -125,10 +132,24 @@ func (b *incusBackend) Metrics(_ context.Context, name string) (backend.Metrics,
 // cpuPercent turns the delta between two cumulative CPU-time samples into a
 // percentage. It records the new sample and returns 0 on the first reading or
 // any non-positive interval.
-func (b *incusBackend) cpuPercent(name string, cpuNanos int64) float64 {
+func (b *incusBackend) cpuEpochSnapshot() uint64 {
+	b.cpuMu.Lock()
+	defer b.cpuMu.Unlock()
+	return b.cpuEpoch
+}
+
+func (b *incusBackend) cpuPercent(name string, cpuNanos int64, epoch uint64) float64 {
 	now := time.Now()
 	b.cpuMu.Lock()
 	defer b.cpuMu.Unlock()
+	for sampleName, sample := range b.cpuSamples {
+		if now.Sub(sample.at) > cpuSampleTTL {
+			delete(b.cpuSamples, sampleName)
+		}
+	}
+	if epoch != b.cpuEpoch {
+		return 0
+	}
 	prev, ok := b.cpuSamples[name]
 	b.cpuSamples[name] = cpuSample{nanos: cpuNanos, at: now}
 	if !ok {
@@ -287,7 +308,15 @@ func (b *incusBackend) DeleteInstance(ctx context.Context, name string) error {
 	if err := op.WaitContext(ctx); err != nil {
 		return fmt.Errorf("delete instance %q: %w", name, mapErr(err))
 	}
+	b.clearCPUSample(name)
 	return nil
+}
+
+func (b *incusBackend) clearCPUSample(name string) {
+	b.cpuMu.Lock()
+	defer b.cpuMu.Unlock()
+	delete(b.cpuSamples, name)
+	b.cpuEpoch++
 }
 
 // --- snapshot & clone ---
@@ -376,10 +405,27 @@ func (b *incusBackend) CloneInstance(ctx context.Context, src, dst string) error
 	if err != nil {
 		return fmt.Errorf("clone %q to %q: %w", src, dst, mapErr(err))
 	}
-	if err := op.Wait(); err != nil {
+	if err := waitRemoteOperation(ctx, op); err != nil {
 		return fmt.Errorf("clone %q to %q: %w", src, dst, mapErr(err))
 	}
 	return nil
+}
+
+func waitRemoteOperation(ctx context.Context, op incusclient.RemoteOperation) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- op.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		if err := op.CancelTarget(); err != nil {
+			return fmt.Errorf("%w: cancel remote operation: %v", ctx.Err(), err)
+		}
+		return ctx.Err()
+	}
 }
 
 // --- mappers / helpers ---
@@ -465,6 +511,8 @@ func mapErr(err error) error {
 		return fmt.Errorf("%w: %w", backend.ErrNotFound, err)
 	case api.StatusErrorCheck(err, http.StatusConflict):
 		return fmt.Errorf("%w: %w", backend.ErrConflict, err)
+	case api.StatusErrorCheck(err, http.StatusBadRequest):
+		return fmt.Errorf("%w: %w", backend.ErrInvalid, err)
 	}
 
 	// Operation wait errors can arrive as plain text after the client has
@@ -475,6 +523,10 @@ func mapErr(err error) error {
 		return fmt.Errorf("%w: %w", backend.ErrNotFound, err)
 	case strings.Contains(msg, "already exists"):
 		return fmt.Errorf("%w: %w", backend.ErrConflict, err)
+	case strings.Contains(msg, "bad request"),
+		strings.Contains(msg, "invalid value"),
+		strings.Contains(msg, "invalid config"):
+		return fmt.Errorf("%w: %w", backend.ErrInvalid, err)
 	}
 	return err
 }

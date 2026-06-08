@@ -49,6 +49,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		Snapshots:  true,
 		Clone:      true,
 		Metrics:    true,
+		Limits:     true,
 	}
 }
 

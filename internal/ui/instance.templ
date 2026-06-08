@@ -32,7 +32,9 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 				hx-swap="outerHTML"
 			></div>
 		}
-		@LimitsForm(inst)
+		if caps.Limits {
+			@LimitsForm(inst)
+		}
 		if caps.Snapshots {
 			@SnapshotTable(inst.Name, snapshots)
 		}

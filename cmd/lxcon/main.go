@@ -10,8 +10,10 @@ import (
 	"github.com/adam/lxcon/internal/server"
 )
 
+const defaultListenAddr = "127.0.0.1:8080"
+
 func main() {
-	addr := flag.String("addr", ":8080", "address to listen on")
+	addr := flag.String("addr", defaultListenAddr, "address to listen on")
 	incusRemote := flag.String("incus-remote", "", "Incus CLI remote to use (defaults to current remote)")
 	flag.Parse()
 
@@ -29,7 +31,7 @@ func main() {
 	srv := server.New(b)
 	srv.Addr = *addr
 
-	log.Printf("lxcon listening on http://localhost%s", *addr)
+	log.Printf("lxcon listening on %s", *addr)
 	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("lxcon: serve on %s: %v", *addr, err)
 	}

@@ -20,6 +20,9 @@ func TestInstancesPageRendersListAndActions(t *testing.T) {
 	assertContains(t, html, "10.0.3.12")
 	assertContains(t, html, `hx-post="/instances/demo/start"`)
 	assertContains(t, html, `hx-post="/instances/demo/delete"`)
+	if strings.Contains(html, `hx-post="/instances/demo/snapshots"`) {
+		t.Fatalf("list row must not render snapshot creation without a snapshot name: %q", html)
+	}
 }
 
 func TestInstancePageRendersSnapshotControls(t *testing.T) {

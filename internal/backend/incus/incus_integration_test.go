@@ -7,6 +7,7 @@ package incus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -40,6 +41,13 @@ func listed(list []backend.Instance, name string) bool {
 		}
 	}
 	return false
+}
+
+func cleanupInstance(t *testing.T, b *incusBackend, name string) {
+	t.Helper()
+	if err := b.DeleteInstance(context.Background(), name); err != nil && !errors.Is(err, backend.ErrNotFound) {
+		t.Errorf("cleanup instance %q: %v", name, err)
+	}
 }
 
 func TestConnect(t *testing.T) {
@@ -86,7 +94,7 @@ func TestUpdateLimitsRoundTrip(t *testing.T) {
 	b := newBackend(t)
 	ctx := context.Background()
 	name := uniqueName("limits")
-	t.Cleanup(func() { _ = b.DeleteInstance(context.Background(), name) })
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
 
 	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
 	require.NoError(t, b.UpdateLimits(ctx, name, backend.Limits{CPU: "2", Memory: "256MiB"}))
@@ -110,7 +118,7 @@ func TestMetricsReportsUsage(t *testing.T) {
 	b := newBackend(t)
 	ctx := context.Background()
 	name := uniqueName("metrics")
-	t.Cleanup(func() { _ = b.DeleteInstance(context.Background(), name) })
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
 
 	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage, Start: true}))
 
@@ -125,7 +133,7 @@ func TestRoundTripLifecycle(t *testing.T) {
 	b := newBackend(t)
 	ctx := context.Background()
 	name := uniqueName("life")
-	t.Cleanup(func() { _ = b.DeleteInstance(context.Background(), name) })
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
 
 	if err := b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage, Start: true}); err != nil {
 		t.Fatalf("create: %v", err)
@@ -136,13 +144,17 @@ func TestRoundTripLifecycle(t *testing.T) {
 	if err := b.StopInstance(ctx, name); err != nil {
 		t.Fatalf("stop: %v", err)
 	}
-	if inst, _ := b.GetInstance(ctx, name); inst.Status != "Stopped" {
+	inst, err := b.GetInstance(ctx, name)
+	require.NoError(t, err)
+	if inst.Status != "Stopped" {
 		t.Fatalf("want Stopped after stop, got %q", inst.Status)
 	}
 	if err := b.DeleteInstance(ctx, name); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if list, _ := b.ListInstances(ctx); listed(list, name) {
+	list, err := b.ListInstances(ctx)
+	require.NoError(t, err)
+	if listed(list, name) {
 		t.Fatal("instance still listed after delete")
 	}
 }
@@ -155,22 +167,26 @@ func TestRoundTripFull(t *testing.T) {
 	name := uniqueName("full")
 	clone := name + "-copy"
 	t.Cleanup(func() {
-		_ = b.DeleteInstance(context.Background(), clone)
-		_ = b.DeleteInstance(context.Background(), name)
+		cleanupInstance(t, b, clone)
+		cleanupInstance(t, b, name)
 	})
 
 	if err := b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage, Start: true}); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if inst, _ := b.GetInstance(ctx, name); inst.Status != "Running" {
+	inst, err := b.GetInstance(ctx, name)
+	require.NoError(t, err)
+	if inst.Status != "Running" {
 		t.Fatalf("want Running, got %q", inst.Status)
 	}
 
 	if err := b.CreateSnapshot(ctx, name, "snap0"); err != nil {
 		t.Fatalf("snapshot: %v", err)
 	}
-	if snaps, err := b.ListSnapshots(ctx, name); err != nil || len(snaps) != 1 || snaps[0].Name != "snap0" {
-		t.Fatalf("snapshots: %+v err=%v", snaps, err)
+	snaps, err := b.ListSnapshots(ctx, name)
+	require.NoError(t, err)
+	if len(snaps) != 1 || snaps[0].Name != "snap0" {
+		t.Fatalf("snapshots: %+v", snaps)
 	}
 
 	// Stop before clone/restore to avoid running-state restrictions.
@@ -181,7 +197,8 @@ func TestRoundTripFull(t *testing.T) {
 	if err := b.CloneInstance(ctx, name, clone); err != nil {
 		t.Fatalf("clone: %v", err)
 	}
-	list, _ := b.ListInstances(ctx)
+	list, err := b.ListInstances(ctx)
+	require.NoError(t, err)
 	if !listed(list, name) || !listed(list, clone) {
 		t.Fatalf("want both %q and %q listed: %+v", name, clone, list)
 	}
@@ -193,7 +210,9 @@ func TestRoundTripFull(t *testing.T) {
 	if err := b.DeleteSnapshot(ctx, name, "snap0"); err != nil {
 		t.Fatalf("delete snapshot: %v", err)
 	}
-	if snaps, _ := b.ListSnapshots(ctx, name); len(snaps) != 0 {
+	snaps, err = b.ListSnapshots(ctx, name)
+	require.NoError(t, err)
+	if len(snaps) != 0 {
 		t.Fatalf("want 0 snapshots after delete, got %d", len(snaps))
 	}
 
@@ -203,7 +222,9 @@ func TestRoundTripFull(t *testing.T) {
 	if err := b.DeleteInstance(ctx, name); err != nil {
 		t.Fatalf("delete original: %v", err)
 	}
-	if list, _ := b.ListInstances(ctx); listed(list, name) || listed(list, clone) {
+	list, err = b.ListInstances(ctx)
+	require.NoError(t, err)
+	if listed(list, name) || listed(list, clone) {
 		t.Fatal("instances still listed after delete")
 	}
 }

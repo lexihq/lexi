@@ -1,7 +1,10 @@
-.PHONY: build dev test test-integration generate vet clean
+.PHONY: build release dev test test-integration generate vet clean
 
 build:
 	./scripts/build.sh
+
+release:
+	./scripts/release.sh
 
 dev:
 	./scripts/dev.sh

@@ -9,7 +9,10 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({
   testDir: "./tests",
-  fullyParallel: true,
+  // Serial: the fake backend is one shared in-memory process, so tests that
+  // create/delete instances must not race each other.
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",

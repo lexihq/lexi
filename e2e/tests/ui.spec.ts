@@ -54,6 +54,51 @@ test("create from the image browser, then start/stop/clone/delete in the list", 
   }
 });
 
+test("create page arch and type filters narrow the image list", async ({ page }) => {
+  await page.goto("/instances/new");
+  const results = page.locator("#image-results");
+  await expect(results).toContainText("debian/12");
+
+  // Type filter: the fake catalog has a single virtual-machine image.
+  await page.locator("select[name=type]").selectOption("virtual-machine");
+  await expect(results).toContainText("ubuntu/24.04");
+  await expect(results).toContainText("virtual-machine");
+  await expect(results).not.toContainText("debian/12");
+
+  // Reset type, then filter by architecture (alpine is aarch64-only).
+  await page.locator("select[name=type]").selectOption("");
+  await expect(results).toContainText("debian/12");
+  await page.locator("select[name=arch]").selectOption("x86_64");
+  await expect(results).toContainText("fedora/40");
+  await expect(results).not.toContainText("alpine/edge");
+});
+
+test("logs panel refresh button re-fetches the console log", async ({ page }) => {
+  await page.goto("/instances/demo");
+  await expect(page.locator("#logs")).toContainText("Console log");
+
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "GET" && r.url().includes("/instances/demo/logs"),
+    ),
+    page.locator("#logs").getByRole("button", { name: "Refresh" }).click(),
+  ]);
+  await expect(page.locator("#logs")).toContainText("demo booted");
+});
+
+test("metrics panel polls for updates", async ({ page }) => {
+  let metricsRequests = 0;
+  page.on("response", (r) => {
+    if (r.url().includes("/instances/demo/metrics")) metricsRequests += 1;
+  });
+
+  await page.goto("/instances/demo");
+  await expect(page.locator("#metrics")).toContainText("Live metrics");
+
+  // The panel reloads itself every 3s; the initial load plus one poll is >= 2.
+  await expect.poll(() => metricsRequests, { timeout: 8_000 }).toBeGreaterThanOrEqual(2);
+});
+
 test("detail page renders metrics and logs and applies resource limits", async ({ page }) => {
   await page.goto("/instances/demo");
 

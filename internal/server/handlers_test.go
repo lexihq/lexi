@@ -9,6 +9,9 @@ import (
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/backend/fake"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStartHXReturnsUpdatedRow(t *testing.T) {
@@ -106,6 +109,19 @@ func TestHXRequestTogglesPartialVsRedirect(t *testing.T) {
 	if loc := full.Header().Get("Location"); loc != "/" {
 		t.Fatalf("expected redirect to /, got %q", loc)
 	}
+}
+
+func TestStatusForSentinels(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+
+	// Missing instance → 404.
+	missing := request(t, New(b), "GET", "/instances/ghost", "", true)
+	assert.Equal(t, http.StatusNotFound, missing.Code)
+
+	// Duplicate create → 409.
+	dup := formRequest(t, New(b), "/instances", url.Values{"name": {"demo"}, "image": {"debian/12"}}, true)
+	assert.Equal(t, http.StatusConflict, dup.Code)
 }
 
 func request(t *testing.T, srv *http.Server, method, path, body string, htmx bool) *httptest.ResponseRecorder {

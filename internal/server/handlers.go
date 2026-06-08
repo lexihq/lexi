@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
@@ -224,14 +225,14 @@ func writeHTML(w http.ResponseWriter, code int) {
 }
 
 func statusFor(err error) int {
-	msg := err.Error()
-	if strings.Contains(msg, "not found") {
+	switch {
+	case errors.Is(err, backend.ErrNotFound):
 		return http.StatusNotFound
-	}
-	if strings.Contains(msg, "already exists") {
+	case errors.Is(err, backend.ErrConflict):
 		return http.StatusConflict
+	default:
+		return http.StatusInternalServerError
 	}
-	return http.StatusInternalServerError
 }
 
 func esc(s string) string {

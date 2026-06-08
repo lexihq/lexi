@@ -5,7 +5,16 @@ package backend
 
 import (
 	"context"
+	"errors"
 	"time"
+)
+
+// Sentinel errors drivers wrap (with %w) so the HTTP layer can map them to
+// status codes via errors.Is, independent of any driver's wording.
+var (
+	ErrNotFound    = errors.New("not found")
+	ErrConflict    = errors.New("already exists")
+	ErrUnsupported = errors.New("unsupported")
 )
 
 // Tier identifies which driver is serving requests.

@@ -88,7 +88,7 @@ func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) erro
 	defer f.mu.Unlock()
 
 	if _, ok := f.instances[opt.Name]; ok {
-		return fmt.Errorf("instance %q already exists", opt.Name)
+		return conflict("instance %q already exists", opt.Name)
 	}
 	status := "Stopped"
 	if opt.Start {
@@ -157,7 +157,7 @@ func (f *Fake) CreateSnapshot(_ context.Context, name, snapshot string) error {
 	}
 	for _, s := range in.snapshots {
 		if s.Name == snapshot {
-			return fmt.Errorf("snapshot %q already exists on %q", snapshot, name)
+			return conflict("snapshot %q already exists on %q", snapshot, name)
 		}
 	}
 	in.snapshots = append(in.snapshots, backend.Snapshot{Name: snapshot, CreatedAt: f.now()})
@@ -177,7 +177,7 @@ func (f *Fake) RestoreSnapshot(_ context.Context, name, snapshot string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("snapshot %q not found on %q", snapshot, name)
+	return notFoundf("snapshot %q not found on %q", snapshot, name)
 }
 
 func (f *Fake) DeleteSnapshot(_ context.Context, name, snapshot string) error {
@@ -194,7 +194,7 @@ func (f *Fake) DeleteSnapshot(_ context.Context, name, snapshot string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("snapshot %q not found on %q", snapshot, name)
+	return notFoundf("snapshot %q not found on %q", snapshot, name)
 }
 
 func (f *Fake) CloneInstance(_ context.Context, src, dst string) error {
@@ -206,7 +206,7 @@ func (f *Fake) CloneInstance(_ context.Context, src, dst string) error {
 		return notFound(src)
 	}
 	if _, ok := f.instances[dst]; ok {
-		return fmt.Errorf("instance %q already exists", dst)
+		return conflict("instance %q already exists", dst)
 	}
 	f.instances[dst] = &instance{
 		Instance: backend.Instance{
@@ -233,5 +233,13 @@ func (f *Fake) ListImages(_ context.Context) ([]backend.Image, error) {
 }
 
 func notFound(name string) error {
-	return fmt.Errorf("instance %q not found", name)
+	return fmt.Errorf("instance %q: %w", name, backend.ErrNotFound)
+}
+
+func notFoundf(format string, args ...any) error {
+	return fmt.Errorf("%s: %w", fmt.Sprintf(format, args...), backend.ErrNotFound)
+}
+
+func conflict(format string, args ...any) error {
+	return fmt.Errorf("%s: %w", fmt.Sprintf(format, args...), backend.ErrConflict)
 }

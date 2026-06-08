@@ -71,7 +71,7 @@ func (b *incusBackend) ListInstances(_ context.Context) ([]backend.Instance, err
 func (b *incusBackend) GetInstance(_ context.Context, name string) (backend.Instance, error) {
 	full, _, err := b.srv.GetInstanceFull(name)
 	if err != nil {
-		return backend.Instance{}, fmt.Errorf("get instance %q: %w", name, err)
+		return backend.Instance{}, fmt.Errorf("get instance %q: %w", name, mapErr(err))
 	}
 	return toInstance(&full.Instance, full.State, len(full.Snapshots)), nil
 }
@@ -151,10 +151,10 @@ func (b *incusBackend) CreateInstance(ctx context.Context, opt backend.CreateOpt
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("create instance %q: %w", opt.Name, err)
+		return fmt.Errorf("create instance %q: %w", opt.Name, mapErr(err))
 	}
 	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("create instance %q: %w", opt.Name, err)
+		return fmt.Errorf("create instance %q: %w", opt.Name, mapErr(err))
 	}
 	return nil
 }
@@ -174,10 +174,10 @@ func (b *incusBackend) changeState(ctx context.Context, name, action string, for
 		Force:   force,
 	}, "")
 	if err != nil {
-		return fmt.Errorf("%s instance %q: %w", action, name, err)
+		return fmt.Errorf("%s instance %q: %w", action, name, mapErr(err))
 	}
 	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("%s instance %q: %w", action, name, err)
+		return fmt.Errorf("%s instance %q: %w", action, name, mapErr(err))
 	}
 	return nil
 }
@@ -185,7 +185,7 @@ func (b *incusBackend) changeState(ctx context.Context, name, action string, for
 func (b *incusBackend) DeleteInstance(ctx context.Context, name string) error {
 	state, _, err := b.srv.GetInstanceState(name)
 	if err != nil {
-		return fmt.Errorf("get state of %q: %w", name, err)
+		return fmt.Errorf("get state of %q: %w", name, mapErr(err))
 	}
 	if state.Status != "Stopped" {
 		if err := b.changeState(ctx, name, "stop", true); err != nil {
@@ -207,7 +207,7 @@ func (b *incusBackend) DeleteInstance(ctx context.Context, name string) error {
 func (b *incusBackend) CreateSnapshot(ctx context.Context, name, snapshot string) error {
 	op, err := b.srv.CreateInstanceSnapshot(name, api.InstanceSnapshotsPost{Name: snapshot})
 	if err != nil {
-		return fmt.Errorf("snapshot %q of %q: %w", snapshot, name, err)
+		return fmt.Errorf("snapshot %q of %q: %w", snapshot, name, mapErr(err))
 	}
 	if err := op.WaitContext(ctx); err != nil {
 		return fmt.Errorf("snapshot %q of %q: %w", snapshot, name, err)
@@ -219,7 +219,7 @@ func (b *incusBackend) RestoreSnapshot(ctx context.Context, name, snapshot strin
 	// GET-then-PUT preserves the instance config; Restore triggers the rollback.
 	inst, etag, err := b.srv.GetInstance(name)
 	if err != nil {
-		return fmt.Errorf("get instance %q: %w", name, err)
+		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
 	}
 	put := inst.Writable()
 	put.Restore = snapshot
@@ -236,7 +236,7 @@ func (b *incusBackend) RestoreSnapshot(ctx context.Context, name, snapshot strin
 func (b *incusBackend) DeleteSnapshot(ctx context.Context, name, snapshot string) error {
 	op, err := b.srv.DeleteInstanceSnapshot(name, snapshot)
 	if err != nil {
-		return fmt.Errorf("delete snapshot %q of %q: %w", snapshot, name, err)
+		return fmt.Errorf("delete snapshot %q of %q: %w", snapshot, name, mapErr(err))
 	}
 	if err := op.WaitContext(ctx); err != nil {
 		return fmt.Errorf("delete snapshot %q of %q: %w", snapshot, name, err)
@@ -250,7 +250,7 @@ func (b *incusBackend) CloneInstance(ctx context.Context, src, dst string) error
 	}
 	source, _, err := b.srv.GetInstance(src)
 	if err != nil {
-		return fmt.Errorf("get source instance %q: %w", src, err)
+		return fmt.Errorf("get source instance %q: %w", src, mapErr(err))
 	}
 	op, err := b.srv.CopyInstance(b.srv, *source, &incusclient.InstanceCopyArgs{Name: dst})
 	if err != nil {
@@ -313,6 +313,22 @@ func hostArch() string {
 	default:
 		return runtime.GOARCH
 	}
+}
+
+// mapErr translates an Incus client error into a backend sentinel so the HTTP
+// layer can map it to a status via errors.Is, mirroring the fake backend.
+func mapErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "not found"):
+		return fmt.Errorf("%w: %v", backend.ErrNotFound, err)
+	case strings.Contains(msg, "already exists"):
+		return fmt.Errorf("%w: %v", backend.ErrConflict, err)
+	}
+	return err
 }
 
 func firstNonEmpty(vals ...string) string {

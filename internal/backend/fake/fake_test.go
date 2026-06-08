@@ -5,7 +5,29 @@ import (
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
+
+	"github.com/stretchr/testify/require"
 )
+
+func TestSentinelErrors(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	// Missing instance → ErrNotFound.
+	_, err := b.GetInstance(ctx(), "ghost")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+
+	// Duplicate name → ErrConflict.
+	err = b.CreateInstance(ctx(), backend.CreateOptions{Name: "demo", Image: "x"})
+	require.ErrorIs(t, err, backend.ErrConflict)
+
+	// Missing snapshot on an existing instance → ErrNotFound.
+	require.ErrorIs(t, b.RestoreSnapshot(ctx(), "demo", "nope"), backend.ErrNotFound)
+
+	// Duplicate snapshot → ErrConflict.
+	require.NoError(t, b.CreateSnapshot(ctx(), "demo", "s1"))
+	require.ErrorIs(t, b.CreateSnapshot(ctx(), "demo", "s1"), backend.ErrConflict)
+}
 
 func ctx() context.Context { return context.Background() }
 

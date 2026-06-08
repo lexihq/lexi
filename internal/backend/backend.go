@@ -38,12 +38,21 @@ type Capabilities struct {
 
 // Instance is a system container or virtual machine.
 type Instance struct {
-	Name      string
-	Status    string // Running | Stopped | ...
-	Image     string // base image description, if known
-	IPv4      []string
-	Snapshots int
-	CreatedAt time.Time
+	Name         string
+	Status       string // Running | Stopped | ...
+	Image        string // base image description, if known
+	IPv4         []string
+	Snapshots    int
+	CreatedAt    time.Time
+	LimitsCPU    string // limits.cpu, e.g. "2"; empty = unset
+	LimitsMemory string // limits.memory, e.g. "2GiB"; empty = unset
+}
+
+// Limits caps an instance's CPU and memory. Empty strings mean "leave unset"
+// (and clear any existing limit on update).
+type Limits struct {
+	CPU    string // cores ("2") or cpuset ("0-1,3")
+	Memory string // e.g. "2GiB"
 }
 
 // Snapshot is a point-in-time snapshot of an instance.
@@ -93,6 +102,8 @@ type Backend interface {
 	DeleteSnapshot(ctx context.Context, name, snapshot string) error
 
 	CloneInstance(ctx context.Context, src, dst string) error
+
+	UpdateLimits(ctx context.Context, name string, l Limits) error
 
 	ListImages(ctx context.Context) ([]Image, error) // for the create dropdown
 }

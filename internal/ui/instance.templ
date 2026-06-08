@@ -22,6 +22,7 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 				<div><dt class="text-muted-foreground">IPv4</dt><dd>{ joinIPv4(inst.IPv4) }</dd></div>
 			</dl>
 		</section>
+		@LimitsForm(inst)
 		if caps.Snapshots {
 			@SnapshotTable(inst.Name, snapshots)
 		}
@@ -64,6 +65,34 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 				}
 			}
 		}
+	</section>
+}
+
+// LimitsForm renders the resource-limits editor; it re-renders itself in place
+// after an HTMX submit so the inputs reflect the applied values.
+templ LimitsForm(inst backend.Instance) {
+	<section id="limits" class="mb-8 rounded-lg border bg-card p-4">
+		<h2 class="mb-3 text-lg font-medium">Resource limits</h2>
+		<form
+			method="post"
+			action={ templ.URL("/instances/" + inst.Name + "/limits") }
+			hx-post={ "/instances/" + inst.Name + "/limits" }
+			hx-target="#limits"
+			hx-swap="outerHTML"
+			class="grid items-end gap-3 sm:grid-cols-3"
+		>
+			<div class="space-y-1">
+				<label class="text-sm text-muted-foreground" for="cpu">CPU</label>
+				<input id="cpu" name="cpu" value={ inst.LimitsCPU } placeholder="e.g. 2" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+			</div>
+			<div class="space-y-1">
+				<label class="text-sm text-muted-foreground" for="memory">Memory</label>
+				<input id="memory" name="memory" value={ inst.LimitsMemory } placeholder="e.g. 2GiB" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+			</div>
+			@button.Button(button.Props{Type: button.TypeSubmit}) {
+				Apply limits
+			}
+		</form>
 	</section>
 }
 

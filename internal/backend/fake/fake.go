@@ -219,6 +219,19 @@ func (f *Fake) CloneInstance(_ context.Context, src, dst string) error {
 	return nil
 }
 
+func (f *Fake) UpdateLimits(_ context.Context, name string, l backend.Limits) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return notFound(name)
+	}
+	in.LimitsCPU = l.CPU
+	in.LimitsMemory = l.Memory
+	return nil
+}
+
 // catalogImages stands in for the full simplestreams catalog the incus driver
 // caches. It spans distributions, releases and architectures so handler-level
 // filter tests have something to slice. Arches use incus naming.

@@ -80,6 +80,30 @@ func TestListImages(t *testing.T) {
 	t.Logf("resolved %d images across %d distributions", len(imgs), len(distros))
 }
 
+// TestUpdateLimitsRoundTrip sets and clears limits on a throwaway container and
+// reads them back through the expanded config.
+func TestUpdateLimitsRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("limits")
+	t.Cleanup(func() { _ = b.DeleteInstance(context.Background(), name) })
+
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
+	require.NoError(t, b.UpdateLimits(ctx, name, backend.Limits{CPU: "2", Memory: "256MiB"}))
+
+	inst, err := b.GetInstance(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "2", inst.LimitsCPU)
+	assert.Equal(t, "256MiB", inst.LimitsMemory)
+
+	// Empty limits clear the keys.
+	require.NoError(t, b.UpdateLimits(ctx, name, backend.Limits{}))
+	inst, err = b.GetInstance(ctx, name)
+	require.NoError(t, err)
+	assert.Empty(t, inst.LimitsCPU)
+	assert.Empty(t, inst.LimitsMemory)
+}
+
 // TestRoundTripLifecycle covers the write paths: create+start, read back as
 // Running, stop, delete (and confirm it leaves the list).
 func TestRoundTripLifecycle(t *testing.T) {

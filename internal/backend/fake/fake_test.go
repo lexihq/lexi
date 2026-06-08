@@ -6,8 +6,30 @@ import (
 
 	"github.com/adam/lxcon/internal/backend"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestUpdateLimits(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	require.NoError(t, b.UpdateLimits(ctx(), "demo", backend.Limits{CPU: "2", Memory: "2GiB"}))
+	inst, err := b.GetInstance(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "2", inst.LimitsCPU)
+	assert.Equal(t, "2GiB", inst.LimitsMemory)
+
+	// Empty limits clear the values.
+	require.NoError(t, b.UpdateLimits(ctx(), "demo", backend.Limits{}))
+	inst, err = b.GetInstance(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Empty(t, inst.LimitsCPU)
+	assert.Empty(t, inst.LimitsMemory)
+
+	// Missing instance → ErrNotFound.
+	require.ErrorIs(t, b.UpdateLimits(ctx(), "ghost", backend.Limits{}), backend.ErrNotFound)
+}
 
 func TestSentinelErrors(t *testing.T) {
 	b := New()

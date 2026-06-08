@@ -273,6 +273,38 @@ func (b *incusBackend) DeleteSnapshot(ctx context.Context, name, snapshot string
 	return nil
 }
 
+// UpdateLimits sets or clears limits.cpu/limits.memory on the instance's local
+// config (GET-then-PUT, matching RestoreSnapshot). Empty values delete the key.
+func (b *incusBackend) UpdateLimits(ctx context.Context, name string, l backend.Limits) error {
+	inst, etag, err := b.srv.GetInstance(name)
+	if err != nil {
+		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
+	}
+	put := inst.Writable()
+	if put.Config == nil {
+		put.Config = map[string]string{}
+	}
+	setOrDelete(put.Config, "limits.cpu", l.CPU)
+	setOrDelete(put.Config, "limits.memory", l.Memory)
+
+	op, err := b.srv.UpdateInstance(name, put, etag)
+	if err != nil {
+		return fmt.Errorf("update limits on %q: %w", name, mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		return fmt.Errorf("update limits on %q: %w", name, mapErr(err))
+	}
+	return nil
+}
+
+func setOrDelete(m map[string]string, key, val string) {
+	if val == "" {
+		delete(m, key)
+		return
+	}
+	m[key] = val
+}
+
 func (b *incusBackend) CloneInstance(ctx context.Context, src, dst string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -295,12 +327,14 @@ func (b *incusBackend) CloneInstance(ctx context.Context, src, dst string) error
 
 func toInstance(in *api.Instance, state *api.InstanceState, snapshots int) backend.Instance {
 	return backend.Instance{
-		Name:      in.Name,
-		Status:    in.Status,
-		Image:     in.ExpandedConfig["image.description"],
-		IPv4:      ipv4Addresses(state),
-		Snapshots: snapshots,
-		CreatedAt: in.CreatedAt,
+		Name:         in.Name,
+		Status:       in.Status,
+		Image:        in.ExpandedConfig["image.description"],
+		IPv4:         ipv4Addresses(state),
+		Snapshots:    snapshots,
+		CreatedAt:    in.CreatedAt,
+		LimitsCPU:    in.ExpandedConfig["limits.cpu"],
+		LimitsMemory: in.ExpandedConfig["limits.memory"],
 	}
 }
 

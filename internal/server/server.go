@@ -26,6 +26,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/stop", h.stop)
 	mux.HandleFunc("POST /instances/{name}/delete", h.delete)
 	mux.HandleFunc("POST /instances/{name}/clone", h.clone)
+	mux.HandleFunc("POST /instances/{name}/limits", h.updateLimits)
 	mux.HandleFunc("POST /instances/{name}/snapshots", h.createSnapshot)
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/restore", h.restoreSnapshot)
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/delete", h.deleteSnapshot)

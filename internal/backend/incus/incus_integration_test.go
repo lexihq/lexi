@@ -168,6 +168,20 @@ func TestExportImportRoundTrip(t *testing.T) {
 	assert.True(t, listed(list, dst), "imported instance %q should be listed", dst)
 }
 
+// TestConsoleLogReadsForRunningInstance starts a throwaway instance and reads
+// its console log without error (content may be empty depending on the image).
+func TestConsoleLogReadsForRunningInstance(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("console")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage, Start: true}))
+
+	_, err := b.ConsoleLog(ctx, name)
+	require.NoError(t, err)
+}
+
 // TestRoundTripLifecycle covers the write paths: create+start, read back as
 // Running, stop, delete (and confirm it leaves the list).
 func TestRoundTripLifecycle(t *testing.T) {

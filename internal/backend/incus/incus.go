@@ -71,6 +71,7 @@ func New() (*incusBackend, error) {
 			Snapshots:  true,
 			Clone:      true,
 			Backup:     true,
+			Console:    true,
 			Metrics:    true,
 			Limits:     true,
 		},
@@ -429,6 +430,21 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 		return fmt.Errorf("stream backup of %q: %w", name, err)
 	}
 	return nil
+}
+
+// ConsoleLog reads the instance's console log buffer into a string.
+func (b *incusBackend) ConsoleLog(_ context.Context, name string) (string, error) {
+	rc, err := b.srv.GetInstanceConsoleLog(name, &incusclient.InstanceConsoleLogArgs{})
+	if err != nil {
+		return "", fmt.Errorf("get console log of %q: %w", name, mapErr(err))
+	}
+	defer rc.Close()
+
+	content, err := io.ReadAll(rc)
+	if err != nil {
+		return "", fmt.Errorf("read console log of %q: %w", name, err)
+	}
+	return string(content), nil
 }
 
 // ImportInstance creates an instance named name from a backup tarball streamed

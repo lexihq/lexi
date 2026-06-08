@@ -12,6 +12,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestConsoleLog(t *testing.T) {
+	b := New()
+	assert.True(t, b.Capabilities().Console, "fake should advertise console")
+	mustCreate(t, b, "demo")
+
+	log, err := b.ConsoleLog(ctx(), "demo")
+	require.NoError(t, err)
+	assert.NotEmpty(t, log, "console log should return canned text")
+
+	_, err = b.ConsoleLog(ctx(), "ghost")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+}
+
 func TestImportInstanceRoundTrip(t *testing.T) {
 	b := New()
 	mustCreate(t, b, "demo") // image debian/12

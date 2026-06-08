@@ -55,6 +55,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		Snapshots:  true,
 		Clone:      true,
 		Backup:     true,
+		Console:    true,
 		Metrics:    true,
 		Limits:     true,
 	}
@@ -291,6 +292,18 @@ func (f *Fake) ImportInstance(_ context.Context, name string, r io.Reader) error
 		},
 	}
 	return nil
+}
+
+// ConsoleLog returns canned console output for an existing instance so handler
+// and UI tests can assert the logs panel without a live daemon.
+func (f *Fake) ConsoleLog(_ context.Context, name string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if _, ok := f.instances[name]; !ok {
+		return "", notFound(name)
+	}
+	return fmt.Sprintf("[fake console] %s booted\nlogin: ", name), nil
 }
 
 func (f *Fake) UpdateLimits(_ context.Context, name string, l backend.Limits) error {

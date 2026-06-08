@@ -33,6 +33,8 @@ type instanceServerStub struct {
 	importOp       incusclient.Operation
 	importedName   string
 	importedBytes  []byte
+	consoleLog     string
+	consoleErr     error
 }
 
 func (s *instanceServerStub) GetInstanceSnapshots(string) ([]api.InstanceSnapshot, error) {
@@ -80,6 +82,13 @@ func (s *instanceServerStub) CreateInstanceFromBackup(args incusclient.InstanceB
 	s.importedName = args.Name
 	s.importedBytes, _ = io.ReadAll(args.BackupFile)
 	return s.importOp, nil
+}
+
+func (s *instanceServerStub) GetInstanceConsoleLog(string, *incusclient.InstanceConsoleLogArgs) (io.ReadCloser, error) {
+	if s.consoleErr != nil {
+		return nil, s.consoleErr
+	}
+	return io.NopCloser(strings.NewReader(s.consoleLog)), nil
 }
 
 type operationStub struct {
@@ -292,6 +301,24 @@ func TestImportInstanceCreatesFromBackup(t *testing.T) {
 
 	assert.Equal(t, "restored", srv.importedName, "destination name should be passed through")
 	assert.Equal(t, "tarball-bytes", string(srv.importedBytes), "the reader should stream to the backup file")
+}
+
+func TestConsoleLogReadsContent(t *testing.T) {
+	srv := &instanceServerStub{consoleLog: "boot line 1\nboot line 2\n"}
+	b := &incusBackend{srv: srv}
+
+	log, err := b.ConsoleLog(t.Context(), "demo")
+
+	require.NoError(t, err)
+	assert.Equal(t, "boot line 1\nboot line 2\n", log)
+}
+
+func TestConsoleLogMapsStructuredStatus(t *testing.T) {
+	b := &incusBackend{srv: &instanceServerStub{consoleErr: api.StatusErrorf(http.StatusNotFound, "missing")}}
+
+	_, err := b.ConsoleLog(t.Context(), "ghost")
+
+	require.ErrorIs(t, err, backend.ErrNotFound)
 }
 
 func TestListSnapshotsMapsStructuredStatus(t *testing.T) {

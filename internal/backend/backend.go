@@ -128,5 +128,8 @@ type Backend interface {
 	// from r (as produced by ExportInstance).
 	ImportInstance(ctx context.Context, name string, r io.Reader) error
 
+	// ConsoleLog returns the instance's console log output.
+	ConsoleLog(ctx context.Context, name string) (string, error)
+
 	ListImages(ctx context.Context) ([]Image, error) // for the create dropdown
 }

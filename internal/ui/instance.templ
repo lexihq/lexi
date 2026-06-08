@@ -42,6 +42,14 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 		if caps.Limits {
 			@LimitsForm(inst)
 		}
+		if caps.Console {
+			<div
+				id="logs"
+				hx-get={ "/instances/" + inst.Name + "/logs" }
+				hx-trigger="load"
+				hx-swap="outerHTML"
+			></div>
+		}
 		if caps.Snapshots {
 			@SnapshotTable(inst.Name, snapshots)
 		}
@@ -134,6 +142,25 @@ templ MetricsPanel(name string, m backend.Metrics) {
 			<div><dt class="text-muted-foreground">Network TX</dt><dd>{ humanBytes(m.NetworkTx) }</dd></div>
 			<div><dt class="text-muted-foreground">Processes</dt><dd>{ fmt.Sprintf("%d", m.Processes) }</dd></div>
 		</dl>
+	</section>
+}
+
+// LogsPanel renders the instance console log with a manual refresh that swaps
+// the panel in place. The initial load is driven by the caps-gated wrapper in
+// InstancePage.
+templ LogsPanel(name string, log string) {
+	<section id="logs" class="mb-8 rounded-lg border bg-card p-4">
+		<div class="mb-3 flex items-center justify-between gap-4">
+			<h2 class="text-lg font-medium">Console log</h2>
+			@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-get": "/instances/" + name + "/logs", "hx-target": "#logs", "hx-swap": "outerHTML"}}) {
+				Refresh
+			}
+		</div>
+		if log == "" {
+			<p class="text-sm text-muted-foreground">No console output yet.</p>
+		} else {
+			<pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">{ log }</pre>
+		}
 	</section>
 }
 

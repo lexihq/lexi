@@ -208,6 +208,23 @@ func TestMetricsUnknownInstanceIs404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, res.Code)
 }
 
+func TestLogsReturnsPanel(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+
+	res := request(t, New(b), "GET", "/instances/demo/logs", "", true)
+
+	assert.Equal(t, http.StatusOK, res.Code)
+	body := res.Body.String()
+	assert.Contains(t, body, "Console log")
+	assert.Contains(t, body, "demo booted")
+}
+
+func TestLogsUnknownInstanceIs404(t *testing.T) {
+	res := request(t, New(fake.New()), "GET", "/instances/ghost/logs", "", true)
+	assert.Equal(t, http.StatusNotFound, res.Code)
+}
+
 func TestExportDownloadsTarball(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))

@@ -230,6 +230,17 @@ func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+// logs renders the console-log panel for an instance.
+func (h handlers) logs(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	log, err := h.backend.ConsoleLog(r.Context(), name)
+	if err != nil {
+		h.renderError(w, statusFor(err), err.Error())
+		return
+	}
+	h.render(w, r, http.StatusOK, ui.LogsPanel(name, log))
+}
+
 // export streams a portable backup tarball as a file download. It validates the
 // instance up front so a missing one returns a clean 404 before any backup work
 // or response body is committed.

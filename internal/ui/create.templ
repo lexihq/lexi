@@ -6,7 +6,7 @@ import (
 )
 
 templ CreatePage(caps backend.Capabilities, images []backend.Image) {
-	@Layout("Create instance", caps) {
+	@Layout("Create instance", caps, Nav{Section: NavInstances}) {
 		<div class="mb-6">
 			<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>
 			<h1 class="mt-2 text-2xl font-semibold">Create instance</h1>
@@ -62,7 +62,7 @@ templ CreatePage(caps backend.Capabilities, images []backend.Image) {
 // produced by Export. It posts a normal multipart form (file uploads don't fit
 // the HTMX partial pattern) and redirects to the list on success.
 templ ImportPage(caps backend.Capabilities) {
-	@Layout("Import instance", caps) {
+	@Layout("Import instance", caps, Nav{Section: NavInstances}) {
 		<div class="mb-6">
 			<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>
 			<h1 class="mt-2 text-2xl font-semibold">Import instance</h1>

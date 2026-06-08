@@ -2,9 +2,23 @@ package ui
 
 import "github.com/adam/lxcon/internal/backend"
 
-// Layout is the base HTML shell: embedded CSS + htmx, and a centered content
-// column. Page-specific component scripts are appended by pages as needed.
-templ Layout(title string, caps backend.Capabilities) {
+// NavInstances is the active-section key for the Instances nav entry.
+const NavInstances = "instances"
+
+// Nav carries the active navigation state into the shell so the sidebar can
+// highlight the current section and instance. Instance is empty on list/create
+// pages and set to the instance name on detail/console pages.
+type Nav struct {
+	Section  string
+	Instance string
+}
+
+// Layout is the base HTML shell: embedded CSS + htmx, a top header, and a
+// Proxmox-style left sidebar over a scrollable main content area. The sidebar
+// collapses off-canvas below md via a pure-CSS peer checkbox (no JS), keeping
+// the no-Alpine constraint. Page-specific component scripts are appended by
+// pages as needed.
+templ Layout(title string, caps backend.Capabilities, nav Nav) {
 	<!DOCTYPE html>
 	<html lang="en" class="h-full">
 		<head>
@@ -15,18 +29,27 @@ templ Layout(title string, caps backend.Capabilities) {
 			<script src="/static/js/htmx.min.js" defer></script>
 		</head>
 		<body class="h-full bg-background text-foreground">
-			<header class="border-b bg-card">
-				<div class="mx-auto flex max-w-6xl items-center justify-between p-4">
-					<a href="/" class="text-xl font-semibold">lxcon</a>
+			<div class="flex h-full flex-col">
+				<header class="flex items-center justify-between border-b bg-card px-4 py-3">
+					<div class="flex items-center gap-2">
+						<label for="sidebar-toggle" class="cursor-pointer rounded-md border p-1.5 md:hidden" aria-label="Toggle sidebar">☰</label>
+						<a href="/" class="text-xl font-semibold">lxcon</a>
+					</div>
 					<div class="flex items-center gap-3 text-sm text-muted-foreground">
 						<span>{ caps.ServerInfo }</span>
 						<span class="rounded-md border px-2 py-1">{ string(caps.Tier) }</span>
 					</div>
+				</header>
+				<div class="flex flex-1 overflow-hidden">
+					<input id="sidebar-toggle" type="checkbox" class="peer hidden"/>
+					<aside class="absolute inset-y-0 left-0 z-40 w-64 -translate-x-full overflow-y-auto border-r bg-card p-3 transition-transform peer-checked:translate-x-0 md:static md:translate-x-0">
+						@Sidebar(nav)
+					</aside>
+					<main class="flex-1 overflow-y-auto p-6">
+						{ children... }
+					</main>
 				</div>
-			</header>
-			<main class="mx-auto max-w-6xl p-6">
-				{ children... }
-			</main>
+			</div>
 		</body>
 	</html>
 }

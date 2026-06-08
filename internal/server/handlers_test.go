@@ -127,6 +127,42 @@ func TestHXRequestTogglesPartialVsRedirect(t *testing.T) {
 	}
 }
 
+func TestSidebarPartialListsInstancesWithActive(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+
+	res := request(t, New(b), "GET", "/partials/sidebar?active=demo", "", true)
+
+	assert.Equal(t, http.StatusOK, res.Code)
+	body := res.Body.String()
+	assert.Contains(t, body, "demo")
+	assert.Contains(t, body, "bg-accent")           // active=demo highlight threaded through
+	assert.Contains(t, body, "bg-muted-foreground") // stopped status dot
+}
+
+func TestDetailTabReturnsFragmentForHXAndFullPageOtherwise(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+	srv := New(b)
+
+	// HTMX request gets just the swappable body (no shell), with the requested
+	// tab mounted — proving ?tab is forwarded and the fragment branch is taken.
+	hx := request(t, srv, "GET", "/instances/demo?tab=metrics", "", true)
+	assert.Equal(t, http.StatusOK, hx.Code)
+	hxBody := hx.Body.String()
+	assert.NotContains(t, strings.ToLower(hxBody), "<!doctype")
+	assert.Contains(t, hxBody, `id="instance-body"`)
+	assert.Contains(t, hxBody, `hx-get="/instances/demo/metrics"`)
+
+	// A plain request gets the full shell (doctype + sidebar) for reload/deep-link.
+	full := request(t, srv, "GET", "/instances/demo?tab=metrics", "", false)
+	assert.Equal(t, http.StatusOK, full.Code)
+	fullBody := full.Body.String()
+	assert.Contains(t, strings.ToLower(fullBody), "<!doctype")
+	assert.Contains(t, fullBody, "/partials/sidebar")
+	assert.Contains(t, fullBody, `id="instance-body"`)
+}
+
 func TestStatusForSentinels(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))

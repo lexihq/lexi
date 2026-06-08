@@ -75,6 +75,8 @@ test("create page arch and type filters narrow the image list", async ({ page })
 
 test("logs panel refresh button re-fetches the console log", async ({ page }) => {
   await page.goto("/instances/demo");
+  // The Logs panel now lives behind the Logs tab; opening it mounts #logs.
+  await page.getByRole("link", { name: "Logs" }).click();
   await expect(page.locator("#logs")).toContainText("Console log");
 
   await Promise.all([
@@ -93,19 +95,18 @@ test("metrics panel polls for updates", async ({ page }) => {
   });
 
   await page.goto("/instances/demo");
+  // The metrics poll only runs while its tab is mounted.
+  await page.getByRole("link", { name: "Metrics" }).click();
   await expect(page.locator("#metrics")).toContainText("Live metrics");
 
   // The panel reloads itself every 3s; the initial load plus one poll is >= 2.
   await expect.poll(() => metricsRequests, { timeout: 8_000 }).toBeGreaterThanOrEqual(2);
 });
 
-test("detail page renders metrics and logs and applies resource limits", async ({ page }) => {
+test("detail tabs expose summary limits, metrics, and logs", async ({ page }) => {
   await page.goto("/instances/demo");
 
-  await expect(page.locator("#metrics")).toContainText("Live metrics");
-  await expect(page.locator("#metrics")).toContainText("Memory");
-  await expect(page.locator("#logs")).toContainText("Console log");
-
+  // Summary is the default tab: apply resource limits in place.
   await page.locator("#cpu").fill("2");
   await page.locator("#memory").fill("512MiB");
   await page.getByRole("button", { name: "Apply limits" }).click();
@@ -113,12 +114,22 @@ test("detail page renders metrics and logs and applies resource limits", async (
   // The form re-renders in place reflecting the applied values.
   await expect(page.locator("#cpu")).toHaveValue("2");
   await expect(page.locator("#memory")).toHaveValue("512MiB");
+
+  // The Metrics and Logs panels each live behind their own tab.
+  await page.getByRole("link", { name: "Metrics" }).click();
+  await expect(page.locator("#metrics")).toContainText("Memory");
+
+  await page.getByRole("link", { name: "Logs" }).click();
+  await expect(page.locator("#logs")).toContainText("Console log");
 });
 
 test("snapshot create, restore, and delete on the detail page", async ({ page }) => {
   await page.goto("/instances/demo");
+  // Snapshots live behind their tab; open it before driving the table.
+  await page.getByRole("link", { name: "Snapshots" }).click();
   const snap = "e2e-snap";
   const snapshots = page.locator("#snapshots");
+  await expect(snapshots).toBeVisible();
 
   await snapshots.locator("input[name=snapshot]").fill(snap);
   await page.getByRole("button", { name: "Create snapshot" }).click();

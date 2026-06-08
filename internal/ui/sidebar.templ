@@ -1,0 +1,53 @@
+package ui
+
+import "github.com/adam/lxcon/internal/backend"
+
+// Sidebar is the persistent left navigation: a static section list plus a
+// live, self-refreshing instance list (the signature Proxmox trait). The
+// instance list is lazy-loaded and polled via the /partials/sidebar route so
+// individual page handlers don't each have to fetch instances; the active
+// highlight is baked in from nav.Instance.
+templ Sidebar(nav Nav) {
+	<nav class="space-y-1">
+		<a
+			href="/"
+			class={ "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium",
+				templ.KV("bg-accent text-accent-foreground", nav.Section == NavInstances),
+				templ.KV("text-muted-foreground hover:text-foreground", nav.Section != NavInstances) }
+		>Instances</a>
+	</nav>
+	<div class="mt-4">
+		<p class="px-3 pb-1 text-xs font-medium uppercase text-muted-foreground">Instances</p>
+		<div
+			hx-get={ "/partials/sidebar?active=" + nav.Instance }
+			hx-trigger="load, every 10s"
+			hx-swap="innerHTML"
+		></div>
+	</div>
+}
+
+// SidebarInstances is the HTMX-swapped instance list. Each entry navigates to
+// the instance detail page (full-page) and shows a status dot; the active
+// instance is highlighted from the active param the shell supplies.
+templ SidebarInstances(instances []backend.Instance, active string) {
+	for _, inst := range instances {
+		<a
+			href={ templ.URL("/instances/" + inst.Name) }
+			class={ "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm",
+				templ.KV("bg-accent text-accent-foreground", inst.Name == active),
+				templ.KV("text-muted-foreground hover:text-foreground", inst.Name != active) }
+		>
+			<span class={ "size-2 shrink-0 rounded-full", statusDot(inst.Status) }></span>
+			<span class="truncate">{ inst.Name }</span>
+		</a>
+	}
+}
+
+// statusDot maps an instance status to the dot color: green for running,
+// muted otherwise.
+func statusDot(status string) string {
+	if status == "Running" {
+		return "bg-green-500"
+	}
+	return "bg-muted-foreground"
+}

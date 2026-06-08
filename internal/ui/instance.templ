@@ -8,57 +8,121 @@ import (
 	"github.com/adam/lxcon/internal/components/table"
 )
 
-templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot) {
-	@Layout(inst.Name, caps) {
+// InstancePage is the per-instance detail shell: a header (name/status + Export
+// action) over a tabbed body. Export stays a header action; Console is a tab
+// link to the full-page terminal.
+templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, tab string) {
+	@Layout(inst.Name, caps, Nav{Section: NavInstances, Instance: inst.Name}) {
 		<div class="mb-6 flex items-start justify-between gap-4">
 			<div>
 				<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>
 				<h1 class="mt-2 text-2xl font-semibold">{ inst.Name }</h1>
 				<p class="text-muted-foreground">{ inst.Status }</p>
 			</div>
-			<div class="flex gap-2">
-				if caps.Console {
-					@button.Button(button.Props{Href: "/instances/" + inst.Name + "/console", Variant: button.VariantOutline}) {
-						Console
-					}
+			if caps.Backup {
+				@button.Button(button.Props{Href: "/instances/" + inst.Name + "/export", Variant: button.VariantOutline}) {
+					Export
 				}
-				if caps.Backup {
-					@button.Button(button.Props{Href: "/instances/" + inst.Name + "/export", Variant: button.VariantOutline}) {
-						Export
-					}
-				}
-			</div>
+			}
 		</div>
-		<section class="mb-8 rounded-lg border bg-card p-4">
-			<h2 class="mb-3 text-lg font-medium">Details</h2>
-			<dl class="grid gap-3 text-sm sm:grid-cols-2">
-				<div><dt class="text-muted-foreground">Image</dt><dd>{ inst.Image }</dd></div>
-				<div><dt class="text-muted-foreground">IPv4</dt><dd>{ joinIPv4(inst.IPv4) }</dd></div>
-			</dl>
-		</section>
-		if caps.Metrics {
-			<div
-				id="metrics"
-				hx-get={ "/instances/" + inst.Name + "/metrics" }
-				hx-trigger="load, every 3s"
-				hx-swap="outerHTML"
-			></div>
+		@InstanceBody(caps, inst, snapshots, tab)
+	}
+}
+
+// InstanceBody is the swappable tab bar + active-tab content. HTMX tab links
+// target this element (outerHTML), so its id must match what the tab links
+// point at. Only the active tab is mounted, keeping panel ids (#metrics, #logs,
+// #snapshots, #limits) unique and stopping the metrics poll when its tab is left.
+templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, tab string) {
+	{{ active := effectiveTab(caps, tab) }}
+	<div id="instance-body">
+		<div class="mb-4 flex gap-1 border-b">
+			@tabLink(inst.Name, "summary", "Summary", active)
+			if caps.Snapshots {
+				@tabLink(inst.Name, "snapshots", "Snapshots", active)
+			}
+			if caps.Console {
+				<a
+					href={ templ.URL("/instances/" + inst.Name + "/console") }
+					class="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+				>Console</a>
+			}
+			if caps.Metrics {
+				@tabLink(inst.Name, "metrics", "Metrics", active)
+			}
+			if caps.Console {
+				@tabLink(inst.Name, "logs", "Logs", active)
+			}
+		</div>
+		switch active {
+			case "snapshots":
+				@SnapshotTable(inst.Name, snapshots)
+			case "metrics":
+				<div
+					id="metrics"
+					hx-get={ "/instances/" + inst.Name + "/metrics" }
+					hx-trigger="load, every 3s"
+					hx-swap="outerHTML"
+				></div>
+			case "logs":
+				<div
+					id="logs"
+					hx-get={ "/instances/" + inst.Name + "/logs" }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+				></div>
+			default:
+				<section class="mb-8 rounded-lg border bg-card p-4">
+					<h2 class="mb-3 text-lg font-medium">Details</h2>
+					<dl class="grid gap-3 text-sm sm:grid-cols-2">
+						<div><dt class="text-muted-foreground">Image</dt><dd>{ inst.Image }</dd></div>
+						<div><dt class="text-muted-foreground">IPv4</dt><dd>{ joinIPv4(inst.IPv4) }</dd></div>
+					</dl>
+				</section>
+				if caps.Limits {
+					@LimitsForm(inst)
+				}
 		}
-		if caps.Limits {
-			@LimitsForm(inst)
-		}
-		if caps.Console {
-			<div
-				id="logs"
-				hx-get={ "/instances/" + inst.Name + "/logs" }
-				hx-trigger="load"
-				hx-swap="outerHTML"
-			></div>
-		}
+	</div>
+}
+
+// effectiveTab resolves the requested tab against the instance's capabilities,
+// downgrading an empty, unknown, or capability-disabled tab to "summary". This
+// keeps the capability boundary intact for direct ?tab= URLs (so a disabled
+// feature is never rendered or polled) and ensures the bare detail URL
+// highlights Summary.
+func effectiveTab(caps backend.Capabilities, tab string) string {
+	switch tab {
+	case "snapshots":
 		if caps.Snapshots {
-			@SnapshotTable(inst.Name, snapshots)
+			return "snapshots"
+		}
+	case "metrics":
+		if caps.Metrics {
+			return "metrics"
+		}
+	case "logs":
+		if caps.Console {
+			return "logs"
 		}
 	}
+	return "summary"
+}
+
+// tabLink is a deep-linkable tab: a plain href for reload/back-forward plus an
+// HTMX swap of #instance-body for in-place switching, with the active tab
+// underlined.
+templ tabLink(name, tab, label, active string) {
+	<a
+		href={ templ.URL("/instances/" + name + "?tab=" + tab) }
+		hx-get={ "/instances/" + name + "?tab=" + tab }
+		hx-target="#instance-body"
+		hx-swap="outerHTML"
+		hx-push-url="true"
+		class={ "border-b-2 px-3 py-2 text-sm",
+			templ.KV("border-primary font-medium", active == tab),
+			templ.KV("border-transparent text-muted-foreground hover:text-foreground", active != tab) }
+	>{ label }</a>
 }
 
 templ SnapshotTable(name string, snapshots []backend.Snapshot) {
@@ -129,7 +193,7 @@ templ LimitsForm(inst backend.Instance) {
 }
 
 // MetricsPanel renders a point-in-time resource snapshot. It re-fetches itself
-// every 3s; the initial load is driven by the caps-gated wrapper in InstancePage.
+// every 3s; the initial load is driven by the metrics tab case in InstanceBody.
 templ MetricsPanel(name string, m backend.Metrics) {
 	<section
 		id="metrics"
@@ -151,8 +215,8 @@ templ MetricsPanel(name string, m backend.Metrics) {
 }
 
 // LogsPanel renders the instance console log with a manual refresh that swaps
-// the panel in place. The initial load is driven by the caps-gated wrapper in
-// InstancePage.
+// the panel in place. The initial load is driven by the logs tab case in
+// InstanceBody.
 templ LogsPanel(name string, log string) {
 	<section id="logs" class="mb-8 rounded-lg border bg-card p-4">
 		<div class="mb-3 flex items-center justify-between gap-4">

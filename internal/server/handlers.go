@@ -37,6 +37,17 @@ func (h handlers) list(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, ui.InstancesPage(h.backend.Capabilities(), instances))
 }
 
+// sidebar renders the self-refreshing instance list for the shell sidebar. The
+// active param (the currently-viewed instance name) drives the highlight.
+func (h handlers) sidebar(w http.ResponseWriter, r *http.Request) {
+	instances, err := h.backend.ListInstances(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.render(w, r, http.StatusOK, ui.SidebarInstances(instances, r.URL.Query().Get("active")))
+}
+
 func (h handlers) detail(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	inst, err := h.backend.GetInstance(r.Context(), name)
@@ -50,7 +61,12 @@ func (h handlers) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, r, http.StatusOK, ui.InstancePage(h.backend.Capabilities(), inst, snapshots))
+	tab := r.URL.Query().Get("tab")
+	if isHTMX(r) {
+		h.render(w, r, http.StatusOK, ui.InstanceBody(h.backend.Capabilities(), inst, snapshots, tab))
+		return
+	}
+	h.render(w, r, http.StatusOK, ui.InstancePage(h.backend.Capabilities(), inst, snapshots, tab))
 }
 
 func (h handlers) createForm(w http.ResponseWriter, r *http.Request) {

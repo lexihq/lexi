@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -223,6 +225,46 @@ func TestExportUnknownInstanceIs404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, res.Code)
 }
 
+func TestImportFormRenders(t *testing.T) {
+	res := request(t, New(fake.New()), "GET", "/instances/import", "", false)
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Contains(t, res.Body.String(), "Import instance")
+}
+
+func TestImportCreatesInstanceFromUpload(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+	var buf bytes.Buffer
+	require.NoError(t, b.ExportInstance(t.Context(), "demo", &buf))
+
+	res := importRequest(t, New(b), "restored", buf.Bytes(), false)
+
+	assert.Equal(t, http.StatusSeeOther, res.Code)
+	assert.Equal(t, "/", res.Header().Get("Location"))
+	inst, err := b.GetInstance(t.Context(), "restored")
+	require.NoError(t, err)
+	assert.Equal(t, "debian/12", inst.Image)
+}
+
+func TestImportValidatesNameAndFile(t *testing.T) {
+	t.Run("missing name", func(t *testing.T) {
+		res := importRequest(t, New(fake.New()), "", []byte("x"), true)
+		assert.Equal(t, http.StatusBadRequest, res.Code)
+		assert.Contains(t, res.Body.String(), "name is required")
+	})
+
+	t.Run("missing file", func(t *testing.T) {
+		res := importRequest(t, New(fake.New()), "restored", nil, true)
+		assert.Equal(t, http.StatusBadRequest, res.Code)
+		assert.Contains(t, res.Body.String(), "backup file is required")
+	})
+}
+
+func TestImportRejectsInvalidBackup(t *testing.T) {
+	res := importRequest(t, New(fake.New()), "restored", []byte("garbage"), true)
+	assert.Equal(t, http.StatusBadRequest, res.Code)
+}
+
 func request(t *testing.T, srv *http.Server, method, path, body string, htmx bool) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -238,6 +280,34 @@ func formRequest(t *testing.T, srv *http.Server, path string, form url.Values, h
 	t.Helper()
 	req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if htmx {
+		req.Header.Set("HX-Request", "true")
+	}
+	res := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(res, req)
+	return res
+}
+
+// importRequest posts a multipart upload to the import endpoint. An empty name
+// omits the field and a nil file omits the file part, so the helper can drive
+// the validation paths as well as a successful upload.
+func importRequest(t *testing.T, srv *http.Server, name string, file []byte, htmx bool) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if name != "" {
+		require.NoError(t, mw.WriteField("name", name))
+	}
+	if file != nil {
+		fw, err := mw.CreateFormFile("backup", "backup.tar.gz")
+		require.NoError(t, err)
+		_, err = fw.Write(file)
+		require.NoError(t, err)
+	}
+	require.NoError(t, mw.Close())
+
+	req := httptest.NewRequest("POST", "/instances/import", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
 	if htmx {
 		req.Header.Set("HX-Request", "true")
 	}

@@ -17,9 +17,16 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance) {
 				<h1 class="text-2xl font-semibold">Instances</h1>
 				<p class="text-muted-foreground">Create and manage Incus containers on this node.</p>
 			</div>
-			@button.Button(button.Props{Href: "/instances/new"}) {
-				Create instance
-			}
+			<div class="flex gap-2">
+				if caps.Backup {
+					@button.Button(button.Props{Href: "/instances/import", Variant: button.VariantOutline}) {
+						Import
+					}
+				}
+				@button.Button(button.Props{Href: "/instances/new"}) {
+					Create instance
+				}
+			</div>
 		</div>
 		@table.Table() {
 			@table.Header() {

@@ -124,6 +124,9 @@ type Backend interface {
 
 	// ExportInstance streams a portable backup tarball of the instance to w.
 	ExportInstance(ctx context.Context, name string, w io.Writer) error
+	// ImportInstance creates an instance named name from a backup tarball read
+	// from r (as produced by ExportInstance).
+	ImportInstance(ctx context.Context, name string, r io.Reader) error
 
 	ListImages(ctx context.Context) ([]Image, error) // for the create dropdown
 }

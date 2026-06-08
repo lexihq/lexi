@@ -145,6 +145,29 @@ func TestExportInstanceProducesTarball(t *testing.T) {
 	assert.Equal(t, []byte{0x1f, 0x8b}, buf.Bytes()[:2], "backup should be a gzip stream")
 }
 
+// TestExportImportRoundTrip exports a throwaway instance and imports the
+// resulting tarball back under a new name, asserting the clone is listed.
+func TestExportImportRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	src := uniqueName("exp-src")
+	dst := uniqueName("exp-dst")
+	t.Cleanup(func() {
+		cleanupInstance(t, b, dst)
+		cleanupInstance(t, b, src)
+	})
+
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: src, Image: testImage}))
+
+	var buf bytes.Buffer
+	require.NoError(t, b.ExportInstance(ctx, src, &buf))
+	require.NoError(t, b.ImportInstance(ctx, dst, &buf))
+
+	list, err := b.ListInstances(ctx)
+	require.NoError(t, err)
+	assert.True(t, listed(list, dst), "imported instance %q should be listed", dst)
+}
+
 // TestRoundTripLifecycle covers the write paths: create+start, read back as
 // Running, stop, delete (and confirm it leaves the list).
 func TestRoundTripLifecycle(t *testing.T) {

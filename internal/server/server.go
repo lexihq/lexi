@@ -20,6 +20,8 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("GET /", h.list)
 	mux.HandleFunc("GET /images", h.images)
 	mux.HandleFunc("GET /instances/new", h.createForm)
+	mux.HandleFunc("GET /instances/import", h.importForm)
+	mux.HandleFunc("POST /instances/import", h.importInstance)
 	mux.HandleFunc("POST /instances", h.create)
 	mux.HandleFunc("GET /instances/{name}", h.detail)
 	mux.HandleFunc("GET /instances/{name}/metrics", h.metrics)

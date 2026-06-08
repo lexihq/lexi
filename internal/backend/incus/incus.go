@@ -431,6 +431,22 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 	return nil
 }
 
+// ImportInstance creates an instance named name from a backup tarball streamed
+// from r (as produced by ExportInstance).
+func (b *incusBackend) ImportInstance(ctx context.Context, name string, r io.Reader) error {
+	op, err := b.srv.CreateInstanceFromBackup(incusclient.InstanceBackupArgs{
+		BackupFile: r,
+		Name:       name,
+	})
+	if err != nil {
+		return fmt.Errorf("import instance %q: %w", name, mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		return fmt.Errorf("import instance %q: %w", name, mapErr(err))
+	}
+	return nil
+}
+
 // deleteBackup removes the temporary server-side backup created during export.
 func (b *incusBackend) deleteBackup(ctx context.Context, name, backupName string) error {
 	op, err := b.srv.DeleteInstanceBackup(name, backupName)

@@ -189,6 +189,47 @@ func (h handlers) metrics(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, ui.MetricsPanel(name, m))
 }
 
+// importForm renders the backup-upload page.
+func (h handlers) importForm(w http.ResponseWriter, r *http.Request) {
+	h.render(w, r, http.StatusOK, ui.ImportPage(h.backend.Capabilities()))
+}
+
+// importInstance restores an instance from an uploaded backup tarball. The file
+// upload uses a plain multipart form, so success redirects to the list (and
+// returns the new row when driven by HTMX, mirroring create).
+func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		h.renderError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	name := strings.TrimSpace(r.FormValue("name"))
+	if name == "" {
+		h.renderError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	file, _, err := r.FormFile("backup")
+	if err != nil {
+		h.renderError(w, http.StatusBadRequest, "backup file is required")
+		return
+	}
+	defer file.Close()
+
+	if err := h.backend.ImportInstance(r.Context(), name, file); err != nil {
+		h.renderError(w, statusFor(err), err.Error())
+		return
+	}
+	if isHTMX(r) {
+		inst, err := h.backend.GetInstance(r.Context(), name)
+		if err != nil {
+			h.renderError(w, statusFor(err), err.Error())
+			return
+		}
+		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(), inst))
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 // export streams a portable backup tarball as a file download. It validates the
 // instance up front so a missing one returns a clean 404 before any backup work
 // or response body is committed.

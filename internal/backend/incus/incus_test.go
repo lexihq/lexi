@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +30,9 @@ type instanceServerStub struct {
 	backupDeleteOp incusclient.Operation
 	backupBytes    []byte
 	deletedBackup  string
+	importOp       incusclient.Operation
+	importedName   string
+	importedBytes  []byte
 }
 
 func (s *instanceServerStub) GetInstanceSnapshots(string) ([]api.InstanceSnapshot, error) {
@@ -69,6 +74,12 @@ func (s *instanceServerStub) GetInstanceBackupFile(_ string, name string, req *i
 func (s *instanceServerStub) DeleteInstanceBackup(_ string, name string) (incusclient.Operation, error) {
 	s.deletedBackup = name
 	return s.backupDeleteOp, nil
+}
+
+func (s *instanceServerStub) CreateInstanceFromBackup(args incusclient.InstanceBackupArgs) (incusclient.Operation, error) {
+	s.importedName = args.Name
+	s.importedBytes, _ = io.ReadAll(args.BackupFile)
+	return s.importOp, nil
 }
 
 type operationStub struct {
@@ -271,6 +282,16 @@ func TestExportInstanceStreamsBackupThenDeletesIt(t *testing.T) {
 
 	assert.Equal(t, "backup-tarball-bytes", buf.String(), "spooled backup should stream to the writer")
 	assert.NotEmpty(t, srv.deletedBackup, "the temporary backup should be deleted afterwards")
+}
+
+func TestImportInstanceCreatesFromBackup(t *testing.T) {
+	srv := &instanceServerStub{importOp: &operationStub{}}
+	b := &incusBackend{srv: srv}
+
+	require.NoError(t, b.ImportInstance(t.Context(), "restored", strings.NewReader("tarball-bytes")))
+
+	assert.Equal(t, "restored", srv.importedName, "destination name should be passed through")
+	assert.Equal(t, "tarball-bytes", string(srv.importedBytes), "the reader should stream to the backup file")
 }
 
 func TestListSnapshotsMapsStructuredStatus(t *testing.T) {

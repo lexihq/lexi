@@ -323,6 +323,17 @@ func TestImportRejectsInvalidBackup(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, res.Code)
 }
 
+func TestImportRejectsOversizedUpload(t *testing.T) {
+	orig := maxImportBytes
+	maxImportBytes = 16
+	t.Cleanup(func() { maxImportBytes = orig })
+
+	res := importRequest(t, New(fake.New()), "restored", make([]byte, 1<<10), true)
+
+	assert.Equal(t, http.StatusRequestEntityTooLarge, res.Code)
+	assert.Contains(t, res.Body.String(), "too large")
+}
+
 func request(t *testing.T, srv *http.Server, method, path, body string, htmx bool) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))

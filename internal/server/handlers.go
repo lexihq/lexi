@@ -18,6 +18,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+// maxImportBytes caps an uploaded backup tarball so import cannot exhaust the
+// temp filesystem. Generous enough for real instance backups, bounded enough to
+// stop a runaway upload. A var (not const) so tests can lower it.
+var maxImportBytes int64 = 8 << 30 // 8 GiB
+
 type handlers struct {
 	backend backend.Backend
 }
@@ -203,7 +208,15 @@ func (h handlers) importForm(w http.ResponseWriter, r *http.Request) {
 // upload uses a plain multipart form, so success redirects to the list (and
 // returns the new row when driven by HTMX, mirroring create).
 func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
+	// Cap the whole request body so a large or malicious upload cannot spool an
+	// unbounded tarball to the temp filesystem before import begins.
+	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			h.renderError(w, http.StatusRequestEntityTooLarge, "backup file is too large")
+			return
+		}
 		h.renderError(w, http.StatusBadRequest, err.Error())
 		return
 	}

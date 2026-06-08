@@ -95,11 +95,17 @@ type operationStub struct {
 	incusclient.Operation
 	waitErr         error
 	waitContextUsed bool
+	cancelUsed      bool
 }
 
 func (o *operationStub) WaitContext(context.Context) error {
 	o.waitContextUsed = true
 	return o.waitErr
+}
+
+func (o *operationStub) Cancel() error {
+	o.cancelUsed = true
+	return nil
 }
 
 type remoteOperationStub struct {
@@ -291,6 +297,22 @@ func TestExportInstanceStreamsBackupThenDeletesIt(t *testing.T) {
 
 	assert.Equal(t, "backup-tarball-bytes", buf.String(), "spooled backup should stream to the writer")
 	assert.NotEmpty(t, srv.deletedBackup, "the temporary backup should be deleted afterwards")
+}
+
+func TestExportInstanceCancelsBackupOperationOnContextCancel(t *testing.T) {
+	op := &operationStub{waitErr: context.Canceled}
+	srv := &instanceServerStub{backupOp: op, backupDeleteOp: &operationStub{}}
+	b := &incusBackend{srv: srv}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var buf bytes.Buffer
+	err := b.ExportInstance(ctx, "demo", &buf)
+
+	require.Error(t, err)
+	assert.True(t, op.cancelUsed, "a canceled create wait should cancel the server operation")
+	assert.NotEmpty(t, srv.deletedBackup, "cleanup should still run after cancellation")
 }
 
 func TestImportInstanceCreatesFromBackup(t *testing.T) {

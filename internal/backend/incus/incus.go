@@ -2,8 +2,10 @@ package incus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -409,10 +411,20 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 	if err != nil {
 		return fmt.Errorf("create backup of %q: %w", name, mapErr(err))
 	}
+	// Once the operation exists, clean up on every return path. deleteBackup
+	// treats a missing backup as a no-op, so this is harmless if creation failed.
+	defer b.deleteBackup(name, backupName)
 	if err := op.WaitContext(ctx); err != nil {
+		// A canceled wait leaves the server operation running; cancel it so the
+		// backup does not finish and leak after we have given up. The deferred
+		// cleanup covers the race where it completes before the cancel lands.
+		if ctx.Err() != nil {
+			if cancelErr := op.Cancel(); cancelErr != nil {
+				log.Printf("lxcon: cancel backup operation for %q: %v", name, cancelErr)
+			}
+		}
 		return fmt.Errorf("create backup of %q: %w", name, mapErr(err))
 	}
-	defer b.deleteBackup(name, backupName)
 
 	tmp, err := os.CreateTemp("", "lxcon-export-*.tar.gz")
 	if err != nil {
@@ -544,18 +556,23 @@ func (b *incusBackend) ImportInstance(ctx context.Context, name string, r io.Rea
 // deleteBackup removes the temporary server-side backup created during export.
 // It is best-effort cleanup invoked via defer with its own bounded context,
 // detached from the request: a client disconnecting as the download finishes
-// must not abort cleanup and leak the backup. A failure can no longer change the
-// already-streamed result, so it is dropped (leaks surface via integration
-// cleanup).
+// must not abort cleanup and leak the backup. A failure cannot change the
+// already-streamed result, so it is logged (not returned) to keep leaked backups
+// discoverable; a missing backup means there was nothing to clean and is ignored.
 func (b *incusBackend) deleteBackup(name, backupName string) {
 	ctx, cancel := context.WithTimeout(context.Background(), backupDeleteTimeout)
 	defer cancel()
 
 	op, err := b.srv.DeleteInstanceBackup(name, backupName)
 	if err != nil {
+		if !errors.Is(mapErr(err), backend.ErrNotFound) {
+			log.Printf("lxcon: delete export backup %q for %q: %v", backupName, name, err)
+		}
 		return
 	}
-	_ = op.WaitContext(ctx)
+	if err := op.WaitContext(ctx); err != nil {
+		log.Printf("lxcon: await deletion of export backup %q for %q: %v", backupName, name, err)
+	}
 }
 
 func setOrDelete(m map[string]string, key, val string) {

@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -62,7 +63,7 @@ func (b *incusBackend) Capabilities() backend.Capabilities { return b.caps }
 // --- read paths ---
 
 func (b *incusBackend) ListInstances(_ context.Context) ([]backend.Instance, error) {
-	full, err := b.srv.GetInstancesFull(api.InstanceTypeContainer)
+	full, err := b.srv.GetInstancesFull(api.InstanceTypeAny)
 	if err != nil {
 		return nil, fmt.Errorf("list instances: %w", err)
 	}
@@ -85,7 +86,7 @@ func (b *incusBackend) GetInstance(_ context.Context, name string) (backend.Inst
 func (b *incusBackend) ListSnapshots(_ context.Context, name string) ([]backend.Snapshot, error) {
 	snaps, err := b.srv.GetInstanceSnapshots(name)
 	if err != nil {
-		return nil, fmt.Errorf("list snapshots of %q: %w", name, err)
+		return nil, fmt.Errorf("list snapshots of %q: %w", name, mapErr(err))
 	}
 	out := make([]backend.Snapshot, 0, len(snaps))
 	for _, s := range snaps {
@@ -123,7 +124,7 @@ func (b *incusBackend) ListImages(_ context.Context) ([]backend.Image, error) {
 }
 
 // toImages flattens the simplestreams catalog into one launchable domain Image
-// per (alias, architecture), pulling distro/release/variant from image properties.
+// per (alias, architecture, type), pulling filter fields from image properties.
 func toImages(images []api.Image) []backend.Image {
 	seen := make(map[string]bool)
 	out := make([]backend.Image, 0, len(images))
@@ -133,13 +134,14 @@ func toImages(images []api.Image) []backend.Image {
 			if al.Name == "" {
 				continue
 			}
-			key := al.Name + "\x00" + img.Architecture
+			key := al.Name + "\x00" + img.Architecture + "\x00" + img.Type
 			if seen[key] {
 				continue
 			}
 			seen[key] = true
 			out = append(out, backend.Image{
 				Alias:        al.Name,
+				Fingerprint:  img.Fingerprint,
 				Description:  firstNonEmpty(al.Description, img.Properties["description"]),
 				Arch:         img.Architecture,
 				SizeBytes:    img.Size,
@@ -154,7 +156,10 @@ func toImages(images []api.Image) []backend.Image {
 		if out[i].Alias != out[j].Alias {
 			return out[i].Alias < out[j].Alias
 		}
-		return out[i].Arch < out[j].Arch
+		if out[i].Arch != out[j].Arch {
+			return out[i].Arch < out[j].Arch
+		}
+		return out[i].Type < out[j].Type
 	})
 	return out
 }
@@ -169,17 +174,11 @@ func distroFromAlias(alias string) string {
 // --- write paths ---
 
 func (b *incusBackend) CreateInstance(ctx context.Context, opt backend.CreateOptions) error {
-	op, err := b.srv.CreateInstance(api.InstancesPost{
-		Name:  opt.Name,
-		Type:  api.InstanceTypeContainer,
-		Start: opt.Start,
-		Source: api.InstanceSource{
-			Type:     "image",
-			Server:   imagesRemote,
-			Protocol: "simplestreams",
-			Alias:    opt.Image,
-		},
-	})
+	req, err := createRequest(opt)
+	if err != nil {
+		return err
+	}
+	op, err := b.srv.CreateInstance(req)
 	if err != nil {
 		return fmt.Errorf("create instance %q: %w", opt.Name, mapErr(err))
 	}
@@ -224,10 +223,10 @@ func (b *incusBackend) DeleteInstance(ctx context.Context, name string) error {
 	}
 	op, err := b.srv.DeleteInstance(name)
 	if err != nil {
-		return fmt.Errorf("delete instance %q: %w", name, err)
+		return fmt.Errorf("delete instance %q: %w", name, mapErr(err))
 	}
 	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("delete instance %q: %w", name, err)
+		return fmt.Errorf("delete instance %q: %w", name, mapErr(err))
 	}
 	return nil
 }
@@ -240,7 +239,7 @@ func (b *incusBackend) CreateSnapshot(ctx context.Context, name, snapshot string
 		return fmt.Errorf("snapshot %q of %q: %w", snapshot, name, mapErr(err))
 	}
 	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("snapshot %q of %q: %w", snapshot, name, err)
+		return fmt.Errorf("snapshot %q of %q: %w", snapshot, name, mapErr(err))
 	}
 	return nil
 }
@@ -255,10 +254,10 @@ func (b *incusBackend) RestoreSnapshot(ctx context.Context, name, snapshot strin
 	put.Restore = snapshot
 	op, err := b.srv.UpdateInstance(name, put, etag)
 	if err != nil {
-		return fmt.Errorf("restore %q on %q: %w", snapshot, name, err)
+		return fmt.Errorf("restore %q on %q: %w", snapshot, name, mapErr(err))
 	}
 	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("restore %q on %q: %w", snapshot, name, err)
+		return fmt.Errorf("restore %q on %q: %w", snapshot, name, mapErr(err))
 	}
 	return nil
 }
@@ -269,7 +268,7 @@ func (b *incusBackend) DeleteSnapshot(ctx context.Context, name, snapshot string
 		return fmt.Errorf("delete snapshot %q of %q: %w", snapshot, name, mapErr(err))
 	}
 	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("delete snapshot %q of %q: %w", snapshot, name, err)
+		return fmt.Errorf("delete snapshot %q of %q: %w", snapshot, name, mapErr(err))
 	}
 	return nil
 }
@@ -284,10 +283,10 @@ func (b *incusBackend) CloneInstance(ctx context.Context, src, dst string) error
 	}
 	op, err := b.srv.CopyInstance(b.srv, *source, &incusclient.InstanceCopyArgs{Name: dst})
 	if err != nil {
-		return fmt.Errorf("clone %q to %q: %w", src, dst, err)
+		return fmt.Errorf("clone %q to %q: %w", src, dst, mapErr(err))
 	}
 	if err := op.Wait(); err != nil {
-		return fmt.Errorf("clone %q to %q: %w", src, dst, err)
+		return fmt.Errorf("clone %q to %q: %w", src, dst, mapErr(err))
 	}
 	return nil
 }
@@ -333,18 +332,56 @@ func snapshotShortName(name string) string {
 	return name
 }
 
+func createRequest(opt backend.CreateOptions) (api.InstancesPost, error) {
+	instanceType := api.InstanceTypeContainer
+	switch opt.Type {
+	case "", string(api.InstanceTypeContainer):
+	case string(api.InstanceTypeVM):
+		instanceType = api.InstanceTypeVM
+	default:
+		return api.InstancesPost{}, fmt.Errorf("image type %q: %w", opt.Type, backend.ErrUnsupported)
+	}
+
+	source := api.InstanceSource{
+		Type:     "image",
+		Server:   imagesRemote,
+		Protocol: "simplestreams",
+	}
+	if opt.Fingerprint != "" {
+		source.Fingerprint = opt.Fingerprint
+	} else {
+		source.Alias = opt.Image
+	}
+
+	return api.InstancesPost{
+		Name:   opt.Name,
+		Type:   instanceType,
+		Start:  opt.Start,
+		Source: source,
+	}, nil
+}
+
 // mapErr translates an Incus client error into a backend sentinel so the HTTP
 // layer can map it to a status via errors.Is, mirroring the fake backend.
 func mapErr(err error) error {
 	if err == nil {
 		return nil
 	}
+	switch {
+	case api.StatusErrorCheck(err, http.StatusNotFound):
+		return fmt.Errorf("%w: %w", backend.ErrNotFound, err)
+	case api.StatusErrorCheck(err, http.StatusConflict):
+		return fmt.Errorf("%w: %w", backend.ErrConflict, err)
+	}
+
+	// Operation wait errors can arrive as plain text after the client has
+	// flattened the operation's error field.
 	msg := strings.ToLower(err.Error())
 	switch {
 	case strings.Contains(msg, "not found"):
-		return fmt.Errorf("%w: %v", backend.ErrNotFound, err)
+		return fmt.Errorf("%w: %w", backend.ErrNotFound, err)
 	case strings.Contains(msg, "already exists"):
-		return fmt.Errorf("%w: %v", backend.ErrConflict, err)
+		return fmt.Errorf("%w: %w", backend.ErrConflict, err)
 	}
 	return err
 }

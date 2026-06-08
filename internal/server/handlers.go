@@ -111,10 +111,23 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	images, err := h.backend.ListImages(r.Context())
+	if err != nil {
+		h.renderError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	selected, ok := imageByFingerprint(images, image)
+	if !ok {
+		h.renderError(w, http.StatusBadRequest, "selected image is unavailable")
+		return
+	}
+
 	if err := h.backend.CreateInstance(r.Context(), backend.CreateOptions{
-		Name:  name,
-		Image: image,
-		Start: r.Form.Get("start") != "",
+		Name:        name,
+		Image:       selected.Alias,
+		Fingerprint: selected.Fingerprint,
+		Type:        selected.Type,
+		Start:       r.Form.Get("start") != "",
 	}); err != nil {
 		h.renderError(w, statusFor(err), err.Error())
 		return
@@ -129,6 +142,15 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func imageByFingerprint(images []backend.Image, fingerprint string) (backend.Image, bool) {
+	for _, image := range images {
+		if image.Fingerprint == fingerprint {
+			return image, true
+		}
+	}
+	return backend.Image{}, false
 }
 
 func (h handlers) start(w http.ResponseWriter, r *http.Request) {

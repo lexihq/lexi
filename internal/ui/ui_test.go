@@ -33,12 +33,18 @@ func TestInstancePageRendersSnapshotControls(t *testing.T) {
 }
 
 func TestCreatePageRendersImageForm(t *testing.T) {
-	html := render(t, CreatePage(testCaps(), []backend.Image{{Alias: "debian/12", Description: "Debian 12"}}))
+	html := render(t, CreatePage(testCaps(), []backend.Image{{
+		Alias:       "debian/12",
+		Description: "Debian 12",
+		Fingerprint: "debian-fingerprint",
+		Type:        "container",
+	}}))
 
 	assertContains(t, html, `action="/instances"`)
 	assertContains(t, html, `name="name"`)
-	assertContains(t, html, `value="debian/12"`)
+	assertContains(t, html, `value="debian-fingerprint"`)
 	assertContains(t, html, "Debian 12")
+	assertContains(t, html, "container")
 }
 
 func TestInstanceRowCanHideUnsupportedActions(t *testing.T) {

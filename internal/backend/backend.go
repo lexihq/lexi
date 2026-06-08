@@ -36,7 +36,7 @@ type Capabilities struct {
 	Console    bool // false in v1
 }
 
-// Instance is a system container.
+// Instance is a system container or virtual machine.
 type Instance struct {
 	Name      string
 	Status    string // Running | Stopped | ...
@@ -57,6 +57,7 @@ type Snapshot struct {
 // Variant/Type fields back the server-side search filters.
 type Image struct {
 	Alias        string // e.g. "debian/12"
+	Fingerprint  string // exact image identity on the remote
 	Description  string
 	Arch         string // incus arch name, e.g. "aarch64", "x86_64"
 	SizeBytes    int64
@@ -68,9 +69,11 @@ type Image struct {
 
 // CreateOptions parameterizes CreateInstance.
 type CreateOptions struct {
-	Name  string
-	Image string // alias on the images remote
-	Start bool
+	Name        string
+	Image       string // display alias on the images remote
+	Fingerprint string // exact image identity; empty falls back to Image
+	Type        string // "container" | "virtual-machine"; empty defaults to container
+	Start       bool
 }
 
 // Backend is the single seam between the HTTP layer and a container driver.

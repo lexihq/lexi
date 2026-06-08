@@ -34,6 +34,7 @@ type Capabilities struct {
 	Clone      bool
 	Backup     bool // false in v1
 	Console    bool // false in v1
+	Metrics    bool // live resource metrics
 }
 
 // Instance is a system container or virtual machine.
@@ -53,6 +54,18 @@ type Instance struct {
 type Limits struct {
 	CPU    string // cores ("2") or cpuset ("0-1,3")
 	Memory string // e.g. "2GiB"
+}
+
+// Metrics is a point-in-time resource snapshot. CPUPercent is derived from the
+// delta between two CPU-time samples, so it reads 0 until a prior sample exists.
+type Metrics struct {
+	CPUPercent  float64
+	MemoryUsage int64
+	MemoryTotal int64
+	DiskUsage   int64
+	NetworkRx   int64
+	NetworkTx   int64
+	Processes   int64
 }
 
 // Snapshot is a point-in-time snapshot of an instance.
@@ -104,6 +117,7 @@ type Backend interface {
 	CloneInstance(ctx context.Context, src, dst string) error
 
 	UpdateLimits(ctx context.Context, name string, l Limits) error
+	Metrics(ctx context.Context, name string) (Metrics, error)
 
 	ListImages(ctx context.Context) ([]Image, error) // for the create dropdown
 }

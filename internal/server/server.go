@@ -22,6 +22,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("GET /instances/new", h.createForm)
 	mux.HandleFunc("POST /instances", h.create)
 	mux.HandleFunc("GET /instances/{name}", h.detail)
+	mux.HandleFunc("GET /instances/{name}/metrics", h.metrics)
 	mux.HandleFunc("POST /instances/{name}/start", h.start)
 	mux.HandleFunc("POST /instances/{name}/stop", h.stop)
 	mux.HandleFunc("POST /instances/{name}/delete", h.delete)

@@ -3,6 +3,7 @@ package incus
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 
@@ -85,6 +86,18 @@ func TestMapErrUsesStructuredStatus(t *testing.T) {
 	require.ErrorIs(t, mapErr(notFound), backend.ErrNotFound)
 	require.ErrorIs(t, mapErr(conflict), backend.ErrConflict)
 	assert.True(t, api.StatusErrorCheck(mapErr(notFound), http.StatusNotFound))
+}
+
+func TestCPUPercentZeroOnFirstSampleThenDeltaBased(t *testing.T) {
+	b := &incusBackend{cpuSamples: make(map[string]cpuSample)}
+
+	// First reading has no prior sample, so it reads 0.
+	assert.Zero(t, b.cpuPercent("demo", 1_000_000_000))
+
+	// Pre-seed a sample one second in the past with 1e9 fewer nanos so the next
+	// reading reflects ~one core fully busy over the elapsed second (≈100%).
+	b.cpuSamples["demo"] = cpuSample{nanos: 1_000_000_000, at: time.Now().Add(-time.Second)}
+	assert.Greater(t, b.cpuPercent("demo", 2_000_000_000), 0.0)
 }
 
 func TestListSnapshotsMapsStructuredStatus(t *testing.T) {

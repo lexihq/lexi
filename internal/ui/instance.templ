@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
 	"github.com/adam/lxcon/internal/components/table"
@@ -22,6 +24,14 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 				<div><dt class="text-muted-foreground">IPv4</dt><dd>{ joinIPv4(inst.IPv4) }</dd></div>
 			</dl>
 		</section>
+		if caps.Metrics {
+			<div
+				id="metrics"
+				hx-get={ "/instances/" + inst.Name + "/metrics" }
+				hx-trigger="load, every 3s"
+				hx-swap="outerHTML"
+			></div>
+		}
 		@LimitsForm(inst)
 		if caps.Snapshots {
 			@SnapshotTable(inst.Name, snapshots)
@@ -96,9 +106,49 @@ templ LimitsForm(inst backend.Instance) {
 	</section>
 }
 
+// MetricsPanel renders a point-in-time resource snapshot. It re-fetches itself
+// every 3s; the initial load is driven by the caps-gated wrapper in InstancePage.
+templ MetricsPanel(name string, m backend.Metrics) {
+	<section
+		id="metrics"
+		class="mb-8 rounded-lg border bg-card p-4"
+		hx-get={ "/instances/" + name + "/metrics" }
+		hx-trigger="every 3s"
+		hx-swap="outerHTML"
+	>
+		<h2 class="mb-3 text-lg font-medium">Live metrics</h2>
+		<dl class="grid gap-3 text-sm sm:grid-cols-3">
+			<div><dt class="text-muted-foreground">CPU</dt><dd>{ formatPercent(m.CPUPercent) }</dd></div>
+			<div><dt class="text-muted-foreground">Memory</dt><dd>{ humanBytes(m.MemoryUsage) } / { humanBytes(m.MemoryTotal) }</dd></div>
+			<div><dt class="text-muted-foreground">Disk</dt><dd>{ humanBytes(m.DiskUsage) }</dd></div>
+			<div><dt class="text-muted-foreground">Network RX</dt><dd>{ humanBytes(m.NetworkRx) }</dd></div>
+			<div><dt class="text-muted-foreground">Network TX</dt><dd>{ humanBytes(m.NetworkTx) }</dd></div>
+			<div><dt class="text-muted-foreground">Processes</dt><dd>{ fmt.Sprintf("%d", m.Processes) }</dd></div>
+		</dl>
+	</section>
+}
+
 func joinIPv4(addrs []string) string {
 	if len(addrs) == 0 {
 		return "—"
 	}
 	return addrs[0]
+}
+
+// humanBytes formats a byte count with binary (IEC) units.
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	div, exp := int64(unit), 0
+	for x := n / unit; x >= unit; x /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
+}
+
+func formatPercent(p float64) string {
+	return fmt.Sprintf("%.1f%%", p)
 }

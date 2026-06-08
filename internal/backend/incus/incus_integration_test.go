@@ -104,6 +104,21 @@ func TestUpdateLimitsRoundTrip(t *testing.T) {
 	assert.Empty(t, inst.LimitsMemory)
 }
 
+// TestMetricsReportsUsage starts a throwaway container and reads its live
+// metrics back, asserting memory usage is populated once it is running.
+func TestMetricsReportsUsage(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("metrics")
+	t.Cleanup(func() { _ = b.DeleteInstance(context.Background(), name) })
+
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage, Start: true}))
+
+	m, err := b.Metrics(ctx, name)
+	require.NoError(t, err)
+	assert.Greater(t, m.MemoryUsage, int64(0), "running instance should report memory usage")
+}
+
 // TestRoundTripLifecycle covers the write paths: create+start, read back as
 // Running, stop, delete (and confirm it leaves the list).
 func TestRoundTripLifecycle(t *testing.T) {

@@ -178,6 +178,17 @@ func (h handlers) updateLimits(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/instances/"+name, http.StatusSeeOther)
 }
 
+// metrics renders the self-refreshing live-metrics panel for an instance.
+func (h handlers) metrics(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	m, err := h.backend.Metrics(r.Context(), name)
+	if err != nil {
+		h.renderError(w, statusFor(err), err.Error())
+		return
+	}
+	h.render(w, r, http.StatusOK, ui.MetricsPanel(name, m))
+}
+
 func (h handlers) start(w http.ResponseWriter, r *http.Request) {
 	h.instanceAction(w, r, func(name string) error { return h.backend.StartInstance(r.Context(), name) })
 }

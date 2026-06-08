@@ -30,6 +30,9 @@ const imageCacheTTL = time.Hour
 // requests that finish racing with deletion.
 const cpuSampleTTL = 10 * time.Minute
 
+// backupDeleteTimeout bounds the detached cleanup of a temporary export backup.
+const backupDeleteTimeout = 30 * time.Second
+
 // Compile-time proof that incusBackend satisfies the Backend contract.
 var _ backend.Backend = (*incusBackend)(nil)
 
@@ -409,7 +412,7 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 	if err := op.WaitContext(ctx); err != nil {
 		return fmt.Errorf("create backup of %q: %w", name, mapErr(err))
 	}
-	defer b.deleteBackup(ctx, name, backupName)
+	defer b.deleteBackup(name, backupName)
 
 	tmp, err := os.CreateTemp("", "lxcon-export-*.tar.gz")
 	if err != nil {
@@ -539,10 +542,15 @@ func (b *incusBackend) ImportInstance(ctx context.Context, name string, r io.Rea
 }
 
 // deleteBackup removes the temporary server-side backup created during export.
-// It is best-effort cleanup invoked via defer: a successful export has already
-// streamed its bytes, so a cleanup failure cannot change the result, and a
-// leaked temporary backup is surfaced separately by integration cleanup.
-func (b *incusBackend) deleteBackup(ctx context.Context, name, backupName string) {
+// It is best-effort cleanup invoked via defer with its own bounded context,
+// detached from the request: a client disconnecting as the download finishes
+// must not abort cleanup and leak the backup. A failure can no longer change the
+// already-streamed result, so it is dropped (leaks surface via integration
+// cleanup).
+func (b *incusBackend) deleteBackup(name, backupName string) {
+	ctx, cancel := context.WithTimeout(context.Background(), backupDeleteTimeout)
+	defer cancel()
+
 	op, err := b.srv.DeleteInstanceBackup(name, backupName)
 	if err != nil {
 		return

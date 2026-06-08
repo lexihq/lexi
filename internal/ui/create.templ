@@ -18,12 +18,34 @@ templ CreatePage(caps backend.Capabilities, images []backend.Image) {
 				<input id="name" name="name" class="h-10 w-full rounded-md border bg-background px-3 text-sm" required/>
 			</div>
 			<div class="space-y-2">
-				<label class="text-sm font-medium" for="image">Image</label>
-				<select id="image" name="image" class="h-10 w-full rounded-md border bg-background px-3 text-sm" required>
-					for _, img := range images {
-						<option value={ img.Alias }>{ img.Description }</option>
-					}
-				</select>
+				<label class="text-sm font-medium" for="image-search">Image</label>
+				<div class="flex gap-2">
+					<input
+						id="image-search"
+						type="search"
+						name="q"
+						placeholder="Search images…"
+						autocomplete="off"
+						class="h-10 w-full rounded-md border bg-background px-3 text-sm"
+						hx-get="/images"
+						hx-trigger="keyup changed delay:300ms, search"
+						hx-target="#image-results"
+						hx-include="closest form"
+					/>
+					<select name="arch" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
+						<option value="">Any arch</option>
+						<option value="aarch64">aarch64</option>
+						<option value="x86_64">x86_64</option>
+					</select>
+					<select name="type" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
+						<option value="">Any type</option>
+						<option value="container">container</option>
+						<option value="virtual-machine">virtual-machine</option>
+					</select>
+				</div>
+				<div id="image-results">
+					@ImageResults(images)
+				</div>
 			</div>
 			<label class="flex items-center gap-2 text-sm">
 				<input type="checkbox" name="start"/>
@@ -33,5 +55,24 @@ templ CreatePage(caps backend.Capabilities, images []backend.Image) {
 				Create instance
 			}
 		</form>
+	}
+}
+
+// ImageResults is the HTMX-swapped list of selectable images. Each entry is a
+// radio bound to name="image" so the surrounding create form submits the alias.
+templ ImageResults(images []backend.Image) {
+	if len(images) == 0 {
+		<p class="py-2 text-sm text-muted-foreground">No matching images.</p>
+	} else {
+		<div class="max-h-72 space-y-1 overflow-y-auto rounded-md border p-1">
+			for _, img := range images {
+				<label class="flex cursor-pointer items-center gap-3 rounded-md p-2 text-sm hover:bg-muted/50">
+					<input type="radio" name="image" value={ img.Alias } required/>
+					<span class="font-medium">{ img.Alias }</span>
+					<span class="truncate text-muted-foreground">{ img.Description }</span>
+					<span class="ml-auto shrink-0 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ img.Arch }</span>
+				</label>
+			}
+		</div>
 	}
 }

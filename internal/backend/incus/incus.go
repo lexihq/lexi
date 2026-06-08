@@ -3,9 +3,10 @@ package incus
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 
@@ -13,11 +14,12 @@ import (
 	"github.com/lxc/incus/v6/shared/api"
 )
 
-// imagesRemote is the public image server lxcon pulls base images from in v1.
+// imagesRemote is the public image server lxcon pulls base images from.
 const imagesRemote = "https://images.linuxcontainers.org"
 
-// curatedAliases is the v1 create-from-image set. A full image browser is post-v1.
-var curatedAliases = []string{"debian/12", "ubuntu/24.04", "alpine/edge"}
+// imageCacheTTL bounds how long the full simplestreams catalog is reused before
+// a refetch, so per-keystroke filtering never hits the network.
+const imageCacheTTL = time.Hour
 
 // Compile-time proof that incusBackend satisfies the Backend contract.
 var _ backend.Backend = (*incusBackend)(nil)
@@ -26,6 +28,10 @@ var _ backend.Backend = (*incusBackend)(nil)
 type incusBackend struct {
 	srv  incusclient.InstanceServer
 	caps backend.Capabilities
+
+	imgMu     sync.Mutex
+	imgCache  []backend.Image
+	imgExpiry time.Time
 }
 
 // New connects to Incus (default remote) and probes the server to populate
@@ -92,7 +98,16 @@ func (b *incusBackend) ListSnapshots(_ context.Context, name string) ([]backend.
 	return out, nil
 }
 
+// ListImages returns the full simplestreams catalog (one entry per alias), served
+// from a lazy, mutex-guarded cache so the search UI can filter without refetching.
 func (b *incusBackend) ListImages(_ context.Context) ([]backend.Image, error) {
+	b.imgMu.Lock()
+	defer b.imgMu.Unlock()
+
+	if b.imgCache != nil && time.Now().Before(b.imgExpiry) {
+		return append([]backend.Image(nil), b.imgCache...), nil
+	}
+
 	is, err := incusclient.ConnectSimpleStreams(imagesRemote, nil)
 	if err != nil {
 		return nil, fmt.Errorf("connect images remote: %w", err)
@@ -102,38 +117,53 @@ func (b *incusBackend) ListImages(_ context.Context) ([]backend.Image, error) {
 		return nil, fmt.Errorf("list images: %w", err)
 	}
 
-	wantArch := hostArch()
-	curated := make(map[string]bool, len(curatedAliases))
-	for _, a := range curatedAliases {
-		curated[a] = true
-	}
+	b.imgCache = toImages(images)
+	b.imgExpiry = time.Now().Add(imageCacheTTL)
+	return append([]backend.Image(nil), b.imgCache...), nil
+}
 
-	// Dedupe by alias, preferring an image built for the host architecture.
-	chosen := make(map[string]backend.Image)
-	for _, img := range images {
+// toImages flattens the simplestreams catalog into one launchable domain Image
+// per (alias, architecture), pulling distro/release/variant from image properties.
+func toImages(images []api.Image) []backend.Image {
+	seen := make(map[string]bool)
+	out := make([]backend.Image, 0, len(images))
+	for i := range images {
+		img := &images[i]
 		for _, al := range img.Aliases {
-			if !curated[al.Name] {
+			if al.Name == "" {
 				continue
 			}
-			cand := backend.Image{
-				Alias:       al.Name,
-				Description: firstNonEmpty(al.Description, img.Properties["description"]),
-				Arch:        img.Architecture,
-				SizeBytes:   img.Size,
+			key := al.Name + "\x00" + img.Architecture
+			if seen[key] {
+				continue
 			}
-			if cur, ok := chosen[al.Name]; !ok || (cur.Arch != wantArch && cand.Arch == wantArch) {
-				chosen[al.Name] = cand
-			}
+			seen[key] = true
+			out = append(out, backend.Image{
+				Alias:        al.Name,
+				Description:  firstNonEmpty(al.Description, img.Properties["description"]),
+				Arch:         img.Architecture,
+				SizeBytes:    img.Size,
+				Distribution: strings.ToLower(firstNonEmpty(img.Properties["os"], distroFromAlias(al.Name))),
+				Release:      img.Properties["release"],
+				Variant:      img.Properties["variant"],
+				Type:         img.Type,
+			})
 		}
 	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Alias != out[j].Alias {
+			return out[i].Alias < out[j].Alias
+		}
+		return out[i].Arch < out[j].Arch
+	})
+	return out
+}
 
-	out := make([]backend.Image, 0, len(curatedAliases))
-	for _, a := range curatedAliases {
-		if img, ok := chosen[a]; ok {
-			out = append(out, img)
-		}
-	}
-	return out, nil
+// distroFromAlias falls back to the first path segment of an alias (e.g.
+// "debian" from "debian/12") when the image carries no os property.
+func distroFromAlias(alias string) string {
+	distro, _, _ := strings.Cut(alias, "/")
+	return distro
 }
 
 // --- write paths ---
@@ -301,18 +331,6 @@ func snapshotShortName(name string) string {
 		return name[i+1:]
 	}
 	return name
-}
-
-// hostArch maps Go's GOARCH onto the incus/simplestreams architecture name.
-func hostArch() string {
-	switch runtime.GOARCH {
-	case "amd64":
-		return "x86_64"
-	case "arm64":
-		return "aarch64"
-	default:
-		return runtime.GOARCH
-	}
 }
 
 // mapErr translates an Incus client error into a backend sentinel so the HTTP

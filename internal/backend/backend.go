@@ -53,12 +53,17 @@ type Snapshot struct {
 	Stateful  bool
 }
 
-// Image is an entry in the create-from-image dropdown.
+// Image is an entry in the create-from-image browser. The Distribution/Release/
+// Variant/Type fields back the server-side search filters.
 type Image struct {
-	Alias       string // e.g. "debian/12"
-	Description string
-	Arch        string
-	SizeBytes   int64
+	Alias        string // e.g. "debian/12"
+	Description  string
+	Arch         string // incus arch name, e.g. "aarch64", "x86_64"
+	SizeBytes    int64
+	Distribution string // e.g. "debian"
+	Release      string // e.g. "12"
+	Variant      string // e.g. "default", "cloud"
+	Type         string // "container" | "virtual-machine"
 }
 
 // CreateOptions parameterizes CreateInstance.

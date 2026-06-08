@@ -219,17 +219,19 @@ func (f *Fake) CloneInstance(_ context.Context, src, dst string) error {
 	return nil
 }
 
-// curatedImages is the fake's stand-in for the v1 curated alias set the incus
-// driver will expose (debian/12, ubuntu/24.04, alpine/edge). Arch is fixed here
-// since the fake has no host to probe.
-var curatedImages = []backend.Image{
-	{Alias: "debian/12", Description: "Debian 12 (bookworm)", Arch: "arm64"},
-	{Alias: "ubuntu/24.04", Description: "Ubuntu 24.04 LTS", Arch: "arm64"},
-	{Alias: "alpine/edge", Description: "Alpine Edge", Arch: "arm64"},
+// catalogImages stands in for the full simplestreams catalog the incus driver
+// caches. It spans distributions, releases and architectures so handler-level
+// filter tests have something to slice. Arches use incus naming.
+var catalogImages = []backend.Image{
+	{Alias: "debian/12", Description: "Debian 12 (bookworm) arm64", Arch: "aarch64", Distribution: "debian", Release: "12", Variant: "default", Type: "container"},
+	{Alias: "debian/12", Description: "Debian 12 (bookworm) amd64", Arch: "x86_64", Distribution: "debian", Release: "12", Variant: "default", Type: "container"},
+	{Alias: "ubuntu/24.04", Description: "Ubuntu 24.04 LTS arm64", Arch: "aarch64", Distribution: "ubuntu", Release: "24.04", Variant: "default", Type: "container"},
+	{Alias: "alpine/edge", Description: "Alpine Edge arm64", Arch: "aarch64", Distribution: "alpine", Release: "edge", Variant: "default", Type: "container"},
+	{Alias: "fedora/40", Description: "Fedora 40 amd64", Arch: "x86_64", Distribution: "fedora", Release: "40", Variant: "default", Type: "container"},
 }
 
 func (f *Fake) ListImages(_ context.Context) ([]backend.Image, error) {
-	return append([]backend.Image(nil), curatedImages...), nil
+	return append([]backend.Image(nil), catalogImages...), nil
 }
 
 func notFound(name string) error {

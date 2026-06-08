@@ -124,6 +124,29 @@ func TestStatusForSentinels(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, dup.Code)
 }
 
+func TestImagesFilter(t *testing.T) {
+	srv := New(fake.New())
+
+	t.Run("by query matches distribution", func(t *testing.T) {
+		res := request(t, srv, "GET", "/images?q=debian", "", true)
+		assert.Equal(t, http.StatusOK, res.Code)
+		body := res.Body.String()
+		assert.Contains(t, body, "debian/12")
+		assert.NotContains(t, body, "fedora/40")
+		assert.NotContains(t, body, "alpine/edge")
+	})
+
+	t.Run("by arch", func(t *testing.T) {
+		res := request(t, srv, "GET", "/images?arch=x86_64", "", true)
+		assert.Equal(t, http.StatusOK, res.Code)
+		body := res.Body.String()
+		assert.Contains(t, body, "fedora/40")
+		assert.Contains(t, body, "debian/12")
+		assert.NotContains(t, body, "ubuntu/24.04")
+		assert.NotContains(t, body, "alpine/edge")
+	})
+}
+
 func request(t *testing.T, srv *http.Server, method, path, body string, htmx bool) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))

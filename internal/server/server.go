@@ -18,6 +18,7 @@ func New(b backend.Backend) *http.Server {
 		_, _ = w.Write([]byte("ok\n"))
 	})
 	mux.HandleFunc("GET /", h.list)
+	mux.HandleFunc("GET /images", h.images)
 	mux.HandleFunc("GET /instances/new", h.createForm)
 	mux.HandleFunc("POST /instances", h.create)
 	mux.HandleFunc("GET /instances/{name}", h.detail)

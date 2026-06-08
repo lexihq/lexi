@@ -19,6 +19,7 @@ import (
 	"github.com/gorilla/websocket"
 	incusclient "github.com/lxc/incus/v6/client"
 	"github.com/lxc/incus/v6/shared/api"
+	"github.com/lxc/incus/v6/shared/cancel"
 )
 
 // imagesRemote is the public image server lxcon pulls base images from.
@@ -430,12 +431,23 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 	if err != nil {
 		return fmt.Errorf("spool backup of %q: %w", name, err)
 	}
-	defer func() {
-		_ = tmp.Close()
-		_ = os.Remove(tmp.Name())
-	}()
+	defer cleanupExportTemp(tmp)
 
-	if _, err := b.srv.GetInstanceBackupFile(name, backupName, &incusclient.BackupFileRequest{BackupFile: tmp}); err != nil {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	canceler := cancel.NewHTTPRequestCanceller()
+	stopCancel := context.AfterFunc(ctx, func() {
+		if err := canceler.Cancel(); err != nil && canceler.Cancelable() {
+			log.Printf("lxcon: cancel backup download for %q: %v", name, err)
+		}
+	})
+	defer stopCancel()
+
+	if _, err := b.srv.GetInstanceBackupFile(name, backupName, &incusclient.BackupFileRequest{
+		BackupFile: contextWriteSeeker{ctx: ctx, WriteSeeker: tmp},
+		Canceler:   canceler,
+	}); err != nil {
 		return fmt.Errorf("download backup of %q: %w", name, mapErr(err))
 	}
 	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
@@ -541,16 +553,59 @@ func resizeControl(size backend.WinSize) api.InstanceExecControl {
 // from r (as produced by ExportInstance).
 func (b *incusBackend) ImportInstance(ctx context.Context, name string, r io.Reader) error {
 	op, err := b.srv.CreateInstanceFromBackup(incusclient.InstanceBackupArgs{
-		BackupFile: r,
+		BackupFile: contextReader{ctx: ctx, Reader: r},
 		Name:       name,
 	})
 	if err != nil {
 		return fmt.Errorf("import instance %q: %w", name, mapErr(err))
 	}
 	if err := op.WaitContext(ctx); err != nil {
+		if ctx.Err() != nil {
+			if cancelErr := op.Cancel(); cancelErr != nil {
+				log.Printf("lxcon: cancel import operation for %q: %v", name, cancelErr)
+			}
+		}
 		return fmt.Errorf("import instance %q: %w", name, mapErr(err))
 	}
 	return nil
+}
+
+type contextReader struct {
+	ctx context.Context
+	io.Reader
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := r.Reader.Read(p)
+	if ctxErr := r.ctx.Err(); ctxErr != nil {
+		return n, ctxErr
+	}
+	return n, err
+}
+
+type contextWriteSeeker struct {
+	ctx context.Context
+	io.WriteSeeker
+}
+
+func (w contextWriteSeeker) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return w.WriteSeeker.Write(p)
+}
+
+func cleanupExportTemp(tmp *os.File) {
+	path := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		log.Printf("lxcon: close export temp file %q: %v", path, err)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("lxcon: remove export temp file %q: %v", path, err)
+	}
 }
 
 // deleteBackup removes the temporary server-side backup created during export.

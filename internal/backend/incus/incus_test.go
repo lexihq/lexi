@@ -5,7 +5,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -20,21 +23,24 @@ import (
 
 type instanceServerStub struct {
 	incusclient.InstanceServer
-	snapshotErr    error
-	listType       api.InstanceType
-	state          *api.InstanceState
-	instance       *api.Instance
-	deleteOp       incusclient.Operation
-	copyOp         incusclient.RemoteOperation
-	backupOp       incusclient.Operation
-	backupDeleteOp incusclient.Operation
-	backupBytes    []byte
-	deletedBackup  string
-	importOp       incusclient.Operation
-	importedName   string
-	importedBytes  []byte
-	consoleLog     string
-	consoleErr     error
+	snapshotErr       error
+	listType          api.InstanceType
+	state             *api.InstanceState
+	instance          *api.Instance
+	deleteOp          incusclient.Operation
+	copyOp            incusclient.RemoteOperation
+	backupOp          incusclient.Operation
+	backupDeleteOp    incusclient.Operation
+	backupBytes       []byte
+	backupRequest     *incusclient.BackupFileRequest
+	backupBeforeWrite func()
+	deletedBackup     string
+	importOp          incusclient.Operation
+	importedName      string
+	importedBytes     []byte
+	importReadErr     error
+	consoleLog        string
+	consoleErr        error
 }
 
 func (s *instanceServerStub) GetInstanceSnapshots(string) ([]api.InstanceSnapshot, error) {
@@ -67,6 +73,10 @@ func (s *instanceServerStub) CreateInstanceBackup(string, api.InstanceBackupsPos
 }
 
 func (s *instanceServerStub) GetInstanceBackupFile(_ string, name string, req *incusclient.BackupFileRequest) (*incusclient.BackupFileResponse, error) {
+	s.backupRequest = req
+	if s.backupBeforeWrite != nil {
+		s.backupBeforeWrite()
+	}
 	if _, err := req.BackupFile.Write(s.backupBytes); err != nil {
 		return nil, err
 	}
@@ -80,7 +90,10 @@ func (s *instanceServerStub) DeleteInstanceBackup(_ string, name string) (incusc
 
 func (s *instanceServerStub) CreateInstanceFromBackup(args incusclient.InstanceBackupArgs) (incusclient.Operation, error) {
 	s.importedName = args.Name
-	s.importedBytes, _ = io.ReadAll(args.BackupFile)
+	s.importedBytes, s.importReadErr = io.ReadAll(args.BackupFile)
+	if s.importReadErr != nil {
+		return nil, s.importReadErr
+	}
 	return s.importOp, nil
 }
 
@@ -96,10 +109,14 @@ type operationStub struct {
 	waitErr         error
 	waitContextUsed bool
 	cancelUsed      bool
+	onWait          func()
 }
 
 func (o *operationStub) WaitContext(context.Context) error {
 	o.waitContextUsed = true
+	if o.onWait != nil {
+		o.onWait()
+	}
 	return o.waitErr
 }
 
@@ -296,6 +313,7 @@ func TestExportInstanceStreamsBackupThenDeletesIt(t *testing.T) {
 	require.NoError(t, b.ExportInstance(t.Context(), "demo", &buf))
 
 	assert.Equal(t, "backup-tarball-bytes", buf.String(), "spooled backup should stream to the writer")
+	require.NotNil(t, srv.backupRequest.Canceler, "backup download should be cancelable")
 	assert.NotEmpty(t, srv.deletedBackup, "the temporary backup should be deleted afterwards")
 }
 
@@ -315,6 +333,24 @@ func TestExportInstanceCancelsBackupOperationOnContextCancel(t *testing.T) {
 	assert.NotEmpty(t, srv.deletedBackup, "cleanup should still run after cancellation")
 }
 
+func TestExportInstanceStopsSpoolingWhenContextIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	srv := &instanceServerStub{
+		backupOp:          &operationStub{},
+		backupDeleteOp:    &operationStub{},
+		backupBytes:       []byte("backup-tarball-bytes"),
+		backupBeforeWrite: cancel,
+	}
+	b := &incusBackend{srv: srv}
+
+	var buf bytes.Buffer
+	err := b.ExportInstance(ctx, "demo", &buf)
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, srv.backupRequest.Canceler)
+	assert.Empty(t, buf.String())
+}
+
 func TestImportInstanceCreatesFromBackup(t *testing.T) {
 	srv := &instanceServerStub{importOp: &operationStub{}}
 	b := &incusBackend{srv: srv}
@@ -323,6 +359,64 @@ func TestImportInstanceCreatesFromBackup(t *testing.T) {
 
 	assert.Equal(t, "restored", srv.importedName, "destination name should be passed through")
 	assert.Equal(t, "tarball-bytes", string(srv.importedBytes), "the reader should stream to the backup file")
+}
+
+func TestImportInstanceStopsReadingWhenContextIsCanceled(t *testing.T) {
+	srv := &instanceServerStub{importOp: &operationStub{}}
+	b := &incusBackend{srv: srv}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := b.ImportInstance(ctx, "restored", strings.NewReader("tarball-bytes"))
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.ErrorIs(t, srv.importReadErr, context.Canceled)
+	assert.Empty(t, srv.importedBytes)
+}
+
+func TestImportInstanceCancelsOperationWhenWaitIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	op := &operationStub{waitErr: context.Canceled, onWait: cancel}
+	srv := &instanceServerStub{importOp: op}
+	b := &incusBackend{srv: srv}
+
+	err := b.ImportInstance(ctx, "restored", strings.NewReader(""))
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.True(t, op.cancelUsed)
+}
+
+func TestCleanupExportTempLogsCloseFailure(t *testing.T) {
+	tmp, err := os.CreateTemp(t.TempDir(), "export-*.tar.gz")
+	require.NoError(t, err)
+	require.NoError(t, tmp.Close())
+
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	cleanupExportTemp(tmp)
+
+	assert.Contains(t, logs.String(), tmp.Name())
+	assert.Contains(t, logs.String(), "close export temp file")
+}
+
+func TestCleanupExportTempLogsRemoveFailure(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "child"), []byte("data"), 0o600))
+	tmp, err := os.Open(dir)
+	require.NoError(t, err)
+
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
+
+	cleanupExportTemp(tmp)
+
+	assert.Contains(t, logs.String(), dir)
+	assert.Contains(t, logs.String(), "remove export temp file")
 }
 
 func TestConsoleLogReadsContent(t *testing.T) {

@@ -6,6 +6,7 @@ package backend
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 )
 
@@ -120,6 +121,9 @@ type Backend interface {
 
 	UpdateLimits(ctx context.Context, name string, l Limits) error
 	Metrics(ctx context.Context, name string) (Metrics, error)
+
+	// ExportInstance streams a portable backup tarball of the instance to w.
+	ExportInstance(ctx context.Context, name string, w io.Writer) error
 
 	ListImages(ctx context.Context) ([]Image, error) // for the create dropdown
 }

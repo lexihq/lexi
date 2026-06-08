@@ -16,6 +16,13 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 				<h1 class="mt-2 text-2xl font-semibold">{ inst.Name }</h1>
 				<p class="text-muted-foreground">{ inst.Status }</p>
 			</div>
+			if caps.Backup {
+				<div class="flex gap-2">
+					@button.Button(button.Props{Href: "/instances/" + inst.Name + "/export", Variant: button.VariantOutline}) {
+						Export
+					}
+				</div>
+			}
 		</div>
 		<section class="mb-8 rounded-lg border bg-card p-4">
 			<h2 class="mb-3 text-lg font-medium">Details</h2>

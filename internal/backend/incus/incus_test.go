@@ -1,6 +1,7 @@
 package incus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -17,12 +18,16 @@ import (
 
 type instanceServerStub struct {
 	incusclient.InstanceServer
-	snapshotErr error
-	listType    api.InstanceType
-	state       *api.InstanceState
-	instance    *api.Instance
-	deleteOp    incusclient.Operation
-	copyOp      incusclient.RemoteOperation
+	snapshotErr    error
+	listType       api.InstanceType
+	state          *api.InstanceState
+	instance       *api.Instance
+	deleteOp       incusclient.Operation
+	copyOp         incusclient.RemoteOperation
+	backupOp       incusclient.Operation
+	backupDeleteOp incusclient.Operation
+	backupBytes    []byte
+	deletedBackup  string
 }
 
 func (s *instanceServerStub) GetInstanceSnapshots(string) ([]api.InstanceSnapshot, error) {
@@ -48,6 +53,22 @@ func (s *instanceServerStub) GetInstance(string) (*api.Instance, string, error) 
 
 func (s *instanceServerStub) CopyInstance(incusclient.InstanceServer, api.Instance, *incusclient.InstanceCopyArgs) (incusclient.RemoteOperation, error) {
 	return s.copyOp, nil
+}
+
+func (s *instanceServerStub) CreateInstanceBackup(string, api.InstanceBackupsPost) (incusclient.Operation, error) {
+	return s.backupOp, nil
+}
+
+func (s *instanceServerStub) GetInstanceBackupFile(_ string, name string, req *incusclient.BackupFileRequest) (*incusclient.BackupFileResponse, error) {
+	if _, err := req.BackupFile.Write(s.backupBytes); err != nil {
+		return nil, err
+	}
+	return &incusclient.BackupFileResponse{Size: int64(len(s.backupBytes))}, nil
+}
+
+func (s *instanceServerStub) DeleteInstanceBackup(_ string, name string) (incusclient.Operation, error) {
+	s.deletedBackup = name
+	return s.backupDeleteOp, nil
 }
 
 type operationStub struct {
@@ -235,6 +256,21 @@ func TestDeleteInstanceRetainsCPUSampleWhenDeleteFails(t *testing.T) {
 
 	require.Error(t, b.DeleteInstance(t.Context(), "demo"))
 	assert.Contains(t, b.cpuSamples, "demo")
+}
+
+func TestExportInstanceStreamsBackupThenDeletesIt(t *testing.T) {
+	srv := &instanceServerStub{
+		backupOp:       &operationStub{},
+		backupDeleteOp: &operationStub{},
+		backupBytes:    []byte("backup-tarball-bytes"),
+	}
+	b := &incusBackend{srv: srv}
+
+	var buf bytes.Buffer
+	require.NoError(t, b.ExportInstance(t.Context(), "demo", &buf))
+
+	assert.Equal(t, "backup-tarball-bytes", buf.String(), "spooled backup should stream to the writer")
+	assert.NotEmpty(t, srv.deletedBackup, "the temporary backup should be deleted afterwards")
 }
 
 func TestListSnapshotsMapsStructuredStatus(t *testing.T) {

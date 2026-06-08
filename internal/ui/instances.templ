@@ -68,6 +68,11 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 						}
 					</form>
 				}
+				if caps.Backup {
+					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/export"}) {
+						Export
+					}
+				}
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/delete", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
 					Delete
 				}

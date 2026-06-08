@@ -5,12 +5,17 @@ package fake
 import (
 	"context"
 	"fmt"
+	"io"
 	"sort"
 	"sync"
 	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 )
+
+// fakeBackupMagic prefixes the deterministic blob ExportInstance writes so
+// ImportInstance can recognize a lxcon-produced backup and recover the image.
+const fakeBackupMagic = "lxcon-fake-backup\n"
 
 // Compile-time proof that Fake satisfies the Backend contract.
 var _ backend.Backend = (*Fake)(nil)
@@ -48,6 +53,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		ServerInfo: "fake backend",
 		Snapshots:  true,
 		Clone:      true,
+		Backup:     true,
 		Metrics:    true,
 		Limits:     true,
 	}
@@ -239,6 +245,21 @@ func (f *Fake) Metrics(_ context.Context, name string) (backend.Metrics, error) 
 		NetworkTx:   2 << 20,
 		Processes:   7,
 	}, nil
+}
+
+// ExportInstance writes a deterministic backup blob for an existing instance so
+// handler tests can exercise the download path (and the C2 import round-trip)
+// without a daemon.
+func (f *Fake) ExportInstance(_ context.Context, name string, w io.Writer) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return notFound(name)
+	}
+	_, err := io.WriteString(w, fakeBackupMagic+in.Image)
+	return err
 }
 
 func (f *Fake) UpdateLimits(_ context.Context, name string, l backend.Limits) error {

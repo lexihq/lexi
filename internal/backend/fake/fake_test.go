@@ -1,6 +1,7 @@
 package fake
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -9,6 +10,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestExportInstance(t *testing.T) {
+	b := New()
+	assert.True(t, b.Capabilities().Backup, "fake should advertise backup")
+	mustCreate(t, b, "demo")
+
+	var buf bytes.Buffer
+	require.NoError(t, b.ExportInstance(ctx(), "demo", &buf))
+	assert.NotEmpty(t, buf.Bytes(), "export should write a backup blob")
+
+	// Missing instance → ErrNotFound.
+	require.ErrorIs(t, b.ExportInstance(ctx(), "ghost", &buf), backend.ErrNotFound)
+}
 
 func TestMetrics(t *testing.T) {
 	b := New()

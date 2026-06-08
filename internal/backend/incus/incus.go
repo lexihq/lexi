@@ -3,7 +3,9 @@ package incus
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -68,6 +70,7 @@ func New() (*incusBackend, error) {
 			ServerInfo: fmt.Sprintf("Incus %s", info.Environment.ServerVersion),
 			Snapshots:  true,
 			Clone:      true,
+			Backup:     true,
 			Metrics:    true,
 			Limits:     true,
 		},
@@ -383,6 +386,58 @@ func (b *incusBackend) UpdateLimits(ctx context.Context, name string, l backend.
 		return fmt.Errorf("update limits on %q: %w", name, mapErr(err))
 	}
 	return nil
+}
+
+// ExportInstance creates a backup, spools it to a temp file (the client API
+// needs an io.WriteSeeker), deletes the server-side backup, then streams the
+// spooled file to w. Deleting before streaming keeps a cleanup failure as a
+// clean error before any response body is written. The backup name is
+// timestamped to avoid colliding with concurrent runs.
+func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Writer) error {
+	backupName := fmt.Sprintf("lxcon-export-%d", time.Now().UnixNano())
+
+	op, err := b.srv.CreateInstanceBackup(name, api.InstanceBackupsPost{
+		Name:                 backupName,
+		CompressionAlgorithm: "gzip",
+	})
+	if err != nil {
+		return fmt.Errorf("create backup of %q: %w", name, mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		return fmt.Errorf("create backup of %q: %w", name, mapErr(err))
+	}
+
+	tmp, err := os.CreateTemp("", "lxcon-export-*.tar.gz")
+	if err != nil {
+		return fmt.Errorf("spool backup of %q: %w", name, err)
+	}
+	defer func() {
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
+	}()
+
+	if _, err := b.srv.GetInstanceBackupFile(name, backupName, &incusclient.BackupFileRequest{BackupFile: tmp}); err != nil {
+		return fmt.Errorf("download backup of %q: %w", name, mapErr(err))
+	}
+	if err := b.deleteBackup(ctx, name, backupName); err != nil {
+		return fmt.Errorf("delete backup of %q: %w", name, mapErr(err))
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("rewind backup of %q: %w", name, err)
+	}
+	if _, err := io.Copy(w, tmp); err != nil {
+		return fmt.Errorf("stream backup of %q: %w", name, err)
+	}
+	return nil
+}
+
+// deleteBackup removes the temporary server-side backup created during export.
+func (b *incusBackend) deleteBackup(ctx context.Context, name, backupName string) error {
+	op, err := b.srv.DeleteInstanceBackup(name, backupName)
+	if err != nil {
+		return err
+	}
+	return op.WaitContext(ctx)
 }
 
 func setOrDelete(m map[string]string, key, val string) {

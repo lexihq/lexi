@@ -6,6 +6,7 @@
 package incus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -125,6 +126,23 @@ func TestMetricsReportsUsage(t *testing.T) {
 	m, err := b.Metrics(ctx, name)
 	require.NoError(t, err)
 	assert.Greater(t, m.MemoryUsage, int64(0), "running instance should report memory usage")
+}
+
+// TestExportInstanceProducesTarball exports a throwaway instance to a temp file
+// and asserts it is a non-empty gzip stream (the requested compression).
+func TestExportInstanceProducesTarball(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("export")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
+
+	var buf bytes.Buffer
+	require.NoError(t, b.ExportInstance(ctx, name, &buf))
+
+	require.Positive(t, buf.Len(), "export should produce a non-empty backup")
+	assert.Equal(t, []byte{0x1f, 0x8b}, buf.Bytes()[:2], "backup should be a gzip stream")
 }
 
 // TestRoundTripLifecycle covers the write paths: create+start, read back as

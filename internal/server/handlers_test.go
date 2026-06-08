@@ -206,6 +206,23 @@ func TestMetricsUnknownInstanceIs404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, res.Code)
 }
 
+func TestExportDownloadsTarball(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+
+	res := request(t, New(b), "GET", "/instances/demo/export", "", false)
+
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Equal(t, "application/octet-stream", res.Header().Get("Content-Type"))
+	assert.Contains(t, res.Header().Get("Content-Disposition"), `filename="demo.tar.gz"`)
+	assert.NotEmpty(t, res.Body.Bytes())
+}
+
+func TestExportUnknownInstanceIs404(t *testing.T) {
+	res := request(t, New(fake.New()), "GET", "/instances/ghost/export", "", false)
+	assert.Equal(t, http.StatusNotFound, res.Code)
+}
+
 func request(t *testing.T, srv *http.Server, method, path, body string, htmx bool) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, path, strings.NewReader(body))

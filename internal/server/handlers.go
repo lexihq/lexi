@@ -189,6 +189,23 @@ func (h handlers) metrics(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, ui.MetricsPanel(name, m))
 }
 
+// export streams a portable backup tarball as a file download. It validates the
+// instance up front so a missing one returns a clean 404 before any backup work
+// or response body is committed.
+func (h handlers) export(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if _, err := h.backend.GetInstance(r.Context(), name); err != nil {
+		h.renderError(w, statusFor(err), err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name+".tar.gz"))
+	if err := h.backend.ExportInstance(r.Context(), name, w); err != nil {
+		http.Error(w, err.Error(), statusFor(err))
+		return
+	}
+}
+
 func (h handlers) start(w http.ResponseWriter, r *http.Request) {
 	h.instanceAction(w, r, func(name string) error { return h.backend.StartInstance(r.Context(), name) })
 }

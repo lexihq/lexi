@@ -12,7 +12,7 @@ templ CreatePage(caps backend.Capabilities, images []backend.Image) {
 			<h1 class="mt-2 text-2xl font-semibold">Create instance</h1>
 			<p class="text-muted-foreground">Launch a new Incus instance from the public image catalog.</p>
 		</div>
-		<form method="post" action="/instances" class="max-w-xl space-y-5 rounded-lg border bg-card p-6">
+		<form method="post" action="/instances" hx-boost="false" class="max-w-xl space-y-5 rounded-lg border bg-card p-6">
 			<div class="space-y-2">
 				<label class="text-sm font-medium" for="name">Name</label>
 				<input id="name" name="name" class="h-10 w-full rounded-md border bg-background px-3 text-sm" required/>
@@ -68,7 +68,7 @@ templ ImportPage(caps backend.Capabilities) {
 			<h1 class="mt-2 text-2xl font-semibold">Import instance</h1>
 			<p class="text-muted-foreground">Restore an instance from a backup tarball produced by Export.</p>
 		</div>
-		<form method="post" action="/instances/import" enctype="multipart/form-data" class="max-w-xl space-y-5 rounded-lg border bg-card p-6">
+		<form method="post" action="/instances/import" enctype="multipart/form-data" hx-boost="false" class="max-w-xl space-y-5 rounded-lg border bg-card p-6">
 			<div class="space-y-2">
 				<label class="text-sm font-medium" for="name">Name</label>
 				<input id="name" name="name" class="h-10 w-full rounded-md border bg-background px-3 text-sm" required/>

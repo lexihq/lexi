@@ -20,7 +20,7 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 				<p class="text-muted-foreground">{ inst.Status }</p>
 			</div>
 			if caps.Backup {
-				@button.Button(button.Props{Href: "/instances/" + inst.Name + "/export", Variant: button.VariantOutline}) {
+				@button.Button(button.Props{Href: "/instances/" + inst.Name + "/export", Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-boost": "false"}}) {
 					Export
 				}
 			}
@@ -44,6 +44,7 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 			if caps.Console {
 				<a
 					href={ templ.URL("/instances/" + inst.Name + "/console") }
+					hx-boost="false"
 					class="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
 				>Console</a>
 			}

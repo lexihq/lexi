@@ -3,10 +3,10 @@ package ui
 import "github.com/adam/lxcon/internal/backend"
 
 // Sidebar is the persistent left navigation: a static section list plus a
-// live, self-refreshing instance list (the signature Proxmox trait). The
-// instance list is lazy-loaded and polled via the /partials/sidebar route so
-// individual page handlers don't each have to fetch instances; the active
-// highlight is baked in from nav.Instance.
+// live instance list (the signature Proxmox trait). The list is rendered
+// server-side from the preloaded context (so an hx-boost content swap never
+// flashes an empty sidebar) and refreshes every 10s via the /partials/sidebar
+// route; the active highlight is baked in from nav.Instance.
 templ Sidebar(nav Nav) {
 	<nav class="space-y-1">
 		<a
@@ -20,9 +20,11 @@ templ Sidebar(nav Nav) {
 		<p class="px-3 pb-1 text-xs font-medium uppercase text-muted-foreground">Instances</p>
 		<div
 			hx-get={ "/partials/sidebar?active=" + nav.Instance }
-			hx-trigger="load, every 10s"
+			hx-trigger="every 10s"
 			hx-swap="innerHTML"
-		></div>
+		>
+			@SidebarInstances(sidebarInstancesFrom(ctx), nav.Instance)
+		</div>
 	</div>
 }
 

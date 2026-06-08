@@ -6,7 +6,7 @@ import "github.com/adam/lxcon/internal/backend"
 // scripts and console.js are deferred so they run in order after parsing; the
 // terminal div carries the WebSocket path console.js connects to.
 templ ConsolePage(caps backend.Capabilities, name string) {
-	@Layout(name+" · console", caps, Nav{Section: NavInstances, Instance: name}) {
+	@Layout(name+" · console", caps, Nav{Section: NavInstances, Instance: name, NoBoost: true}) {
 		<link href="/static/css/xterm.css" rel="stylesheet"/>
 		<div class="mb-4 flex items-center justify-between gap-4">
 			<div>

@@ -7,10 +7,13 @@ const NavInstances = "instances"
 
 // Nav carries the active navigation state into the shell so the sidebar can
 // highlight the current section and instance. Instance is empty on list/create
-// pages and set to the instance name on detail/console pages.
+// pages and set to the instance name on detail/console pages. NoBoost opts the
+// page out of hx-boost so leaving it is a real navigation — the console page
+// needs this so the browser unloads the document and closes its WebSocket.
 type Nav struct {
 	Section  string
 	Instance string
+	NoBoost  bool
 }
 
 // Layout is the base HTML shell: embedded CSS + htmx, a top header, and a
@@ -28,7 +31,12 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 			<link href="/static/css/app.css" rel="stylesheet"/>
 			<script src="/static/js/htmx.min.js" defer></script>
 		</head>
-		<body class="h-full bg-background text-foreground">
+		<body
+			class="h-full bg-background text-foreground"
+			if !nav.NoBoost {
+				hx-boost="true"
+			}
+		>
 			<div class="flex h-full flex-col">
 				<header class="flex items-center justify-between border-b bg-card px-4 py-3">
 					<div class="flex items-center gap-2">

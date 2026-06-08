@@ -161,6 +161,15 @@ func TestDetailTabReturnsFragmentForHXAndFullPageOtherwise(t *testing.T) {
 	assert.Contains(t, strings.ToLower(fullBody), "<!doctype")
 	assert.Contains(t, fullBody, "/partials/sidebar")
 	assert.Contains(t, fullBody, `id="instance-body"`)
+
+	// A boosted navigation (HX-Request + HX-Boosted) must get the full page too,
+	// so hx-boost swaps the whole shell — not the bare tab fragment.
+	boosted := boostedRequest(t, srv, "/instances/demo?tab=metrics")
+	assert.Equal(t, http.StatusOK, boosted.Code)
+	boostedBody := boosted.Body.String()
+	assert.Contains(t, strings.ToLower(boostedBody), "<!doctype")
+	assert.Contains(t, boostedBody, "/partials/sidebar")
+	assert.Contains(t, boostedBody, `id="instance-body"`)
 }
 
 func TestStatusForSentinels(t *testing.T) {
@@ -376,6 +385,18 @@ func request(t *testing.T, srv *http.Server, method, path, body string, htmx boo
 	if htmx {
 		req.Header.Set("HX-Request", "true")
 	}
+	res := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(res, req)
+	return res
+}
+
+// boostedRequest issues a GET carrying both HX-Request and HX-Boosted, as an
+// hx-boost navigation does.
+func boostedRequest(t *testing.T, srv *http.Server, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest("GET", path, nil)
+	req.Header.Set("HX-Request", "true")
+	req.Header.Set("HX-Boosted", "true")
 	res := httptest.NewRecorder()
 	srv.Handler.ServeHTTP(res, req)
 	return res

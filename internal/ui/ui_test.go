@@ -95,6 +95,19 @@ func TestSidebarInstancesRendersStatusDotsAndActive(t *testing.T) {
 	assertContains(t, html, "bg-accent")           // active highlight on running-one
 }
 
+func TestConsolePageOptsOutOfBoost(t *testing.T) {
+	// The console page must not be hx-boosted: leaving it has to be a real
+	// navigation so the browser unloads the document and closes the terminal
+	// WebSocket. Normal pages keep the in-place SPA shell.
+	console := render(t, ConsolePage(testCaps(), "demo"))
+	if strings.Contains(console, `hx-boost="true"`) {
+		t.Fatalf("console page must opt out of hx-boost, got %q", console)
+	}
+
+	list := render(t, InstancesPage(testCaps(), nil))
+	assertContains(t, list, `hx-boost="true"`)
+}
+
 func TestCreatePageRendersImageForm(t *testing.T) {
 	html := render(t, CreatePage(testCaps(), []backend.Image{{
 		Alias:       "debian/12",

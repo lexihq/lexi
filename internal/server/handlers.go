@@ -34,7 +34,8 @@ func (h handlers) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, r, http.StatusOK, ui.InstancesPage(h.backend.Capabilities(), instances))
+	// The list already has the instances the sidebar needs; reuse them.
+	h.renderWithSidebar(w, r, http.StatusOK, instances, ui.InstancesPage(h.backend.Capabilities(), instances))
 }
 
 // sidebar renders the self-refreshing instance list for the shell sidebar. The
@@ -62,11 +63,15 @@ func (h handlers) detail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tab := r.URL.Query().Get("tab")
-	if isHTMX(r) {
+	// A tab click is an explicit (non-boosted) HTMX request and gets just the
+	// swappable body. A boosted navigation (clicking the instance in the sidebar
+	// or list) carries HX-Boosted and must get the full page so the shell's
+	// #content swap finds the whole content region.
+	if isHTMX(r) && !isBoosted(r) {
 		h.render(w, r, http.StatusOK, ui.InstanceBody(h.backend.Capabilities(), inst, snapshots, tab))
 		return
 	}
-	h.render(w, r, http.StatusOK, ui.InstancePage(h.backend.Capabilities(), inst, snapshots, tab))
+	h.renderShell(w, r, http.StatusOK, ui.InstancePage(h.backend.Capabilities(), inst, snapshots, tab))
 }
 
 func (h handlers) createForm(w http.ResponseWriter, r *http.Request) {
@@ -76,7 +81,7 @@ func (h handlers) createForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.render(w, r, http.StatusOK, ui.CreatePage(h.backend.Capabilities(), images))
+	h.renderShell(w, r, http.StatusOK, ui.CreatePage(h.backend.Capabilities(), images))
 }
 
 // images renders the HTMX-driven image search results, filtered by the q/arch/
@@ -217,7 +222,7 @@ func (h handlers) metrics(w http.ResponseWriter, r *http.Request) {
 
 // importForm renders the backup-upload page.
 func (h handlers) importForm(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, http.StatusOK, ui.ImportPage(h.backend.Capabilities()))
+	h.renderShell(w, r, http.StatusOK, ui.ImportPage(h.backend.Capabilities()))
 }
 
 // importInstance restores an instance from an uploaded backup tarball. The file
@@ -270,7 +275,7 @@ var wsUpgrader = websocket.Upgrader{}
 
 // console renders the full-page interactive terminal.
 func (h handlers) console(w http.ResponseWriter, r *http.Request) {
-	h.render(w, r, http.StatusOK, ui.ConsolePage(h.backend.Capabilities(), r.PathValue("name")))
+	h.renderShell(w, r, http.StatusOK, ui.ConsolePage(h.backend.Capabilities(), r.PathValue("name")))
 }
 
 // consoleWS bridges a browser terminal to backend.Exec. Binary frames carry
@@ -498,8 +503,40 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, code int, compo
 	}
 }
 
+// renderShell renders a full-page component with the sidebar instance list
+// preloaded, so the shell paints (and hx-boost re-swaps) with a populated
+// sidebar instead of flashing an empty one. It fetches the list here (the
+// sidebar is part of every full page); a list failure fails the page,
+// consistent with h.list.
+func (h handlers) renderShell(w http.ResponseWriter, r *http.Request, code int, component templ.Component) {
+	instances, err := h.backend.ListInstances(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.renderWithSidebar(w, r, code, instances, component)
+}
+
+// renderWithSidebar renders a full-page component, injecting the given instance
+// list into the context for the shell sidebar. Callers that already hold the
+// list (e.g. the index page) use this directly to avoid a second fetch.
+func (h handlers) renderWithSidebar(w http.ResponseWriter, r *http.Request, code int, instances []backend.Instance, component templ.Component) {
+	writeHTML(w, code)
+	ctx := ui.WithSidebarInstances(r.Context(), instances)
+	if err := component.Render(ctx, w); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func isHTMX(r *http.Request) bool {
 	return r.Header.Get("HX-Request") == "true"
+}
+
+// isBoosted reports whether the request came from an hx-boost navigation (as
+// opposed to an explicit hx-get/hx-post partial). Boosted requests want the
+// full page so the shell's content region swap has everything to select.
+func isBoosted(r *http.Request) bool {
+	return r.Header.Get("HX-Boosted") == "true"
 }
 
 func writeHTML(w http.ResponseWriter, code int) {
@@ -518,8 +555,4 @@ func statusFor(err error) int {
 	default:
 		return http.StatusInternalServerError
 	}
-}
-
-func esc(s string) string {
-	return html.EscapeString(s)
 }

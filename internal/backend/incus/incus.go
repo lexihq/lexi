@@ -390,9 +390,9 @@ func (b *incusBackend) UpdateLimits(ctx context.Context, name string, l backend.
 }
 
 // ExportInstance creates a backup, spools it to a temp file (the client API
-// needs an io.WriteSeeker), deletes the server-side backup, then streams the
-// spooled file to w. Deleting before streaming keeps a cleanup failure as a
-// clean error before any response body is written. The backup name is
+// needs an io.WriteSeeker), then streams the spooled file to w. The server-side
+// backup is removed via a deferred best-effort cleanup so it is deleted on every
+// path, including errors between creation and streaming. The backup name is
 // timestamped to avoid colliding with concurrent runs.
 func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Writer) error {
 	backupName := fmt.Sprintf("lxcon-export-%d", time.Now().UnixNano())
@@ -407,6 +407,7 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 	if err := op.WaitContext(ctx); err != nil {
 		return fmt.Errorf("create backup of %q: %w", name, mapErr(err))
 	}
+	defer b.deleteBackup(ctx, name, backupName)
 
 	tmp, err := os.CreateTemp("", "lxcon-export-*.tar.gz")
 	if err != nil {
@@ -419,9 +420,6 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 
 	if _, err := b.srv.GetInstanceBackupFile(name, backupName, &incusclient.BackupFileRequest{BackupFile: tmp}); err != nil {
 		return fmt.Errorf("download backup of %q: %w", name, mapErr(err))
-	}
-	if err := b.deleteBackup(ctx, name, backupName); err != nil {
-		return fmt.Errorf("delete backup of %q: %w", name, mapErr(err))
 	}
 	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("rewind backup of %q: %w", name, err)
@@ -464,12 +462,15 @@ func (b *incusBackend) ImportInstance(ctx context.Context, name string, r io.Rea
 }
 
 // deleteBackup removes the temporary server-side backup created during export.
-func (b *incusBackend) deleteBackup(ctx context.Context, name, backupName string) error {
+// It is best-effort cleanup invoked via defer: a successful export has already
+// streamed its bytes, so a cleanup failure cannot change the result, and a
+// leaked temporary backup is surfaced separately by integration cleanup.
+func (b *incusBackend) deleteBackup(ctx context.Context, name, backupName string) {
 	op, err := b.srv.DeleteInstanceBackup(name, backupName)
 	if err != nil {
-		return err
+		return
 	}
-	return op.WaitContext(ctx)
+	_ = op.WaitContext(ctx)
 }
 
 func setOrDelete(m map[string]string, key, val string) {

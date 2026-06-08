@@ -321,6 +321,14 @@ func TestConsoleLogMapsStructuredStatus(t *testing.T) {
 	require.ErrorIs(t, err, backend.ErrNotFound)
 }
 
+func TestResizeControlMessage(t *testing.T) {
+	msg := resizeControl(backend.WinSize{Cols: 120, Rows: 40})
+
+	assert.Equal(t, "window-resize", msg.Command)
+	assert.Equal(t, "120", msg.Args["width"])
+	assert.Equal(t, "40", msg.Args["height"])
+}
+
 func TestListSnapshotsMapsStructuredStatus(t *testing.T) {
 	b := &incusBackend{
 		srv: &instanceServerStub{

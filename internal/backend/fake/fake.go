@@ -294,6 +294,20 @@ func (f *Fake) ImportInstance(_ context.Context, name string, r io.Reader) error
 	return nil
 }
 
+// Exec echoes stdin back to stdout for an existing instance, which is enough to
+// assert the WebSocket bridge wiring without a live daemon. It ignores resize
+// events. The instance check happens before any streaming.
+func (f *Fake) Exec(_ context.Context, name string, req backend.ExecRequest) error {
+	f.mu.Lock()
+	_, ok := f.instances[name]
+	f.mu.Unlock()
+	if !ok {
+		return notFound(name)
+	}
+	_, err := io.Copy(req.Stdout, req.Stdin)
+	return err
+}
+
 // ConsoleLog returns canned console output for an existing instance so handler
 // and UI tests can assert the logs panel without a live daemon.
 func (f *Fake) ConsoleLog(_ context.Context, name string) (string, error) {

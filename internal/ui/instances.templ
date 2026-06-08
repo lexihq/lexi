@@ -75,6 +75,11 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 						}
 					</form>
 				}
+				if caps.Console {
+					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/console"}) {
+						Console
+					}
+				}
 				if caps.Backup {
 					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/export"}) {
 						Export

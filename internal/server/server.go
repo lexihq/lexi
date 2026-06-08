@@ -26,6 +26,8 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("GET /instances/{name}", h.detail)
 	mux.HandleFunc("GET /instances/{name}/metrics", h.metrics)
 	mux.HandleFunc("GET /instances/{name}/logs", h.logs)
+	mux.HandleFunc("GET /instances/{name}/console", h.console)
+	mux.HandleFunc("GET /instances/{name}/console/ws", h.consoleWS)
 	mux.HandleFunc("GET /instances/{name}/export", h.export)
 	mux.HandleFunc("POST /instances/{name}/start", h.start)
 	mux.HandleFunc("POST /instances/{name}/stop", h.stop)

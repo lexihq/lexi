@@ -71,6 +71,25 @@ type Metrics struct {
 	Processes   int64
 }
 
+// WinSize is a terminal window size in character cells.
+type WinSize struct {
+	Cols int
+	Rows int
+}
+
+// ExecRequest parameterizes an interactive Exec session. Stdin/Stdout bridge the
+// instance PTY, Resize carries window-resize events for the lifetime of the
+// session, and Width/Height seed the initial size. Command empty defaults to the
+// driver's shell.
+type ExecRequest struct {
+	Command []string
+	Stdin   io.Reader
+	Stdout  io.Writer
+	Resize  <-chan WinSize
+	Width   int
+	Height  int
+}
+
 // Snapshot is a point-in-time snapshot of an instance.
 type Snapshot struct {
 	Name      string
@@ -130,6 +149,10 @@ type Backend interface {
 
 	// ConsoleLog returns the instance's console log output.
 	ConsoleLog(ctx context.Context, name string) (string, error)
+	// Exec runs an interactive command (the driver's default shell when
+	// req.Command is empty), bridging req.Stdin/Stdout to the instance PTY and
+	// applying window resizes from req.Resize until the session ends.
+	Exec(ctx context.Context, name string, req ExecRequest) error
 
 	ListImages(ctx context.Context) ([]Image, error) // for the create dropdown
 }

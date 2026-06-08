@@ -1,0 +1,27 @@
+package ui
+
+import "github.com/adam/lxcon/internal/backend"
+
+// ConsolePage hosts the interactive xterm.js terminal. The vendored xterm
+// scripts and console.js are deferred so they run in order after parsing; the
+// terminal div carries the WebSocket path console.js connects to.
+templ ConsolePage(caps backend.Capabilities, name string) {
+	@Layout(name+" · console", caps) {
+		<link href="/static/css/xterm.css" rel="stylesheet"/>
+		<div class="mb-4 flex items-center justify-between gap-4">
+			<div>
+				<a href={ templ.URL("/instances/" + name) } class="text-sm text-muted-foreground underline-offset-4 hover:underline">← { name }</a>
+				<h1 class="mt-2 text-2xl font-semibold">Console</h1>
+				<p class="text-muted-foreground">Interactive shell on { name }.</p>
+			</div>
+		</div>
+		<div
+			id="terminal"
+			data-ws={ "/instances/" + name + "/console/ws" }
+			class="h-[70vh] overflow-hidden rounded-lg border bg-black p-2"
+		></div>
+		<script src="/static/js/xterm.js" defer></script>
+		<script src="/static/js/xterm-addon-fit.js" defer></script>
+		<script src="/static/js/console.js" defer></script>
+	}
+}

@@ -107,3 +107,28 @@ func TestSnapshotExtras(t *testing.T) {
 	}
 	require.ErrorIs(t, b.UpdateSnapshotExpiry(ctx(), "demo", "ghost", exp), backend.ErrNotFound)
 }
+
+func TestSnapshotSchedule(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	s, err := b.GetSnapshotSchedule(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Empty(t, s.Schedule)
+
+	require.NoError(t, b.SetSnapshotSchedule(ctx(), "demo", backend.SnapshotSchedule{Schedule: "@daily", Expiry: "2w", Pattern: "snap%d"}))
+	s, err = b.GetSnapshotSchedule(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "@daily", s.Schedule)
+	assert.Equal(t, "2w", s.Expiry)
+	assert.Equal(t, "snap%d", s.Pattern)
+
+	// Clearing a field removes the key.
+	require.NoError(t, b.SetSnapshotSchedule(ctx(), "demo", backend.SnapshotSchedule{Schedule: "@daily"}))
+	s, err = b.GetSnapshotSchedule(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Empty(t, s.Expiry)
+
+	_, err = b.GetSnapshotSchedule(ctx(), "ghost")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+}

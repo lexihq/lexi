@@ -63,6 +63,26 @@ func (b *incusBackend) DeleteSnapshot(ctx context.Context, name, snapshot string
 	return waitOp(ctx, op, err, "delete snapshot %q of %q", snapshot, name)
 }
 
+func (b *incusBackend) GetSnapshotSchedule(_ context.Context, name string) (backend.SnapshotSchedule, error) {
+	inst, _, err := b.srv.GetInstance(name)
+	if err != nil {
+		return backend.SnapshotSchedule{}, fmt.Errorf("get instance %q: %w", name, mapErr(err))
+	}
+	return backend.SnapshotSchedule{
+		Schedule: inst.Config["snapshots.schedule"],
+		Expiry:   inst.Config["snapshots.expiry"],
+		Pattern:  inst.Config["snapshots.pattern"],
+	}, nil
+}
+
+func (b *incusBackend) SetSnapshotSchedule(ctx context.Context, name string, s backend.SnapshotSchedule) error {
+	return b.mutateInstance(ctx, name, func(put *api.InstancePut) {
+		setOrDelete(put.Config, "snapshots.schedule", s.Schedule)
+		setOrDelete(put.Config, "snapshots.expiry", s.Expiry)
+		setOrDelete(put.Config, "snapshots.pattern", s.Pattern)
+	}, "set snapshot schedule on %q", name)
+}
+
 func snapshotShortName(name string) string {
 	if i := strings.LastIndex(name, "/"); i >= 0 {
 		return name[i+1:]

@@ -174,6 +174,14 @@ type SnapshotOptions struct {
 	ExpiresAt time.Time
 }
 
+// SnapshotSchedule is an instance's auto-snapshot config (three Incus config
+// keys). Empty fields mean the corresponding key is unset.
+type SnapshotSchedule struct {
+	Schedule string // snapshots.schedule, e.g. "@daily" or a cron expression
+	Expiry   string // snapshots.expiry, e.g. "2w"
+	Pattern  string // snapshots.pattern, e.g. "snap%d"
+}
+
 // Image is an entry in the create-from-image browser. The Distribution/Release/
 // Variant/Type fields back the server-side search filters.
 type Image struct {
@@ -217,6 +225,8 @@ type Backend interface {
 	UpdateSnapshotExpiry(ctx context.Context, name, snapshot string, expiresAt time.Time) error
 	RestoreSnapshot(ctx context.Context, name, snapshot string) error
 	DeleteSnapshot(ctx context.Context, name, snapshot string) error
+	GetSnapshotSchedule(ctx context.Context, name string) (SnapshotSchedule, error)
+	SetSnapshotSchedule(ctx context.Context, name string, s SnapshotSchedule) error
 
 	CloneInstance(ctx context.Context, src, dst string) error
 

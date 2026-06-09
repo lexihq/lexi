@@ -78,6 +78,47 @@ func (f *Fake) UpdateSnapshotExpiry(_ context.Context, name, snapshot string, ex
 	return notFoundf("snapshot %q not found on %q", snapshot, name)
 }
 
+func (f *Fake) GetSnapshotSchedule(_ context.Context, name string) (backend.SnapshotSchedule, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return backend.SnapshotSchedule{}, notFound(name)
+	}
+	return backend.SnapshotSchedule{
+		Schedule: in.config["snapshots.schedule"],
+		Expiry:   in.config["snapshots.expiry"],
+		Pattern:  in.config["snapshots.pattern"],
+	}, nil
+}
+
+func (f *Fake) SetSnapshotSchedule(_ context.Context, name string, s backend.SnapshotSchedule) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return notFound(name)
+	}
+	if in.config == nil {
+		in.config = map[string]string{}
+	}
+	setOrDeleteKey(in.config, "snapshots.schedule", s.Schedule)
+	setOrDeleteKey(in.config, "snapshots.expiry", s.Expiry)
+	setOrDeleteKey(in.config, "snapshots.pattern", s.Pattern)
+	return nil
+}
+
+// setOrDeleteKey writes val under key, or deletes the key when val is empty.
+func setOrDeleteKey(m map[string]string, key, val string) {
+	if val == "" {
+		delete(m, key)
+		return
+	}
+	m[key] = val
+}
+
 func (f *Fake) RestoreSnapshot(_ context.Context, name, snapshot string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

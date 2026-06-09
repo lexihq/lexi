@@ -22,10 +22,13 @@ func (b *incusBackend) UpdateLimits(ctx context.Context, name string, l backend.
 }
 
 // managedConfigKey reports whether a config key is managed outside the config
-// editor: volatile.* (internal/auto-managed) and limits.cpu/limits.memory (owned
-// by the Limits form). These are hidden from the editor and preserved on update.
+// editor: volatile.* (internal/auto-managed), limits.cpu/limits.memory (owned by
+// the Limits form), and snapshots.* (owned by the snapshot-schedule form). These
+// are hidden from the editor and preserved on update.
 func managedConfigKey(k string) bool {
-	return strings.HasPrefix(k, "volatile.") || k == "limits.cpu" || k == "limits.memory"
+	return strings.HasPrefix(k, "volatile.") ||
+		k == "limits.cpu" || k == "limits.memory" ||
+		k == "snapshots.schedule" || k == "snapshots.expiry" || k == "snapshots.pattern"
 }
 
 // editableConfig returns the user-editable subset of an instance's local config

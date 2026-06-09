@@ -70,3 +70,34 @@ func TestListSnapshotsMapsExpiresAt(t *testing.T) {
 	require.Len(t, snaps, 1)
 	assert.Equal(t, exp, snaps[0].ExpiresAt)
 }
+
+func TestGetSnapshotScheduleReadsConfig(t *testing.T) {
+	inst := &api.Instance{}
+	inst.Config = map[string]string{"snapshots.schedule": "@daily", "snapshots.expiry": "2w", "snapshots.pattern": "snap%d"}
+	b := &incusBackend{srv: &instanceServerStub{instance: inst}}
+	s, err := b.GetSnapshotSchedule(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "@daily", s.Schedule)
+	assert.Equal(t, "2w", s.Expiry)
+	assert.Equal(t, "snap%d", s.Pattern)
+}
+
+func TestSetSnapshotScheduleWritesKeys(t *testing.T) {
+	inst := &api.Instance{}
+	inst.Config = map[string]string{"snapshots.expiry": "1w"} // stale value to be cleared
+	s := &instanceServerStub{instance: inst}
+	b := &incusBackend{srv: s}
+	require.NoError(t, b.SetSnapshotSchedule(t.Context(), "demo", backend.SnapshotSchedule{Schedule: "@daily", Pattern: "snap%d"}))
+	require.NotNil(t, s.updatedPut)
+	assert.Equal(t, "@daily", s.updatedPut.Config["snapshots.schedule"])
+	assert.Equal(t, "snap%d", s.updatedPut.Config["snapshots.pattern"])
+	_, hasExpiry := s.updatedPut.Config["snapshots.expiry"]
+	assert.False(t, hasExpiry, "empty expiry should be cleared")
+}
+
+func TestManagedConfigKeyExcludesSnapshotSchedule(t *testing.T) {
+	assert.True(t, managedConfigKey("snapshots.schedule"))
+	assert.True(t, managedConfigKey("snapshots.expiry"))
+	assert.True(t, managedConfigKey("snapshots.pattern"))
+	assert.False(t, managedConfigKey("boot.autostart"))
+}

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/adam/lxcon/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -94,6 +95,20 @@ func TestListWarningsMapsAndSortsNewestFirst(t *testing.T) {
 	assert.Equal(t, "m2", got[0].LastMessage)
 	assert.Equal(t, newer, got[0].LastSeenAt)
 	assert.Equal(t, "w-old", got[1].UUID)
+}
+
+func TestUpdateServerConfigEtagRaceIsConflict(t *testing.T) {
+	srv := &instanceServerStub{
+		server:    &api.Server{},
+		serverErr: nil,
+	}
+	b := &incusBackend{srv: srv}
+	// The GET succeeds; the PUT races another writer and gets 412.
+	require.NoError(t, b.UpdateServerConfig(context.Background(), nil))
+
+	srv.serverErr = api.StatusErrorf(412, "Precondition failed")
+	err := b.UpdateServerConfig(context.Background(), map[string]string{"user.x": "1"})
+	require.ErrorIs(t, err, backend.ErrConflict)
 }
 
 func TestDeleteWarningPassesUUID(t *testing.T) {

@@ -30,7 +30,10 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, con
 		</section>
 		<section class="mb-8 rounded-lg border bg-card p-4">
 			<h2 class="mb-1 text-lg font-medium">Configuration</h2>
-			<p class="mb-3 text-sm text-muted-foreground">Server config keys. Clearing a key's name removes it on apply.</p>
+			<p class="mb-3 text-sm text-muted-foreground">
+				Server config keys. Clearing a key's name removes it on apply.
+				Careful with <span class="font-mono">core.https_address</span>: pointing it elsewhere can cut lxcon off from the daemon.
+			</p>
 			<form method="post" action="/server/config" class="max-w-xl space-y-2">
 				for _, k := range sortedKeys(config) {
 					<div class="flex gap-2">

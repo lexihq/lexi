@@ -94,7 +94,8 @@ func mapErr(err error) error {
 	switch {
 	case api.StatusErrorCheck(err, http.StatusNotFound):
 		return fmt.Errorf("%w: %w", backend.ErrNotFound, err)
-	case api.StatusErrorCheck(err, http.StatusConflict):
+	case api.StatusErrorCheck(err, http.StatusConflict),
+		api.StatusErrorCheck(err, http.StatusPreconditionFailed): // etag race
 		return fmt.Errorf("%w: %w", backend.ErrConflict, err)
 	case api.StatusErrorCheck(err, http.StatusBadRequest):
 		return fmt.Errorf("%w: %w", backend.ErrInvalid, err)
@@ -106,7 +107,8 @@ func mapErr(err error) error {
 	switch {
 	case strings.Contains(msg, "not found"):
 		return fmt.Errorf("%w: %w", backend.ErrNotFound, err)
-	case strings.Contains(msg, "already exists"):
+	case strings.Contains(msg, "already exists"),
+		strings.Contains(msg, "precondition failed"):
 		return fmt.Errorf("%w: %w", backend.ErrConflict, err)
 	case strings.Contains(msg, "bad request"),
 		strings.Contains(msg, "invalid value"),

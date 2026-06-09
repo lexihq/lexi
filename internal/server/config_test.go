@@ -25,9 +25,18 @@ func TestConfigPanelRenders(t *testing.T) {
 	require.NoError(t, b.UpdateInstanceConfig(t.Context(), "demo", map[string]string{"security.nesting": "true"}))
 	res := request(t, New(b), "GET", "/instances/demo/config", "", true)
 	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "security.nesting")
+}
+
+func TestDevicesPanelRenders(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	res := request(t, New(b), "GET", "/instances/demo/devices", "", true)
+	assertStatus(t, res, http.StatusOK)
 	body := res.Body.String()
-	assert.Contains(t, body, "security.nesting")
-	assert.Contains(t, body, "root") // device from default profile
+	assert.Contains(t, body, `id="devices"`)
+	assert.Contains(t, body, "root")     // inherited device from the default profile
+	assert.Contains(t, body, "Add disk") // typed add form
 }
 
 func TestUpdateConfigAppliesAndReturnsPanel(t *testing.T) {

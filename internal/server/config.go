@@ -11,7 +11,7 @@ import (
 )
 
 // config renders the lazy-loaded Configuration tab: the key/value editor over
-// the instance's editable config plus a read-only device list.
+// the instance's editable config. Devices live on their own tab (devicesPanel).
 func (h handlers) config(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
@@ -19,7 +19,13 @@ func (h handlers) config(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.render(w, r, http.StatusOK, ui.ConfigPanel(h.backend.Capabilities(), name, cfg))
+	h.render(w, r, http.StatusOK, ui.ConfigPanel(name, cfg))
+}
+
+// devicesPanel renders the lazy-loaded Devices tab: local devices (editable),
+// inherited devices (read-only), and the typed add forms.
+func (h handlers) devicesPanel(w http.ResponseWriter, r *http.Request) {
+	h.renderDevices(w, r, r.PathValue("name"))
 }
 
 // updateConfig replaces the instance's editable config from the parallel
@@ -41,7 +47,7 @@ func (h handlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isHTMX(r) {
-		h.render(w, r, http.StatusOK, ui.ConfigPanel(h.backend.Capabilities(), name, cfg))
+		h.render(w, r, http.StatusOK, ui.ConfigPanel(name, cfg))
 		return
 	}
 	redirectToInstance(w, name)

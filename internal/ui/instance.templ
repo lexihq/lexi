@@ -58,6 +58,7 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 			}
 			if caps.Config {
 				@tabLink(inst.Name, "config", "Configuration", "settings", active)
+				@tabLink(inst.Name, "devices", "Devices", "hard-drive", active)
 			}
 		</div>
 		switch active {
@@ -81,6 +82,13 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 				<div
 					id="config"
 					hx-get={ "/instances/" + inst.Name + "/config" }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+				></div>
+			case "devices":
+				<div
+					id="devices"
+					hx-get={ "/instances/" + inst.Name + "/devices" }
 					hx-trigger="load"
 					hx-swap="outerHTML"
 				></div>
@@ -124,6 +132,10 @@ func effectiveTab(caps backend.Capabilities, tab string) string {
 	case "config":
 		if caps.Config {
 			return "config"
+		}
+	case "devices":
+		if caps.Config {
+			return "devices"
 		}
 	}
 	return "summary"

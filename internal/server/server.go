@@ -49,6 +49,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/profiles", h.setInstanceProfiles)
 	mux.HandleFunc("GET /instances/{name}/config", h.config)
 	mux.HandleFunc("POST /instances/{name}/config", h.updateConfig)
+	mux.HandleFunc("GET /instances/{name}/devices", h.devicesPanel)
 	mux.HandleFunc("POST /instances/{name}/devices", h.addDevice)
 	mux.HandleFunc("POST /instances/{name}/devices/{device}/delete", h.removeDevice)
 	mux.HandleFunc("POST /instances/{name}/snapshots", h.createSnapshot)

@@ -54,3 +54,25 @@ func TestInstanceConfigRoundTrip(t *testing.T) {
 	_, present := cfg.Config["security.nesting"]
 	assert.False(t, present)
 }
+
+func TestDeviceAddRemoveRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("dev")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
+
+	require.NoError(t, b.AddDevice(ctx, name, "web",
+		map[string]string{"type": "proxy", "listen": "tcp:127.0.0.1:8080", "connect": "tcp:127.0.0.1:80"}))
+	cfg, err := b.GetInstanceConfig(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "proxy", cfg.LocalDevices["web"]["type"])
+	assert.NotContains(t, cfg.LocalDevices, "root") // root stays inherited
+
+	require.NoError(t, b.RemoveDevice(ctx, name, "web"))
+	cfg, err = b.GetInstanceConfig(ctx, name)
+	require.NoError(t, err)
+	assert.NotContains(t, cfg.LocalDevices, "web")
+
+	require.ErrorIs(t, b.RemoveDevice(ctx, name, "web"), backend.ErrNotFound)
+}

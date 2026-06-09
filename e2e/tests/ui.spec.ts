@@ -234,7 +234,7 @@ test("edit instance config in the Configuration tab", async ({ page }) => {
   await page.goto("/instances/demo");
   await page.getByRole("link", { name: "Configuration" }).click();
   const config = page.locator("#config");
-  await expect(config.getByText("Devices")).toBeVisible();
+  await expect(config.getByRole("button", { name: "Apply config" })).toBeVisible();
 
   // Add a key via the trailing blank row.
   await config.locator('input[name="key"]').last().fill("security.nesting");
@@ -256,4 +256,24 @@ test("edit instance config in the Configuration tab", async ({ page }) => {
     page.locator("#config").getByRole("button", { name: "Apply config" }).click(),
   ]);
   await expect(page.locator('#config input[value="security.nesting"]')).toHaveCount(0);
+});
+
+test("add and remove a proxy device in the Devices tab", async ({ page }) => {
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Devices" }).click();
+  const devices = page.locator("#devices");
+  await expect(devices).toBeVisible();
+
+  // Open the proxy add form and fill it.
+  const proxyForm = devices.locator('details:has-text("Add proxy")');
+  await proxyForm.locator("summary").click();
+  await proxyForm.locator('input[name="device"]').fill("web");
+  await proxyForm.locator('input[name="listen"]').fill("tcp:0.0.0.0:8080");
+  await proxyForm.locator('input[name="connect"]').fill("tcp:127.0.0.1:80");
+  await proxyForm.getByRole("button", { name: "Add proxy" }).click();
+  await expect(devices.getByText("web", { exact: true })).toBeVisible();
+
+  // Remove it via the Remove button on the local device row.
+  await devices.getByRole("button", { name: "Remove" }).click();
+  await expect(devices.getByText("web", { exact: true })).toHaveCount(0);
 });

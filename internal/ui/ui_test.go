@@ -239,28 +239,27 @@ func TestDevicesSectionGatesEditingOnCapability(t *testing.T) {
 	}
 }
 
-func TestConfigPanelRendersRowsAndDevices(t *testing.T) {
-	html := render(t, ConfigPanel(backend.Capabilities{Config: true, Devices: true}, "demo", backend.InstanceConfig{
-		Config:  map[string]string{"security.nesting": "true"},
-		Devices: map[string]map[string]string{"root": {"type": "disk", "path": "/"}},
+func TestConfigPanelRendersRows(t *testing.T) {
+	html := render(t, ConfigPanel("demo", backend.InstanceConfig{
+		Config: map[string]string{"security.nesting": "true"},
 	}))
 	assertContains(t, html, `hx-post="/instances/demo/config"`)
 	assertContains(t, html, `value="security.nesting"`)
 	assertContains(t, html, `value="true"`)
-	assertContains(t, html, "root") // device name
-	assertContains(t, html, "disk") // device value
 	assertContains(t, html, `name="key"`)
 }
 
-func TestInstanceBodyGatesConfigTab(t *testing.T) {
+func TestInstanceBodyGatesConfigAndDevicesTabs(t *testing.T) {
 	on := render(t, InstanceBody(backend.Capabilities{Config: true},
-		backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "config"))
-	assertContains(t, on, `hx-get="/instances/demo/config"`)
+		backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "devices"))
+	assertContains(t, on, `hx-get="/instances/demo?tab=config"`)  // Configuration tab link
+	assertContains(t, on, `hx-get="/instances/demo?tab=devices"`) // Devices tab link
+	assertContains(t, on, `hx-get="/instances/demo/devices"`)     // active Devices panel mount
 
 	off := render(t, InstanceBody(backend.Capabilities{},
-		backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "config"))
-	if strings.Contains(off, `hx-get="/instances/demo/config"`) {
-		t.Fatalf("config tab must be hidden without the capability, got %q", off)
+		backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "devices"))
+	if strings.Contains(off, `tab=devices`) || strings.Contains(off, `tab=config`) {
+		t.Fatalf("config/devices tabs must be hidden without the capability, got %q", off)
 	}
 	assertContains(t, off, "Details") // falls back to summary
 }

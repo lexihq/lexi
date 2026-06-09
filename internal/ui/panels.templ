@@ -89,7 +89,7 @@ templ LimitsForm(inst backend.Instance) {
 // editor over the instance's editable config, plus a read-only device list.
 // Submitting replaces the editable config (blank-key rows are dropped, so
 // clearing a key removes it); the trailing blank row adds one.
-templ ConfigPanel(caps backend.Capabilities, name string, cfg backend.InstanceConfig) {
+templ ConfigPanel(name string, cfg backend.InstanceConfig) {
 	<section id="config" class="space-y-8">
 		<div class="rounded-lg border bg-card p-4">
 			<h2 class="mb-3 text-lg font-medium">Configuration</h2>
@@ -118,7 +118,6 @@ templ ConfigPanel(caps backend.Capabilities, name string, cfg backend.InstanceCo
 				}
 			</form>
 		</div>
-		@DevicesSection(caps, name, cfg)
 	</section>
 }
 

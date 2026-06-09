@@ -21,7 +21,9 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 			<h2 class="text-lg font-medium">Snapshots</h2>
 			<form method="post" action={ templ.URL("/instances/" + en + "/snapshots") } hx-post={ "/instances/" + en + "/snapshots" } hx-target="#snapshots" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="snapshot" placeholder="snapshot name"/>
-				<input type="datetime-local" name="expires_at" class="h-9 rounded-md border bg-background px-2 text-sm" title="Expiry (optional)"/>
+				<label class="flex items-center gap-1 text-sm text-muted-foreground">
+					<input type="datetime-local" name="expires_at" class="h-9 rounded-md border bg-background px-2 text-sm" title="Expiry in UTC (optional)"/> UTC
+				</label>
 				<label class="flex items-center gap-1 text-sm text-muted-foreground">
 					<input type="checkbox" name="stateful"/> stateful
 				</label>
@@ -52,7 +54,7 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 						}
 						@table.Cell() {
 							if !snap.ExpiresAt.IsZero() {
-								<span class="text-xs text-muted-foreground">{ snap.ExpiresAt.Format("2006-01-02 15:04") }</span>
+								<span class="text-xs text-muted-foreground">{ snap.ExpiresAt.UTC().Format("2006-01-02 15:04") } UTC</span>
 							}
 						}
 						@table.Cell() {
@@ -68,9 +70,9 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 									}
 								</form>
 								<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/" + es + "/expiry") } hx-post={ "/instances/" + en + "/snapshots/" + es + "/expiry" } hx-target="#snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
-									<input type="datetime-local" name="expires_at" class="h-8 rounded-md border bg-background px-1 text-sm"/>
+									<input type="datetime-local" name="expires_at" class="h-8 rounded-md border bg-background px-1 text-sm" title="Expiry in UTC (empty clears)"/>
 									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
-										Set expiry
+										Set expiry (UTC)
 									}
 								</form>
 								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/delete", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {

@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/backend/fake"
@@ -16,6 +17,18 @@ func newInstance(t *testing.T) *fake.Fake {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
 	return b
+}
+
+func TestParseSnapshotExpiryIsUTC(t *testing.T) {
+	got, err := parseSnapshotExpiry("2026-06-01T03:30")
+	require.NoError(t, err)
+	// datetime-local carries no offset; we fix it to UTC (not the server zone) so
+	// the absolute expiry is deployment-independent.
+	assert.Equal(t, time.Date(2026, 6, 1, 3, 30, 0, 0, time.UTC), got)
+
+	zero, err := parseSnapshotExpiry("  ")
+	require.NoError(t, err)
+	assert.True(t, zero.IsZero())
 }
 
 func TestCreateSnapshotStatefulAndExpiry(t *testing.T) {

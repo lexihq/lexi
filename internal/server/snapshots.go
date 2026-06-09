@@ -73,14 +73,17 @@ func (h handlers) updateSnapshotExpiry(w http.ResponseWriter, r *http.Request) {
 	h.renderSnapshotsOrRedirect(w, r, name)
 }
 
-// parseSnapshotExpiry parses a datetime-local value into a local time; an empty
-// value means "no expiry" (zero time).
+// parseSnapshotExpiry parses a datetime-local value as UTC; an empty value means
+// "no expiry" (zero time). The <input type="datetime-local"> carries no timezone
+// offset, so we fix the interpretation to UTC (and label the field UTC) rather
+// than the server's local zone — otherwise the absolute expiry would shift with
+// wherever the server happens to run.
 func parseSnapshotExpiry(v string) (time.Time, error) {
 	v = strings.TrimSpace(v)
 	if v == "" {
 		return time.Time{}, nil
 	}
-	t, err := time.ParseInLocation(snapshotExpiryLayout, v, time.Local)
+	t, err := time.Parse(snapshotExpiryLayout, v) // no zone in layout → parsed as UTC
 	if err != nil {
 		return time.Time{}, fmt.Errorf("invalid expiry %q: %w", v, backend.ErrInvalid)
 	}

@@ -86,6 +86,38 @@ type instanceServerStub struct {
 
 	operations    []api.Operation // returned by GetOperations
 	operationsErr error           // error for GetOperations
+
+	files       map[string]*fileStub          // keyed by path, served by GetInstanceFile
+	createdFile *incusclient.InstanceFileArgs // captured by CreateInstanceFile
+	createdPath string                        // path captured by CreateInstanceFile
+	filesErr    error                         // error for CreateInstanceFile
+}
+
+// fileStub is one GetInstanceFile result: a file with content, or a directory
+// with entries.
+type fileStub struct {
+	content string
+	resp    incusclient.InstanceFileResponse
+}
+
+func (s *instanceServerStub) GetInstanceFile(_ string, path string) (io.ReadCloser, *incusclient.InstanceFileResponse, error) {
+	f, ok := s.files[path]
+	if !ok {
+		return nil, nil, errNotFoundStatus()
+	}
+	resp := f.resp
+	return io.NopCloser(strings.NewReader(f.content)), &resp, nil
+}
+
+func (s *instanceServerStub) CreateInstanceFile(_ string, path string, args incusclient.InstanceFileArgs) error {
+	s.createdPath = path
+	s.createdFile = &args
+	return s.filesErr
+}
+
+// errNotFoundStatus mimics the Incus client's 404 for a missing file path.
+func errNotFoundStatus() error {
+	return api.StatusErrorf(404, "not found")
 }
 
 func (s *instanceServerStub) GetOperations() ([]api.Operation, error) {

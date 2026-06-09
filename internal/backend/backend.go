@@ -50,6 +50,8 @@ type Capabilities struct {
 	ImageManagement bool
 	// Operations is the daemon task log (running + recent operations).
 	Operations bool
+	// Files is instance file transfer: browse, download, upload.
+	Files bool
 }
 
 // Instance is a system container or virtual machine.
@@ -202,6 +204,13 @@ type Image struct {
 	Type         string // "container" | "virtual-machine"
 }
 
+// FileEntry is one entry of an instance directory listing.
+type FileEntry struct {
+	Name string
+	Dir  bool
+	Mode string // e.g. "0644"; "" when the entry could not be statted
+}
+
 // Operation is a daemon task: an async operation that is running or recently
 // finished (Incus prunes completed operations after a few seconds).
 type Operation struct {
@@ -322,4 +331,13 @@ type Backend interface {
 	// ListOperations returns running and recently finished daemon tasks,
 	// newest first.
 	ListOperations(ctx context.Context) ([]Operation, error)
+
+	// ListFiles lists the instance directory at path (absolute), directories
+	// first. Listing a file is ErrInvalid.
+	ListFiles(ctx context.Context, instance, path string) ([]FileEntry, error)
+	// PullFile streams the instance file at path to w. Pulling a directory is
+	// ErrInvalid.
+	PullFile(ctx context.Context, instance, path string, w io.Writer) error
+	// PushFile creates (or overwrites) the instance file at path from r.
+	PushFile(ctx context.Context, instance, path string, r io.Reader) error
 }

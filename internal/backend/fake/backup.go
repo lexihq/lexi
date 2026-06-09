@@ -50,6 +50,7 @@ func (f *Fake) ImportInstance(_ context.Context, name string, r io.Reader) error
 			Image:     image,
 			CreatedAt: f.now(),
 		},
+		files: seedFiles(name),
 	}
 	return nil
 }

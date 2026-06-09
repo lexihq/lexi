@@ -21,6 +21,7 @@ type instance struct {
 	snapshots []backend.Snapshot
 	config    map[string]string
 	devices   map[string]map[string]string
+	files     map[string][]byte // path → content; dirs implied by prefixes
 }
 
 type storagePool struct {
@@ -119,6 +120,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 
 		ImageManagement: true,
 		Operations:      true,
+		Files:           true,
 	}
 }
 

@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -52,6 +53,7 @@ func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) erro
 		},
 		config:  map[string]string{},
 		devices: map[string]map[string]string{},
+		files:   seedFiles(opt.Name),
 	}
 	f.logOp(fmt.Sprintf("Creating instance %q", opt.Name))
 	return nil
@@ -120,6 +122,7 @@ func (f *Fake) CloneInstance(_ context.Context, src, dst string) error {
 			Image:     from.Image,
 			CreatedAt: f.now(),
 		},
+		files: maps.Clone(from.files),
 	}
 	f.logOp(fmt.Sprintf("Cloning instance %q to %q", src, dst))
 	return nil

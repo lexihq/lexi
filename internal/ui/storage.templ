@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
@@ -29,7 +30,7 @@ templ StoragePoolsPage(caps backend.Capabilities, pools []backend.StoragePool) {
 				for _, p := range pools {
 					@table.Row() {
 						@table.Cell() {
-							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/storage/" + p.Name) }>{ p.Name }</a>
+							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/storage/" + url.PathEscape(p.Name)) }>{ p.Name }</a>
 						}
 						@table.Cell() {
 							{ p.Driver }
@@ -71,11 +72,12 @@ templ StoragePoolPage(caps backend.Capabilities, pool backend.StoragePool, volum
 // StorageVolumesTable is the swappable custom-volumes list with a create form.
 // Delete re-renders it in place via the #volumes target.
 templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
+	{{ ep := url.PathEscape(pool) }}
 	<section id="volumes" class="rounded-lg border bg-card p-4">
 		<div class="mb-4 flex items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Volumes</h2>
 		</div>
-		<form method="post" action={ templ.URL("/storage/" + pool + "/volumes") } hx-post={ "/storage/" + pool + "/volumes" } hx-target="#volumes" hx-swap="outerHTML" class="mb-4 space-y-2">
+		<form method="post" action={ templ.URL("/storage/" + ep + "/volumes") } hx-post={ "/storage/" + ep + "/volumes" } hx-target="#volumes" hx-swap="outerHTML" class="mb-4 space-y-2">
 			<div class="flex gap-2">
 				<input class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm" name="name" placeholder="volume name"/>
 				<select name="content_type" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm">
@@ -105,9 +107,10 @@ templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
 			}
 			@table.Body() {
 				for _, v := range vols {
+					{{ ev := url.PathEscape(v.Name) }}
 					@table.Row() {
 						@table.Cell() {
-							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/storage/" + pool + "/volumes/" + v.Name) }>{ v.Name }</a>
+							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/storage/" + ep + "/volumes/" + ev) }>{ v.Name }</a>
 						}
 						@table.Cell() {
 							{ v.ContentType }
@@ -116,7 +119,7 @@ templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
 							{ fmt.Sprint(len(v.UsedBy)) }
 						}
 						@table.Cell() {
-							@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/storage/" + pool + "/volumes/" + v.Name + "/delete", "hx-target": "#volumes", "hx-swap": "outerHTML"}}) {
+							@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/storage/" + ep + "/volumes/" + ev + "/delete", "hx-target": "#volumes", "hx-swap": "outerHTML"}}) {
 								@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 								Delete
 							}
@@ -132,7 +135,7 @@ templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
 templ StorageVolumePage(caps backend.Capabilities, v backend.StorageVolume, snapshots []backend.StorageVolumeSnapshot) {
 	@Layout(v.Name, caps, Nav{Section: NavStorage}) {
 		<div class="mb-6">
-			<a href={ templ.URL("/storage/" + v.Pool) } class="text-sm text-muted-foreground underline-offset-4 hover:underline">← { v.Pool }</a>
+			<a href={ templ.URL("/storage/" + url.PathEscape(v.Pool)) } class="text-sm text-muted-foreground underline-offset-4 hover:underline">← { v.Pool }</a>
 			<h1 class="mt-2 text-2xl font-semibold">{ v.Name }</h1>
 			<p class="text-muted-foreground">{ v.ContentType }</p>
 		</div>
@@ -155,10 +158,12 @@ templ StorageVolumePage(caps backend.Capabilities, v backend.StorageVolume, snap
 // StorageVolumeSnapshotsTable is the swappable snapshots list for a volume,
 // mirroring the instance SnapshotTable: a create form plus per-row restore/delete.
 templ StorageVolumeSnapshotsTable(pool, volume string, snapshots []backend.StorageVolumeSnapshot) {
+	{{ ep := url.PathEscape(pool) }}
+	{{ ev := url.PathEscape(volume) }}
 	<section id="volume-snapshots" class="rounded-lg border bg-card p-4">
 		<div class="mb-4 flex items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Snapshots</h2>
-			<form method="post" action={ templ.URL("/storage/" + pool + "/volumes/" + volume + "/snapshots") } hx-post={ "/storage/" + pool + "/volumes/" + volume + "/snapshots" } hx-target="#volume-snapshots" hx-swap="outerHTML" class="flex gap-2">
+			<form method="post" action={ templ.URL("/storage/" + ep + "/volumes/" + ev + "/snapshots") } hx-post={ "/storage/" + ep + "/volumes/" + ev + "/snapshots" } hx-target="#volume-snapshots" hx-swap="outerHTML" class="flex gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="snapshot" placeholder="snapshot name"/>
 				@button.Button(button.Props{Type: button.TypeSubmit}) {
 					@icon.Icon("camera")(icon.Props{Class: "size-4"})
@@ -175,15 +180,16 @@ templ StorageVolumeSnapshotsTable(pool, volume string, snapshots []backend.Stora
 			}
 			@table.Body() {
 				for _, snap := range snapshots {
+					{{ es := url.PathEscape(snap.Name) }}
 					@table.Row() {
 						@table.Cell() { { snap.Name } }
 						@table.Cell() {
 							<div class="flex gap-2">
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/storage/" + pool + "/volumes/" + volume + "/snapshots/" + snap.Name + "/restore", "hx-target": "#volume-snapshots", "hx-swap": "outerHTML"}}) {
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/storage/" + ep + "/volumes/" + ev + "/snapshots/" + es + "/restore", "hx-target": "#volume-snapshots", "hx-swap": "outerHTML"}}) {
 									@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
 									Restore
 								}
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/storage/" + pool + "/volumes/" + volume + "/snapshots/" + snap.Name + "/delete", "hx-target": "#volume-snapshots", "hx-swap": "outerHTML"}}) {
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/storage/" + ep + "/volumes/" + ev + "/snapshots/" + es + "/delete", "hx-target": "#volume-snapshots", "hx-swap": "outerHTML"}}) {
 									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 									Delete
 								}

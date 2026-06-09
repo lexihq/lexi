@@ -222,6 +222,22 @@ func TestStorageVolumesTableShowsDeleteAndCreateForm(t *testing.T) {
 	assertContains(t, html, `hx-post="/storage/default/volumes/vol1/delete"`)
 }
 
+func TestStorageURLsEscapeSpecialNames(t *testing.T) {
+	// Incus permits names like "a#b"; path segments must be escaped so the link
+	// targets the whole name (not just "a", with "#b" read as a URL fragment).
+	vols := render(t, StorageVolumesTable("pool#1", []backend.StorageVolume{
+		{Name: "a#b", ContentType: "filesystem"},
+	}))
+	assertContains(t, vols, "/storage/pool%231/volumes/a%23b")
+	assertContains(t, vols, `hx-post="/storage/pool%231/volumes/a%23b/delete"`)
+
+	snaps := render(t, StorageVolumeSnapshotsTable("pool#1", "a#b", []backend.StorageVolumeSnapshot{
+		{Name: "s#0"},
+	}))
+	assertContains(t, snaps, `hx-post="/storage/pool%231/volumes/a%23b/snapshots/s%230/restore"`)
+	assertContains(t, snaps, `hx-post="/storage/pool%231/volumes/a%23b/snapshots/s%230/delete"`)
+}
+
 func TestStorageVolumeSnapshotsTableHasCreateAndActions(t *testing.T) {
 	html := render(t, StorageVolumeSnapshotsTable("default", "vol1", []backend.StorageVolumeSnapshot{
 		{Name: "snap0"},

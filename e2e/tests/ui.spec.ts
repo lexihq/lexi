@@ -10,13 +10,21 @@ test("create from the image browser, then start/stop/clone/delete in the list", 
 
   // rowAction clicks a row button and waits for its HTMX POST to complete, so
   // the in-place row swap has settled before the next action or assertion.
+  // Retry the click until the POST actually fires: a button in a freshly
+  // htmx-swapped row can be clicked before its hx-post handler is bound (the
+  // swap-then-click race), losing the click. We only re-click when no response
+  // was observed, so a registered action is never fired twice.
   const rowAction = async (instance: string, button: string) => {
-    await Promise.all([
-      page.waitForResponse(
-        (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
-      ),
-      page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
-    ]);
+    await expect(async () => {
+      const [resp] = await Promise.all([
+        page.waitForResponse(
+          (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
+          { timeout: 3000 },
+        ),
+        page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
+      ]);
+      expect(resp.ok()).toBeTruthy();
+    }).toPass({ timeout: 15000 });
   };
 
   await page.goto("/instances/new");
@@ -177,6 +185,24 @@ test("snapshot stateful flag, expiry, and rename on the detail page", async ({ p
   }).toPass({ timeout: 10000 });
 });
 
+test("set an instance snapshot schedule", async ({ page }) => {
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Snapshots" }).click();
+
+  // The schedule form lazy-loads into #snapshot-schedule; wait for its inputs.
+  const schedule = page.locator('#snapshot-schedule input[name="schedule"]');
+  await expect(schedule).toBeVisible();
+  await schedule.fill("@daily");
+  await page.locator('#snapshot-schedule input[name="expiry"]').fill("2w");
+  await page.locator('#snapshot-schedule input[name="pattern"]').fill("snap%d");
+  await page.getByRole("button", { name: "Save schedule" }).click();
+
+  // After the swap, the form reflects the saved values.
+  await expect(page.locator('#snapshot-schedule input[name="schedule"]')).toHaveValue("@daily");
+  await expect(page.locator('#snapshot-schedule input[name="expiry"]')).toHaveValue("2w");
+  await expect(page.locator('#snapshot-schedule input[name="pattern"]')).toHaveValue("snap%d");
+});
+
 test("export downloads a tarball that re-imports as a new instance", async ({ page }) => {
   await page.goto("/instances/demo");
 
@@ -202,13 +228,21 @@ test("export downloads a tarball that re-imports as a new instance", async ({ pa
 test("restart, pause, and resume an instance from the list row", async ({ page }) => {
   const name = "e2e-lifecycle";
 
+  // Retry the click until the POST actually fires: a button in a freshly
+  // htmx-swapped row can be clicked before its hx-post handler is bound (the
+  // swap-then-click race), losing the click. We only re-click when no response
+  // was observed, so a registered action is never fired twice.
   const rowAction = async (instance: string, button: string) => {
-    await Promise.all([
-      page.waitForResponse(
-        (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
-      ),
-      page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
-    ]);
+    await expect(async () => {
+      const [resp] = await Promise.all([
+        page.waitForResponse(
+          (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
+          { timeout: 3000 },
+        ),
+        page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
+      ]);
+      expect(resp.ok()).toBeTruthy();
+    }).toPass({ timeout: 15000 });
   };
 
   // Create a running instance to exercise the lifecycle controls.

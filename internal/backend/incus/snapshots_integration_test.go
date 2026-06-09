@@ -53,3 +53,27 @@ func TestSnapshotExtrasRoundTrip(t *testing.T) {
 	assert.True(t, snaps[0].Stateful)
 	require.NoError(t, b.DeleteSnapshot(ctx, name, "stateful0"))
 }
+
+func TestSnapshotScheduleRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("sched")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
+
+	require.NoError(t, b.SetSnapshotSchedule(ctx, name, backend.SnapshotSchedule{Schedule: "@daily", Expiry: "2w", Pattern: "snap%d"}))
+	s, err := b.GetSnapshotSchedule(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "@daily", s.Schedule)
+	assert.Equal(t, "2w", s.Expiry)
+	assert.Equal(t, "snap%d", s.Pattern)
+
+	// Clearing fields removes the keys.
+	require.NoError(t, b.SetSnapshotSchedule(ctx, name, backend.SnapshotSchedule{Schedule: "@daily"}))
+	s, err = b.GetSnapshotSchedule(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "@daily", s.Schedule)
+	assert.Empty(t, s.Expiry)
+	assert.Empty(t, s.Pattern)
+}

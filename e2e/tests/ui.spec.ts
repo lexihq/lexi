@@ -277,3 +277,23 @@ test("add and remove a proxy device in the Devices tab", async ({ page }) => {
   await devices.getByRole("button", { name: "Remove" }).click();
   await expect(devices.getByText("web", { exact: true })).toHaveCount(0);
 });
+
+test("create and delete a network in the Networks section", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Networks" }).click();
+  await expect(page).toHaveURL(/\/networks$/);
+  await expect(page.getByText("incusbr0")).toBeVisible();
+
+  await page.getByRole("link", { name: "Create network" }).click();
+  await page.locator('input[name="name"]').fill("e2e-net");
+  await page.locator('input[name="key"]').first().fill("ipv4.nat");
+  await page.locator('input[name="value"]').first().fill("true");
+  await page.getByRole("button", { name: "Create" }).click();
+
+  await expect(page).toHaveURL(/\/networks$/);
+  const table = page.locator("#networks-table");
+  await expect(table.getByText("e2e-net")).toBeVisible();
+
+  await table.getByRole("row", { name: /e2e-net/ }).getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator("#networks-table").getByText("e2e-net")).toHaveCount(0);
+});

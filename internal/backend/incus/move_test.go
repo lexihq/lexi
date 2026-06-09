@@ -21,4 +21,7 @@ func TestMoveInstanceSendsPool(t *testing.T) {
 	require.NotNil(t, s.migratedInstance)
 	assert.Equal(t, "demo", s.migratedInstance.Name)
 	assert.Equal(t, "zfs0", s.migratedInstance.Pool)
+	// The real client rejects MigrateInstance with Migration=false, so the pool
+	// move must set it (the stub mirrors that guard below).
+	assert.True(t, s.migratedInstance.Migration)
 }

@@ -2,6 +2,7 @@ package incus
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strings"
 
@@ -183,6 +184,10 @@ func (s *instanceServerStub) RenameInstance(name string, p api.InstancePost) (in
 
 func (s *instanceServerStub) MigrateInstance(_ string, p api.InstancePost) (incusclient.Operation, error) {
 	s.migratedInstance = &p
+	// Mirror the real client's guard so a missing Migration flag can't pass tests.
+	if !p.Migration {
+		return nil, errors.New("Can't ask for a rename through MigrateInstance")
+	}
 	return &operationStub{}, nil
 }
 

@@ -12,6 +12,10 @@ func (b *incusBackend) RenameInstance(ctx context.Context, name, newName string)
 }
 
 func (b *incusBackend) MoveInstance(ctx context.Context, name, pool string) error {
-	op, err := b.srv.MigrateInstance(name, api.InstancePost{Name: name, Pool: pool})
+	// Migration must be true even for a local cross-pool move: the client rejects
+	// MigrateInstance with Migration=false ("Can't ask for a rename through
+	// MigrateInstance"). No Target → local pull-mode move (matches `incus move
+	// <name> <name> --storage <pool>`).
+	op, err := b.srv.MigrateInstance(name, api.InstancePost{Name: name, Pool: pool, Migration: true})
 	return waitOp(ctx, op, err, "move instance %q to pool %q", name, pool)
 }

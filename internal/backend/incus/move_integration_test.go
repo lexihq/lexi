@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
+	"github.com/lxc/incus/v6/shared/api"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,24 +33,21 @@ func TestRenameInstanceRoundTrip(t *testing.T) {
 func TestMoveInstancePool(t *testing.T) {
 	b := newBackend(t)
 	ctx := context.Background()
-	pools, err := b.ListStoragePools(ctx)
-	require.NoError(t, err)
-	// Pick a target pool other than the default (instances land on "default").
-	target := ""
-	for _, p := range pools {
-		if p.Name != "default" {
-			target = p.Name
-			break
-		}
+
+	// Create a throwaway dir-backed pool to move into. Pool creation is out of the
+	// app's scope, so drive the client directly here. Creating our own target (vs
+	// skipping when the host has only one pool) is deliberate: a silent skip is
+	// exactly what let the missing Migration flag ship.
+	const pool = "lxmovepool"
+	if err := b.srv.CreateStoragePool(api.StoragePoolsPost{Name: pool, Driver: "dir"}); err != nil {
+		t.Skipf("cannot create a temp storage pool on this host: %v", err)
 	}
-	if target == "" {
-		t.Skip("no non-default storage pool to move to")
-	}
+	t.Cleanup(func() { _ = b.srv.DeleteStoragePool(pool) })
 
 	name := uniqueName("mvp")
-	t.Cleanup(func() { cleanupInstance(t, b, name) })
+	t.Cleanup(func() { cleanupInstance(t, b, name) }) // LIFO: deletes instance before the pool
 	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
 
 	// Stopped instance; a local cross-pool move copies the root disk.
-	require.NoError(t, b.MoveInstance(ctx, name, target))
+	require.NoError(t, b.MoveInstance(ctx, name, pool))
 }

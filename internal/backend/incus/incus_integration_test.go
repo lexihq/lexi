@@ -256,6 +256,41 @@ func TestRoundTripLifecycle(t *testing.T) {
 	}
 }
 
+func TestRestartPauseResumeRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("lcyc")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+
+	if err := b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage, Start: true}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if inst, err := b.GetInstance(ctx, name); err != nil || inst.Status != "Running" {
+		t.Fatalf("want Running after create+start: inst=%+v err=%v", inst, err)
+	}
+
+	if err := b.RestartInstance(ctx, name); err != nil {
+		t.Fatalf("restart: %v", err)
+	}
+	if inst, err := b.GetInstance(ctx, name); err != nil || inst.Status != "Running" {
+		t.Fatalf("want Running after restart: inst=%+v err=%v", inst, err)
+	}
+
+	if err := b.PauseInstance(ctx, name); err != nil {
+		t.Fatalf("pause: %v", err)
+	}
+	if inst, err := b.GetInstance(ctx, name); err != nil || inst.Status != "Frozen" {
+		t.Fatalf("want Frozen after pause: inst=%+v err=%v", inst, err)
+	}
+
+	if err := b.ResumeInstance(ctx, name); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if inst, err := b.GetInstance(ctx, name); err != nil || inst.Status != "Running" {
+		t.Fatalf("want Running after resume: inst=%+v err=%v", inst, err)
+	}
+}
+
 // TestRoundTripFull is the brainstorm's spike: New -> Start -> Snapshot ->
 // Clone -> Restore -> Delete (clone + original), asserted via the read paths.
 func TestRoundTripFull(t *testing.T) {

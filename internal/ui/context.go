@@ -23,6 +23,9 @@ func WithSidebarInstances(ctx context.Context, instances []backend.Instance) con
 // a render path (e.g. a unit test rendering a page directly) didn't set one —
 // in which case the sidebar's poll fills it in shortly after load.
 func sidebarInstancesFrom(ctx context.Context) []backend.Instance {
-	instances, _ := ctx.Value(sidebarCtxKey{}).([]backend.Instance)
+	instances, ok := ctx.Value(sidebarCtxKey{}).([]backend.Instance)
+	if !ok {
+		return nil
+	}
 	return instances
 }

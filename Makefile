@@ -1,4 +1,4 @@
-.PHONY: build release dev test test-integration test-e2e e2e-setup generate vet clean
+.PHONY: build release dev test test-integration test-e2e e2e-setup generate lint vet clean
 
 build:
 	./scripts/build.sh
@@ -14,6 +14,9 @@ generate:
 
 test: generate
 	go test ./...
+
+lint: generate
+	golangci-lint run ./...
 
 # Requires a reachable Incus daemon; uses the current incus remote.
 test-integration:

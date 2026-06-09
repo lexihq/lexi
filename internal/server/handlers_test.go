@@ -324,9 +324,13 @@ func TestConsoleWSBridgesExec(t *testing.T) {
 	defer httpSrv.Close()
 
 	wsURL := "ws" + strings.TrimPrefix(httpSrv.URL, "http") + "/instances/demo/console/ws"
-	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	require.NoError(t, err)
-	defer conn.Close()
+	require.NotNil(t, resp)
+	require.NoError(t, resp.Body.Close())
+	t.Cleanup(func() {
+		require.NoError(t, conn.Close())
+	})
 
 	// Binary stdin is echoed back by the fake as binary stdout.
 	require.NoError(t, conn.WriteMessage(websocket.BinaryMessage, []byte("hello\n")))
@@ -413,7 +417,7 @@ func TestImportRejectsOversizedUpload(t *testing.T) {
 
 func request(t *testing.T, srv *http.Server, method, path, body string, htmx bool) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req := httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
 	if htmx {
 		req.Header.Set("HX-Request", "true")
 	}
@@ -426,7 +430,7 @@ func request(t *testing.T, srv *http.Server, method, path, body string, htmx boo
 // hx-boost navigation does.
 func boostedRequest(t *testing.T, srv *http.Server, path string) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest("GET", path, nil)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 	req.Header.Set("HX-Request", "true")
 	req.Header.Set("HX-Boosted", "true")
 	res := httptest.NewRecorder()
@@ -436,7 +440,7 @@ func boostedRequest(t *testing.T, srv *http.Server, path string) *httptest.Respo
 
 func formRequest(t *testing.T, srv *http.Server, path string, form url.Values, htmx bool) *httptest.ResponseRecorder {
 	t.Helper()
-	req := httptest.NewRequest("POST", path, strings.NewReader(form.Encode()))
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	if htmx {
 		req.Header.Set("HX-Request", "true")
@@ -464,7 +468,7 @@ func importRequest(t *testing.T, srv *http.Server, name string, file []byte, htm
 	}
 	require.NoError(t, mw.Close())
 
-	req := httptest.NewRequest("POST", "/instances/import", &body)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/instances/import", &body)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	if htmx {
 		req.Header.Set("HX-Request", "true")

@@ -41,6 +41,7 @@ type instanceServerStub struct {
 	importReadErr     error
 	consoleLog        string
 	consoleErr        error
+	consoleCloseErr   error
 	stateAction       string                // last UpdateInstanceState action
 	stateOp           incusclient.Operation // operation returned by UpdateInstanceState
 }
@@ -103,7 +104,19 @@ func (s *instanceServerStub) GetInstanceConsoleLog(string, *incusclient.Instance
 	if s.consoleErr != nil {
 		return nil, s.consoleErr
 	}
-	return io.NopCloser(strings.NewReader(s.consoleLog)), nil
+	return &readCloserStub{
+		Reader:   strings.NewReader(s.consoleLog),
+		closeErr: s.consoleCloseErr,
+	}, nil
+}
+
+type readCloserStub struct {
+	io.Reader
+	closeErr error
+}
+
+func (r *readCloserStub) Close() error {
+	return r.closeErr
 }
 
 func (s *instanceServerStub) UpdateInstanceState(_ string, req api.InstanceStatePut, _ string) (incusclient.Operation, error) {
@@ -138,6 +151,7 @@ func (o *operationStub) Cancel() error {
 type remoteOperationStub struct {
 	incusclient.RemoteOperation
 	waitErr    error
+	cancelErr  error
 	started    chan struct{}
 	cancelled  chan struct{}
 	cancelUsed bool
@@ -152,7 +166,7 @@ func (o *remoteOperationStub) Wait() error {
 func (o *remoteOperationStub) CancelTarget() error {
 	o.cancelUsed = true
 	close(o.cancelled)
-	return nil
+	return o.cancelErr
 }
 
 func TestListInstancesIncludesContainersAndVMs(t *testing.T) {
@@ -303,6 +317,33 @@ func TestCloneInstanceWaitsWithContext(t *testing.T) {
 
 	require.ErrorIs(t, err, context.Canceled)
 	assert.True(t, op.cancelUsed)
+}
+
+func TestCloneInstancePreservesCancellationFailure(t *testing.T) {
+	cancelErr := errors.New("cancel target")
+	op := &remoteOperationStub{
+		cancelErr: cancelErr,
+		started:   make(chan struct{}),
+		cancelled: make(chan struct{}),
+	}
+	b := &incusBackend{
+		srv: &instanceServerStub{
+			instance: &api.Instance{Name: "source"},
+			copyOp:   op,
+		},
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- b.CloneInstance(ctx, "source", "copy")
+	}()
+	<-op.started
+	cancel()
+
+	err := <-errCh
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, cancelErr)
 }
 
 func TestDeleteInstanceRemovesCPUSampleAfterSuccessfulDelete(t *testing.T) {
@@ -465,6 +506,18 @@ func TestConsoleLogMapsStructuredStatus(t *testing.T) {
 	_, err := b.ConsoleLog(t.Context(), "ghost")
 
 	require.ErrorIs(t, err, backend.ErrNotFound)
+}
+
+func TestConsoleLogReportsCloseFailure(t *testing.T) {
+	closeErr := errors.New("close console log")
+	b := &incusBackend{srv: &instanceServerStub{
+		consoleLog:      "boot line\n",
+		consoleCloseErr: closeErr,
+	}}
+
+	_, err := b.ConsoleLog(t.Context(), "demo")
+
+	require.ErrorIs(t, err, closeErr)
 }
 
 func TestResizeControlMessage(t *testing.T) {

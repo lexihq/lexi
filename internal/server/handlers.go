@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -251,7 +252,7 @@ func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusBadRequest, "backup file is required")
 		return
 	}
-	defer file.Close()
+	defer closeAndLog("uploaded backup file", file)
 
 	if err := h.backend.ImportInstance(r.Context(), name, file); err != nil {
 		h.renderError(w, statusFor(err), err.Error())
@@ -287,7 +288,7 @@ func (h handlers) consoleWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return // Upgrade already wrote an error response.
 	}
-	defer conn.Close()
+	defer closeAndLog("console WebSocket", conn)
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -297,7 +298,7 @@ func (h handlers) consoleWS(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer cancel()
-		defer stdinW.Close()
+		defer closeAndLog("console stdin pipe", stdinW)
 		for {
 			mt, data, err := conn.ReadMessage()
 			if err != nil {
@@ -333,7 +334,15 @@ func (h handlers) consoleWS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		closeMsg = websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error())
 	}
-	_ = conn.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second))
+	if err := conn.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second)); err != nil {
+		log.Printf("lxcon: write console WebSocket close message: %v", err)
+	}
+}
+
+func closeAndLog(name string, closer io.Closer) {
+	if err := closer.Close(); err != nil {
+		log.Printf("lxcon: close %s: %v", name, err)
+	}
 }
 
 // wsConnWriter adapts a WebSocket connection to io.Writer, sending each write as
@@ -505,7 +514,9 @@ func (h handlers) renderSnapshotsOrRedirect(w http.ResponseWriter, r *http.Reque
 
 func (h handlers) renderError(w http.ResponseWriter, code int, message string) {
 	writeHTML(w, code)
-	_, _ = fmt.Fprintf(w, `<div role="alert">%s</div>`, html.EscapeString(message))
+	if _, err := fmt.Fprintf(w, `<div role="alert">%s</div>`, html.EscapeString(message)); err != nil {
+		log.Printf("lxcon: write error response: %v", err)
+	}
 }
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, code int, component templ.Component) {

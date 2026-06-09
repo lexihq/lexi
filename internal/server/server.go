@@ -2,6 +2,7 @@
 package server
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -15,7 +16,9 @@ func New(b backend.Backend) *http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static.FS)))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ok\n"))
+		if _, err := w.Write([]byte("ok\n")); err != nil {
+			log.Printf("lxcon: write health response: %v", err)
+		}
 	})
 	mux.HandleFunc("GET /", h.list)
 	mux.HandleFunc("GET /partials/sidebar", h.sidebar)

@@ -478,10 +478,10 @@ func (b *incusBackend) ConsoleLog(_ context.Context, name string) (string, error
 	if err != nil {
 		return "", fmt.Errorf("get console log of %q: %w", name, mapErr(err))
 	}
-	defer rc.Close()
 
-	content, err := io.ReadAll(rc)
-	if err != nil {
+	content, readErr := io.ReadAll(rc)
+	closeErr := rc.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
 		return "", fmt.Errorf("read console log of %q: %w", name, err)
 	}
 	return string(content), nil
@@ -680,7 +680,7 @@ func waitRemoteOperation(ctx context.Context, op incusclient.RemoteOperation) er
 		return err
 	case <-ctx.Done():
 		if err := op.CancelTarget(); err != nil {
-			return fmt.Errorf("%w: cancel remote operation: %v", ctx.Err(), err)
+			return errors.Join(ctx.Err(), fmt.Errorf("cancel remote operation: %w", err))
 		}
 		return ctx.Err()
 	}

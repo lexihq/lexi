@@ -225,14 +225,22 @@ func TestStartStop(t *testing.T) {
 	if err := b.StartInstance(ctx(), "demo"); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	if inst, _ := b.GetInstance(ctx(), "demo"); inst.Status != "Running" {
+	inst, err := b.GetInstance(ctx(), "demo")
+	if err != nil {
+		t.Fatalf("get after start: %v", err)
+	}
+	if inst.Status != "Running" {
 		t.Fatalf("want Running after start, got %q", inst.Status)
 	}
 
 	if err := b.StopInstance(ctx(), "demo"); err != nil {
 		t.Fatalf("stop: %v", err)
 	}
-	if inst, _ := b.GetInstance(ctx(), "demo"); inst.Status != "Stopped" {
+	inst, err = b.GetInstance(ctx(), "demo")
+	if err != nil {
+		t.Fatalf("get after stop: %v", err)
+	}
+	if inst.Status != "Stopped" {
 		t.Fatalf("want Stopped after stop, got %q", inst.Status)
 	}
 
@@ -257,7 +265,11 @@ func TestSnapshots(t *testing.T) {
 	}
 
 	// Snapshot count surfaces on the instance.
-	if inst, _ := b.GetInstance(ctx(), "demo"); inst.Snapshots != 1 {
+	inst, err := b.GetInstance(ctx(), "demo")
+	if err != nil {
+		t.Fatalf("get instance after snapshot: %v", err)
+	}
+	if inst.Snapshots != 1 {
 		t.Fatalf("want snapshot count 1, got %d", inst.Snapshots)
 	}
 
@@ -268,7 +280,11 @@ func TestSnapshots(t *testing.T) {
 	if err := b.DeleteSnapshot(ctx(), "demo", "snap1"); err != nil {
 		t.Fatalf("delete snapshot: %v", err)
 	}
-	if snaps, _ := b.ListSnapshots(ctx(), "demo"); len(snaps) != 0 {
+	snaps, err = b.ListSnapshots(ctx(), "demo")
+	if err != nil {
+		t.Fatalf("list snapshots after delete: %v", err)
+	}
+	if len(snaps) != 0 {
 		t.Fatalf("want 0 snapshots after delete, got %d", len(snaps))
 	}
 
@@ -309,7 +325,10 @@ func TestClone(t *testing.T) {
 	if err := b.CloneInstance(ctx(), "demo", "demo-copy"); err != nil {
 		t.Fatalf("clone: %v", err)
 	}
-	list, _ := b.ListInstances(ctx())
+	list, err := b.ListInstances(ctx())
+	if err != nil {
+		t.Fatalf("list after clone: %v", err)
+	}
 	if len(list) != 2 {
 		t.Fatalf("want 2 instances after clone, got %d", len(list))
 	}
@@ -337,7 +356,11 @@ func TestDelete(t *testing.T) {
 	if err := b.DeleteInstance(ctx(), "demo"); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if list, _ := b.ListInstances(ctx()); len(list) != 0 {
+	list, err := b.ListInstances(ctx())
+	if err != nil {
+		t.Fatalf("list after delete: %v", err)
+	}
+	if len(list) != 0 {
 		t.Fatalf("want 0 instances after delete, got %d", len(list))
 	}
 

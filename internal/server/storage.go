@@ -87,3 +87,75 @@ func (h handlers) renderVolumesOrRedirect(w http.ResponseWriter, r *http.Request
 	}
 	h.render(w, r, http.StatusOK, ui.StorageVolumesTable(pool, vols))
 }
+
+func (h handlers) storageVolume(w http.ResponseWriter, r *http.Request) {
+	pool := r.PathValue("pool")
+	volume := r.PathValue("volume")
+	v, err := h.backend.GetVolume(r.Context(), pool, volume)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	snaps, err := h.backend.ListVolumeSnapshots(r.Context(), pool, volume)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderShell(w, r, http.StatusOK, ui.StorageVolumePage(h.backend.Capabilities(), v, snaps))
+}
+
+func (h handlers) createVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	pool := r.PathValue("pool")
+	volume := r.PathValue("volume")
+	snapshot := strings.TrimSpace(r.Form.Get("snapshot"))
+	if snapshot == "" {
+		h.fail(w, fmt.Errorf("snapshot name is required: %w", backend.ErrInvalid))
+		return
+	}
+	if err := h.backend.CreateVolumeSnapshot(r.Context(), pool, volume, snapshot); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
+}
+
+func (h handlers) restoreVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
+	pool := r.PathValue("pool")
+	volume := r.PathValue("volume")
+	if err := h.backend.RestoreVolumeSnapshot(r.Context(), pool, volume, r.PathValue("snap")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
+}
+
+func (h handlers) deleteVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
+	pool := r.PathValue("pool")
+	volume := r.PathValue("volume")
+	if err := h.backend.DeleteVolumeSnapshot(r.Context(), pool, volume, r.PathValue("snap")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
+}
+
+// renderVolumeSnapshotsOrRedirect re-renders the swappable snapshots table on
+// HTMX (so the inline forms swap #volume-snapshots in place), else redirects to
+// the volume.
+func (h handlers) renderVolumeSnapshotsOrRedirect(w http.ResponseWriter, r *http.Request, pool, volume string) {
+	if !isHTMX(r) {
+		w.Header().Set("Location", "/storage/"+url.PathEscape(pool)+"/volumes/"+url.PathEscape(volume))
+		w.WriteHeader(http.StatusSeeOther)
+		return
+	}
+	snaps, err := h.backend.ListVolumeSnapshots(r.Context(), pool, volume)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.render(w, r, http.StatusOK, ui.StorageVolumeSnapshotsTable(pool, volume, snaps))
+}

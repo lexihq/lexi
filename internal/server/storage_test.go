@@ -69,3 +69,58 @@ func TestDeleteVolumeReturnsTable(t *testing.T) {
 	_, err := b.GetVolume(t.Context(), "default", "vol1")
 	require.ErrorIs(t, err, backend.ErrNotFound)
 }
+
+func newVolume(t *testing.T) *fake.Fake {
+	t.Helper()
+	b := fake.New()
+	require.NoError(t, b.CreateVolume(t.Context(), "default", backend.StorageVolume{Name: "vol1", ContentType: "filesystem"}))
+	return b
+}
+
+func TestStorageVolumePageRenders(t *testing.T) {
+	res := request(t, New(newVolume(t)), "GET", "/storage/default/volumes/vol1", "", false)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, "vol1")
+	assert.Contains(t, body, "Snapshots")
+}
+
+func TestStorageVolumeUnknownIs404(t *testing.T) {
+	res := request(t, New(fake.New()), "GET", "/storage/default/volumes/ghost", "", false)
+	assertStatus(t, res, http.StatusNotFound)
+}
+
+func TestCreateVolumeSnapshotReturnsTable(t *testing.T) {
+	b := newVolume(t)
+	res := formRequest(t, New(b), "/storage/default/volumes/vol1/snapshots",
+		url.Values{"snapshot": {"snap0"}}, true)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, `id="volume-snapshots"`)
+	assert.Contains(t, body, "snap0")
+	assert.NotContains(t, body, "<!doctype")
+}
+
+func TestCreateVolumeSnapshotBlankNameIs400(t *testing.T) {
+	res := formRequest(t, New(newVolume(t)), "/storage/default/volumes/vol1/snapshots",
+		url.Values{"snapshot": {"  "}}, true)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestRestoreVolumeSnapshotReturnsTable(t *testing.T) {
+	b := newVolume(t)
+	require.NoError(t, b.CreateVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))
+	res := formRequest(t, New(b), "/storage/default/volumes/vol1/snapshots/snap0/restore", url.Values{}, true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "snap0")
+}
+
+func TestDeleteVolumeSnapshotReturnsTable(t *testing.T) {
+	b := newVolume(t)
+	require.NoError(t, b.CreateVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))
+	res := formRequest(t, New(b), "/storage/default/volumes/vol1/snapshots/snap0/delete", url.Values{}, true)
+	assertStatus(t, res, http.StatusOK)
+	snaps, err := b.ListVolumeSnapshots(t.Context(), "default", "vol1")
+	require.NoError(t, err)
+	assert.Empty(t, snaps)
+}

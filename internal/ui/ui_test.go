@@ -222,6 +222,16 @@ func TestStorageVolumesTableShowsDeleteAndCreateForm(t *testing.T) {
 	assertContains(t, html, `hx-post="/storage/default/volumes/vol1/delete"`)
 }
 
+func TestStorageVolumeSnapshotsTableHasCreateAndActions(t *testing.T) {
+	html := render(t, StorageVolumeSnapshotsTable("default", "vol1", []backend.StorageVolumeSnapshot{
+		{Name: "snap0"},
+	}))
+	assertContains(t, html, `id="volume-snapshots"`)
+	assertContains(t, html, `action="/storage/default/volumes/vol1/snapshots"`)
+	assertContains(t, html, `hx-post="/storage/default/volumes/vol1/snapshots/snap0/restore"`)
+	assertContains(t, html, `hx-post="/storage/default/volumes/vol1/snapshots/snap0/delete"`)
+}
+
 func TestErrorToastRendersMessage(t *testing.T) {
 	html := render(t, ErrorToast("boom"))
 	assertContains(t, html, "boom")

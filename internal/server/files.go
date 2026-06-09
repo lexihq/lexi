@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
@@ -19,14 +20,19 @@ var maxFileUploadBytes int64 = 1 << 30 // 1 GiB
 // requestPath extracts and validates the ?path= query parameter, defaulting to
 // the filesystem root.
 func requestPath(r *http.Request) (string, error) {
-	p := r.URL.Query().Get("path")
+	return normalizeAbsPath(r.URL.Query().Get("path"))
+}
+
+// normalizeAbsPath requires an absolute path and canonicalizes it (dot
+// segments, doubled and trailing slashes) so every driver sees the same form.
+func normalizeAbsPath(p string) (string, error) {
 	if p == "" {
 		p = "/"
 	}
 	if !strings.HasPrefix(p, "/") {
 		return "", fmt.Errorf("path %q must be absolute: %w", p, backend.ErrInvalid)
 	}
-	return p, nil
+	return path.Clean(p), nil
 }
 
 // filesPanel renders the Files tab listing for an instance directory.
@@ -78,9 +84,9 @@ func (h handlers) downloadFile(w http.ResponseWriter, r *http.Request) {
 	aw := &attachmentWriter{w: w, filename: path.Base(filePath)}
 	if err := h.backend.PullFile(r.Context(), name, filePath, aw); err != nil {
 		if aw.wrote {
-			// Headers are gone; the download is already broken. Nothing clean
-			// to send — surface it in the status text via a plain error.
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			// The 200 and part of the body are already sent; writing anything
+			// more would corrupt the download with error text. Log and abort.
+			slog.Warn("download aborted mid-stream", "instance", name, "path", filePath, "err", err)
 			return
 		}
 		h.fail(w, err)
@@ -106,8 +112,8 @@ func (h handlers) uploadFile(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	dir := strings.TrimSpace(r.FormValue("path"))
-	if !strings.HasPrefix(dir, "/") {
+	dir, err := normalizeAbsPath(strings.TrimSpace(r.FormValue("path")))
+	if err != nil {
 		h.renderError(w, http.StatusBadRequest, "directory path must be absolute")
 		return
 	}

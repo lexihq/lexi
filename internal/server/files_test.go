@@ -58,6 +58,13 @@ func TestFilesPanelListsSubdir(t *testing.T) {
 	assert.Contains(t, res.Body.String(), "hostname")
 }
 
+func TestFilesPanelNormalizesDotSegments(t *testing.T) {
+	// /etc/../etc cleans to /etc; doubled and trailing slashes are removed too.
+	res := request(t, New(demoFake(t)), "GET", "/instances/demo/files?path=%2Fetc%2F..%2F%2Fetc%2F", "", true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "hostname")
+}
+
 func TestFilesPanelRelativePathIs400(t *testing.T) {
 	res := request(t, New(demoFake(t)), "GET", "/instances/demo/files?path=etc", "", true)
 	assertStatus(t, res, http.StatusBadRequest)

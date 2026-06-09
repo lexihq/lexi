@@ -584,3 +584,28 @@ test("files tab: browse, download, and upload", async ({ page }) => {
     await expect(files.getByText("e2e-upload.txt")).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10000 });
 });
+
+test("server section: overview, config apply, warning delete", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Server", exact: true }).click();
+  await expect(page).toHaveURL(/\/server$/);
+
+  // Overview + seeded config row (config keys render as input values).
+  await expect(page.getByText("6.0-fake")).toBeVisible();
+  await expect(page.locator('input[name="key"]').first()).toHaveValue("core.https_address");
+
+  // Add a user.* key in the first blank row and apply (plain form + redirect).
+  await page.locator('input[name="key"]').nth(1).fill("user.e2e");
+  await page.locator('input[name="value"]').nth(1).fill("yes");
+  await page.getByRole("button", { name: "Apply config" }).click();
+  await expect(page).toHaveURL(/\/server$/);
+  await expect(page.locator('input[value="user.e2e"]')).toBeVisible();
+
+  // Delete a seeded warning; the table re-renders in place.
+  const warnings = page.locator("#warnings");
+  await expect(warnings.getByText("KVM support is missing")).toBeVisible();
+  await expect(async () => {
+    await warnings.getByRole("row", { name: /KVM support/ }).getByRole("button", { name: "Delete" }).click();
+    await expect(warnings.getByText("KVM support is missing")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});

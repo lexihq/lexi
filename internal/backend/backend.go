@@ -39,6 +39,7 @@ type Capabilities struct {
 	Metrics    bool // live resource metrics
 	Limits     bool // CPU and memory limits
 	Pause      bool // freeze/unfreeze (pause/resume)
+	Profiles   bool // list/view profiles + attach to instances
 }
 
 // Instance is a system container or virtual machine.
@@ -49,8 +50,9 @@ type Instance struct {
 	IPv4         []string
 	Snapshots    int
 	CreatedAt    time.Time
-	LimitsCPU    string // limits.cpu, e.g. "2"; empty = unset
-	LimitsMemory string // limits.memory, e.g. "2GiB"; empty = unset
+	LimitsCPU    string   // limits.cpu, e.g. "2"; empty = unset
+	LimitsMemory string   // limits.memory, e.g. "2GiB"; empty = unset
+	Profiles     []string // assigned profile names, in override order
 }
 
 // Limits caps an instance's CPU and memory. Empty strings mean "leave unset"
@@ -58,6 +60,16 @@ type Instance struct {
 type Limits struct {
 	CPU    string // cores ("2") or cpuset ("0-1,3")
 	Memory string // e.g. "2GiB"
+}
+
+// Profile is an Incus profile: a reusable bundle of config and devices that can
+// be attached to instances. Config/Devices are read-only in this slice.
+type Profile struct {
+	Name        string
+	Description string
+	Config      map[string]string
+	Devices     map[string]map[string]string // device name → {key: value}
+	UsedBy      []string                      // instance names using it
 }
 
 // Metrics is a point-in-time resource snapshot. CPUPercent is derived from the
@@ -144,6 +156,12 @@ type Backend interface {
 
 	UpdateLimits(ctx context.Context, name string, l Limits) error
 	Metrics(ctx context.Context, name string) (Metrics, error)
+
+	ListProfiles(ctx context.Context) ([]Profile, error)
+	GetProfile(ctx context.Context, name string) (Profile, error)
+	// SetInstanceProfiles replaces the instance's profile list (ordered; later
+	// profiles override earlier ones).
+	SetInstanceProfiles(ctx context.Context, name string, profiles []string) error
 
 	// ExportInstance streams a portable backup tarball of the instance to w.
 	ExportInstance(ctx context.Context, name string, w io.Writer) error

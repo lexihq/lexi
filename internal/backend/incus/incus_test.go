@@ -44,6 +44,27 @@ type instanceServerStub struct {
 	consoleCloseErr   error
 	stateAction       string                // last UpdateInstanceState action
 	stateOp           incusclient.Operation // operation returned by UpdateInstanceState
+	profiles          []api.Profile         // returned by GetProfiles
+	profile           *api.Profile          // returned by GetProfile
+	profileErr        error                 // error for GetProfiles/GetProfile
+	updatedPut        *api.InstancePut      // captured by UpdateInstance
+	updateOp          incusclient.Operation // operation returned by UpdateInstance
+}
+
+func (s *instanceServerStub) GetProfiles() ([]api.Profile, error) {
+	return s.profiles, s.profileErr
+}
+
+func (s *instanceServerStub) GetProfile(string) (*api.Profile, string, error) {
+	return s.profile, "etag", s.profileErr
+}
+
+func (s *instanceServerStub) UpdateInstance(_ string, put api.InstancePut, _ string) (incusclient.Operation, error) {
+	s.updatedPut = &put
+	if s.updateOp != nil {
+		return s.updateOp, nil
+	}
+	return &operationStub{}, nil
 }
 
 func (s *instanceServerStub) GetInstanceSnapshots(string) ([]api.InstanceSnapshot, error) {
@@ -272,6 +293,34 @@ func TestCPUPercentDoesNotRecreateSampleAfterDeletion(t *testing.T) {
 	b.cpuPercent("demo", 1, epoch)
 
 	assert.NotContains(t, b.cpuSamples, "demo")
+}
+
+func TestListProfilesMapsFields(t *testing.T) {
+	srv := &instanceServerStub{profiles: []api.Profile{
+		{Name: "default", ProfilePut: api.ProfilePut{
+			Description: "d", Config: map[string]string{"k": "v"},
+			Devices: map[string]map[string]string{"eth0": {"type": "nic"}}},
+			UsedBy: []string{"/1.0/instances/c1"}},
+	}}
+	b := &incusBackend{srv: srv}
+	got, err := b.ListProfiles(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "default", got[0].Name)
+	assert.Equal(t, "v", got[0].Config["k"])
+	assert.Equal(t, "nic", got[0].Devices["eth0"]["type"])
+	assert.Equal(t, []string{"/1.0/instances/c1"}, got[0].UsedBy)
+}
+
+func TestSetInstanceProfilesGetThenPut(t *testing.T) {
+	srv := &instanceServerStub{
+		instance: &api.Instance{Name: "demo",
+			InstancePut: api.InstancePut{Profiles: []string{"default"}}},
+	}
+	b := &incusBackend{srv: srv}
+	require.NoError(t, b.SetInstanceProfiles(context.Background(), "demo", []string{"default", "gpu"}))
+	require.NotNil(t, srv.updatedPut)
+	assert.Equal(t, []string{"default", "gpu"}, srv.updatedPut.Profiles)
 }
 
 func TestLifecycleActionsSendCorrectIncusAction(t *testing.T) {

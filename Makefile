@@ -11,6 +11,7 @@ dev:
 
 generate:
 	templ generate
+	./scripts/tailwind.sh
 
 test: generate
 	go test ./...

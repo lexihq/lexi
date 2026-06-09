@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/adam/lxcon/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -71,4 +72,33 @@ func TestUpdateInstanceConfigPreservesVolatileAndLimits(t *testing.T) {
 		"volatile.base_image": "abc",
 		"limits.cpu":          "2",
 	}, srv.updatedPut.Config)
+}
+
+func TestAddDevicePutsDevice(t *testing.T) {
+	srv := &instanceServerStub{instance: &api.Instance{}}
+	b := &incusBackend{srv: srv}
+	require.NoError(t, b.AddDevice(context.Background(), "demo", "web",
+		map[string]string{"type": "proxy", "listen": "tcp:0.0.0.0:80"}))
+	require.NotNil(t, srv.updatedPut)
+	assert.Equal(t, "proxy", srv.updatedPut.Devices["web"]["type"])
+}
+
+func TestRemoveDeviceDeletesDevice(t *testing.T) {
+	srv := &instanceServerStub{instance: &api.Instance{
+		InstancePut: api.InstancePut{Devices: map[string]map[string]string{
+			"web": {"type": "proxy"},
+		}},
+	}}
+	b := &incusBackend{srv: srv}
+	require.NoError(t, b.RemoveDevice(context.Background(), "demo", "web"))
+	require.NotNil(t, srv.updatedPut)
+	assert.NotContains(t, srv.updatedPut.Devices, "web")
+}
+
+func TestRemoveDeviceAbsentIsNotFoundNoPut(t *testing.T) {
+	srv := &instanceServerStub{instance: &api.Instance{}}
+	b := &incusBackend{srv: srv}
+	err := b.RemoveDevice(context.Background(), "demo", "ghost")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+	assert.Nil(t, srv.updatedPut) // no write issued
 }

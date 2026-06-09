@@ -62,3 +62,31 @@ func TestGetInstanceConfigSeparatesLocalFromInherited(t *testing.T) {
 	assert.Empty(t, cfg.LocalDevices)       // nothing local yet
 	assert.Contains(t, cfg.Devices, "root") // inherited from "default"
 }
+
+func TestDeviceAddRemoveRoundTrip(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo"}))
+
+	require.NoError(t, f.AddDevice(ctx(), "demo", "web",
+		map[string]string{"type": "proxy", "listen": "tcp:0.0.0.0:80", "connect": "tcp:127.0.0.1:80"}))
+
+	cfg, err := f.GetInstanceConfig(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "proxy", cfg.LocalDevices["web"]["type"])
+	assert.Contains(t, cfg.Devices, "web") // shows in expanded too
+
+	// Local overrides a same-named profile device in the expanded view.
+	require.NoError(t, f.AddDevice(ctx(), "demo", "root", map[string]string{"type": "disk", "path": "/srv"}))
+	cfg, err = f.GetInstanceConfig(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "/srv", cfg.Devices["root"]["path"])
+
+	require.NoError(t, f.RemoveDevice(ctx(), "demo", "web"))
+	cfg, err = f.GetInstanceConfig(ctx(), "demo")
+	require.NoError(t, err)
+	assert.NotContains(t, cfg.LocalDevices, "web")
+
+	// Error paths.
+	require.ErrorIs(t, f.AddDevice(ctx(), "ghost", "x", map[string]string{"type": "disk"}), backend.ErrNotFound)
+	require.ErrorIs(t, f.RemoveDevice(ctx(), "demo", "nope"), backend.ErrNotFound)
+}

@@ -48,6 +48,33 @@ func (f *Fake) UpdateInstanceConfig(_ context.Context, name string, config map[s
 	return nil
 }
 
+func (f *Fake) AddDevice(_ context.Context, name, device string, config map[string]string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return notFound(name)
+	}
+	in.devices[device] = maps.Clone(config)
+	return nil
+}
+
+func (f *Fake) RemoveDevice(_ context.Context, name, device string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return notFound(name)
+	}
+	if _, ok := in.devices[device]; !ok {
+		return notFoundf("device %q on %q", device, name)
+	}
+	delete(in.devices, device)
+	return nil
+}
+
 func (f *Fake) UpdateLimits(_ context.Context, name string, l backend.Limits) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

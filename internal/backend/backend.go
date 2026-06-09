@@ -177,6 +177,10 @@ type Backend interface {
 
 	GetInstanceConfig(ctx context.Context, name string) (InstanceConfig, error)
 	UpdateInstanceConfig(ctx context.Context, name string, config map[string]string) error
+	// AddDevice attaches (or overwrites) a local device on the instance.
+	AddDevice(ctx context.Context, name, device string, config map[string]string) error
+	// RemoveDevice detaches a local device. The device must exist (ErrNotFound).
+	RemoveDevice(ctx context.Context, name, device string) error
 
 	// ExportInstance streams a portable backup tarball of the instance to w.
 	ExportInstance(ctx context.Context, name string, w io.Writer) error

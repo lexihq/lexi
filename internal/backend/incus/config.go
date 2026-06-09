@@ -74,6 +74,31 @@ func (b *incusBackend) UpdateInstanceConfig(ctx context.Context, name string, co
 	}, "update config on %q", name)
 }
 
+// AddDevice attaches or overwrites a local device (GET-then-PUT, like UpdateLimits).
+func (b *incusBackend) AddDevice(ctx context.Context, name, device string, config map[string]string) error {
+	return b.mutateInstance(ctx, name, func(put *api.InstancePut) {
+		if put.Devices == nil {
+			put.Devices = map[string]map[string]string{}
+		}
+		put.Devices[device] = config
+	}, "add device %q to %q", device, name)
+}
+
+// RemoveDevice detaches a local device. Absent devices 404 before any PUT.
+func (b *incusBackend) RemoveDevice(ctx context.Context, name, device string) error {
+	inst, etag, err := b.srv.GetInstance(name)
+	if err != nil {
+		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
+	}
+	put := inst.Writable()
+	if _, ok := put.Devices[device]; !ok {
+		return fmt.Errorf("device %q on %q: %w", device, name, backend.ErrNotFound)
+	}
+	delete(put.Devices, device)
+	op, err := b.srv.UpdateInstance(name, put, etag)
+	return waitOp(ctx, op, err, "remove device %q from %q", device, name)
+}
+
 func setOrDelete(m map[string]string, key, val string) {
 	if val == "" {
 		delete(m, key)

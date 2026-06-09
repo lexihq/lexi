@@ -1,0 +1,160 @@
+package ui
+
+import (
+	"net/url"
+	"path"
+	"strings"
+
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/icon"
+	"github.com/adam/lxcon/internal/components/table"
+)
+
+// filesURL builds the panel URL for a directory; the path travels as a query
+// parameter because it contains slashes.
+func filesURL(name, dir string) string {
+	return "/instances/" + url.PathEscape(name) + "/files?path=" + url.QueryEscape(dir)
+}
+
+// crumb is one breadcrumb segment of the current directory path.
+type crumb struct {
+	Label string
+	Path  string
+}
+
+// crumbs splits an absolute directory path into breadcrumb segments, starting
+// with the root.
+func crumbs(dir string) []crumb {
+	out := []crumb{{Label: "/", Path: "/"}}
+	cur := ""
+	for _, seg := range strings.Split(strings.Trim(dir, "/"), "/") {
+		if seg == "" {
+			continue
+		}
+		cur += "/" + seg
+		out = append(out, crumb{Label: seg, Path: cur})
+	}
+	return out
+}
+
+// FilesPanel is the Files tab: breadcrumb navigation, an upload form targeting
+// the current directory, and the directory listing. Navigation re-renders the
+// panel in place (hx-get targeting #files).
+templ FilesPanel(name, dir string, entries []backend.FileEntry) {
+	<div id="files">
+		<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+			<nav class="flex items-center gap-1 text-sm">
+				for i, c := range crumbs(dir) {
+					if i > 0 {
+						<span class="text-muted-foreground">/</span>
+					}
+					<button
+						type="button"
+						class="rounded px-1 py-0.5 font-medium underline-offset-4 hover:underline"
+						hx-get={ filesURL(name, c.Path) }
+						hx-target="#files"
+						hx-swap="outerHTML"
+					>{ c.Label }</button>
+				}
+			</nav>
+			<form
+				hx-post={ "/instances/" + url.PathEscape(name) + "/files/upload" }
+				hx-encoding="multipart/form-data"
+				hx-target="#files"
+				hx-swap="outerHTML"
+				class="flex items-center gap-2"
+			>
+				<input type="hidden" name="path" value={ dir }/>
+				<input type="file" name="file" required class="text-sm"/>
+				@button.Button(button.Props{Type: button.TypeSubmit, Size: button.SizeSm}) {
+					@icon.Icon("upload")(icon.Props{Class: "size-4"})
+					Upload
+				}
+			</form>
+		</div>
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() { Name }
+					@table.Head() { Mode }
+					@table.Head() { }
+				}
+			}
+			@table.Body() {
+				if dir != "/" {
+					@table.Row() {
+						@table.Cell() {
+							<button
+								type="button"
+								class="flex items-center gap-2 font-medium underline-offset-4 hover:underline"
+								hx-get={ filesURL(name, parentDir(dir)) }
+								hx-target="#files"
+								hx-swap="outerHTML"
+							>
+								@icon.Icon("folder")(icon.Props{Class: "size-4"})
+								..
+							</button>
+						}
+						@table.Cell() {}
+						@table.Cell() {}
+					}
+				}
+				for _, e := range entries {
+					@table.Row() {
+						@table.Cell() {
+							if e.Dir {
+								<button
+									type="button"
+									class="flex items-center gap-2 font-medium underline-offset-4 hover:underline"
+									hx-get={ filesURL(name, childPath(dir, e.Name)) }
+									hx-target="#files"
+									hx-swap="outerHTML"
+								>
+									@icon.Icon("folder")(icon.Props{Class: "size-4"})
+									{ e.Name }
+								</button>
+							} else {
+								<span class="flex items-center gap-2">
+									@icon.Icon("file")(icon.Props{Class: "size-4 text-muted-foreground"})
+									{ e.Name }
+								</span>
+							}
+						}
+						@table.Cell() {
+							<span class="font-mono text-xs text-muted-foreground">{ e.Mode }</span>
+						}
+						@table.Cell() {
+							if !e.Dir {
+								<a
+									href={ templ.URL("/instances/" + url.PathEscape(name) + "/files/download?path=" + url.QueryEscape(childPath(dir, e.Name))) }
+									hx-boost="false"
+									class="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
+								>
+									@icon.Icon("download")(icon.Props{Class: "size-4"})
+									Download
+								</a>
+							}
+						}
+					}
+				}
+			}
+		}
+		if len(entries) == 0 {
+			<p class="mt-3 text-sm text-muted-foreground">Empty directory.</p>
+		}
+	</div>
+}
+
+// parentDir is the directory one level up, never above the root.
+func parentDir(dir string) string {
+	return path.Dir(dir)
+}
+
+// childPath joins a directory and an entry name.
+func childPath(dir, name string) string {
+	if dir == "/" {
+		return "/" + name
+	}
+	return dir + "/" + name
+}

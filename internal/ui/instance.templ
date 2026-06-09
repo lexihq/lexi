@@ -76,6 +76,13 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 					hx-trigger="load"
 					hx-swap="outerHTML"
 				></div>
+			case "files":
+				<div
+					id="files"
+					hx-get={ "/instances/" + url.PathEscape(inst.Name) + "/files" }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+				></div>
 			default:
 				<section class="mb-8 rounded-lg border bg-card p-4">
 					<h2 class="mb-3 text-lg font-medium">Details</h2>
@@ -121,6 +128,10 @@ func effectiveTab(caps backend.Capabilities, tab string) string {
 		if caps.Config {
 			return "devices"
 		}
+	case "files":
+		if caps.Files {
+			return "files"
+		}
 	}
 	return "summary"
 }
@@ -157,6 +168,9 @@ templ instanceTabs(caps backend.Capabilities, name, active string, swap bool) {
 		if caps.Config {
 			@tabLink(name, "config", "Configuration", "settings", active, swap)
 			@tabLink(name, "devices", "Devices", "hard-drive", active, swap)
+		}
+		if caps.Files {
+			@tabLink(name, "files", "Files", "folder", active, swap)
 		}
 	</div>
 }

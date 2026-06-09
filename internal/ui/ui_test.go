@@ -212,6 +212,38 @@ func TestSidebarGatesStorageLink(t *testing.T) {
 	}
 }
 
+func TestFilesPanelRendersEntriesAndControls(t *testing.T) {
+	html := render(t, FilesPanel("demo", "/etc", []backend.FileEntry{
+		{Name: "ssl", Dir: true, Mode: "0755"},
+		{Name: "hostname", Mode: "0644"},
+	}))
+
+	// Breadcrumb + parent navigation re-target the panel.
+	assertContains(t, html, `hx-get="/instances/demo/files?path=%2F"`)
+	// Directory descent and file download.
+	assertContains(t, html, `hx-get="/instances/demo/files?path=%2Fetc%2Fssl"`)
+	assertContains(t, html, `href="/instances/demo/files/download?path=%2Fetc%2Fhostname"`)
+	assertContains(t, html, `hx-boost="false"`)
+	// Upload form posts multipart to the current directory.
+	assertContains(t, html, `hx-post="/instances/demo/files/upload"`)
+	assertContains(t, html, `hx-encoding="multipart/form-data"`)
+	assertContains(t, html, `value="/etc"`)
+	assertContains(t, html, "0644")
+}
+
+func TestInstanceBodyGatesFilesTab(t *testing.T) {
+	caps := testCaps()
+	caps.Files = true
+	with := render(t, InstanceBody(caps, backend.Instance{Name: "demo"}, nil, nil, "files"))
+	assertContains(t, with, `hx-get="/instances/demo/files"`)
+
+	// Without the capability the tab downgrades to summary and never mounts.
+	without := render(t, InstanceBody(testCaps(), backend.Instance{Name: "demo"}, nil, nil, "files"))
+	if strings.Contains(without, "/instances/demo/files") {
+		t.Fatalf("files tab must be hidden without the capability, got %q", without)
+	}
+}
+
 func TestLayoutGatesOperationsPanel(t *testing.T) {
 	caps := testCaps()
 	caps.Operations = true

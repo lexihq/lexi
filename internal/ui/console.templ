@@ -5,19 +5,20 @@ import "github.com/adam/lxcon/internal/backend"
 // ConsolePage hosts the interactive xterm.js terminal. The vendored xterm
 // scripts and console.js are deferred so they run in order after parsing; the
 // terminal div carries the WebSocket path console.js connects to.
-templ ConsolePage(caps backend.Capabilities, name string) {
-	@Layout(name+" · console", caps, Nav{Section: NavInstances, Instance: name, NoBoost: true}) {
+templ ConsolePage(caps backend.Capabilities, inst backend.Instance) {
+	@Layout(inst.Name+" · console", caps, Nav{Section: NavInstances, Instance: inst.Name, NoBoost: true}) {
 		<link href="/static/css/xterm.css" rel="stylesheet"/>
-		<div class="mb-4 flex items-center justify-between gap-4">
+		<div class="mb-6 flex items-start justify-between gap-4">
 			<div>
-				<a href={ templ.URL("/instances/" + name) } class="text-sm text-muted-foreground underline-offset-4 hover:underline">← { name }</a>
-				<h1 class="mt-2 text-2xl font-semibold">Console</h1>
-				<p class="text-muted-foreground">Interactive shell on { name }.</p>
+				<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>
+				<h1 class="mt-2 text-2xl font-semibold">{ inst.Name }</h1>
+				<p class="text-muted-foreground">{ inst.Status }</p>
 			</div>
 		</div>
+		@instanceTabs(caps, inst.Name, "console", false)
 		<div
 			id="terminal"
-			data-ws={ "/instances/" + name + "/console/ws" }
+			data-ws={ "/instances/" + inst.Name + "/console/ws" }
 			class="h-[70vh] overflow-hidden rounded-lg border bg-black p-2"
 		></div>
 		<script src="/static/js/xterm.js" defer></script>

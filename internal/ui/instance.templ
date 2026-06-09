@@ -35,32 +35,7 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, profiles []backend.Profile, tab string) {
 	{{ active := effectiveTab(caps, tab) }}
 	<div id="instance-body">
-		<div class="mb-4 flex gap-1 border-b">
-			@tabLink(inst.Name, "summary", "Summary", "info", active)
-			if caps.Snapshots {
-				@tabLink(inst.Name, "snapshots", "Snapshots", "camera", active)
-			}
-			if caps.Console {
-				<a
-					href={ templ.URL("/instances/" + inst.Name + "/console") }
-					hx-boost="false"
-					class="inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
-				>
-					@icon.Icon("square-terminal")(icon.Props{Class: "size-4"})
-					Console
-				</a>
-			}
-			if caps.Metrics {
-				@tabLink(inst.Name, "metrics", "Metrics", "activity", active)
-			}
-			if caps.Console {
-				@tabLink(inst.Name, "logs", "Logs", "scroll-text", active)
-			}
-			if caps.Config {
-				@tabLink(inst.Name, "config", "Configuration", "settings", active)
-				@tabLink(inst.Name, "devices", "Devices", "hard-drive", active)
-			}
-		</div>
+		@instanceTabs(caps, inst.Name, active, true)
 		switch active {
 			case "snapshots":
 				@SnapshotTable(inst.Name, snapshots)
@@ -141,16 +116,55 @@ func effectiveTab(caps backend.Capabilities, tab string) string {
 	return "summary"
 }
 
-// tabLink is a deep-linkable tab: a plain href for reload/back-forward plus an
-// HTMX swap of #instance-body for in-place switching, with the active tab
-// underlined.
-templ tabLink(name, tab, label, iconName, active string) {
+// instanceTabs renders the instance tab bar, shared by the detail page and the
+// full-page console so navigation is never lost. When swap is true the tabs
+// swap #instance-body in place (detail page); when false they are full-page
+// navigations (console page, which must unload to close its WebSocket). The
+// Console entry is always a full-page link and is highlighted when active.
+templ instanceTabs(caps backend.Capabilities, name, active string, swap bool) {
+	<div class="mb-4 flex gap-1 border-b">
+		@tabLink(name, "summary", "Summary", "info", active, swap)
+		if caps.Snapshots {
+			@tabLink(name, "snapshots", "Snapshots", "camera", active, swap)
+		}
+		if caps.Console {
+			<a
+				href={ templ.URL("/instances/" + name + "/console") }
+				hx-boost="false"
+				class={ "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm",
+					templ.KV("border-primary font-medium", active == "console"),
+					templ.KV("border-transparent text-muted-foreground hover:text-foreground", active != "console") }
+			>
+				@icon.Icon("square-terminal")(icon.Props{Class: "size-4"})
+				Console
+			</a>
+		}
+		if caps.Metrics {
+			@tabLink(name, "metrics", "Metrics", "activity", active, swap)
+		}
+		if caps.Console {
+			@tabLink(name, "logs", "Logs", "scroll-text", active, swap)
+		}
+		if caps.Config {
+			@tabLink(name, "config", "Configuration", "settings", active, swap)
+			@tabLink(name, "devices", "Devices", "hard-drive", active, swap)
+		}
+	</div>
+}
+
+// tabLink is a deep-linkable tab: a plain href for reload/back-forward plus,
+// when swap is true, an HTMX swap of #instance-body for in-place switching. On
+// the console page swap is false so the tab is a full-page navigation. The
+// active tab is underlined.
+templ tabLink(name, tab, label, iconName, active string, swap bool) {
 	<a
 		href={ templ.URL("/instances/" + name + "?tab=" + tab) }
-		hx-get={ "/instances/" + name + "?tab=" + tab }
-		hx-target="#instance-body"
-		hx-swap="outerHTML"
-		hx-push-url="true"
+		if swap {
+			hx-get={ "/instances/" + name + "?tab=" + tab }
+			hx-target="#instance-body"
+			hx-swap="outerHTML"
+			hx-push-url="true"
+		}
 		class={ "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm",
 			templ.KV("border-primary font-medium", active == tab),
 			templ.KV("border-transparent text-muted-foreground hover:text-foreground", active != tab) }

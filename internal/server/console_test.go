@@ -43,6 +43,31 @@ func TestConsolePageRenders(t *testing.T) {
 	assert.Contains(t, body, "/instances/demo/console/ws")
 }
 
+func TestConsolePageKeepsInstanceTabs(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+
+	inst, err := b.GetInstance(t.Context(), "demo")
+	require.NoError(t, err)
+
+	res := request(t, New(b), "GET", "/instances/demo/console", "", false)
+
+	require.Equal(t, http.StatusOK, res.Code)
+	body := res.Body.String()
+	// The instance tab bar is present so navigation isn't lost on the console.
+	assert.Contains(t, body, "/instances/demo?tab=snapshots")
+	assert.Contains(t, body, "/instances/demo?tab=metrics")
+	// Tabs are full-page navigations here, not #instance-body HTMX swaps.
+	assert.NotContains(t, body, `hx-target="#instance-body"`)
+	// The instance status is shown under the name, as on the detail page.
+	assert.Contains(t, body, inst.Status)
+}
+
+func TestConsolePageUnknownInstanceIs404(t *testing.T) {
+	res := request(t, New(fake.New()), "GET", "/instances/ghost/console", "", false)
+	assert.Equal(t, http.StatusNotFound, res.Code)
+}
+
 func TestConsoleWSBridgesExec(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))

@@ -19,7 +19,12 @@ var wsUpgrader = websocket.Upgrader{}
 
 // console renders the full-page interactive terminal.
 func (h handlers) console(w http.ResponseWriter, r *http.Request) {
-	h.renderShell(w, r, http.StatusOK, ui.ConsolePage(h.backend.Capabilities(), r.PathValue("name")))
+	inst, err := h.backend.GetInstance(r.Context(), r.PathValue("name"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderShell(w, r, http.StatusOK, ui.ConsolePage(h.backend.Capabilities(), inst))
 }
 
 // consoleWS bridges a browser terminal to backend.Exec. Binary frames carry

@@ -29,3 +29,21 @@ test("console terminal round-trips typed input over the websocket", async ({ pag
 
   expect(errors, "no uncaught page errors").toEqual([]);
 });
+
+test("console page keeps the instance tab bar for navigation", async ({ page }) => {
+  await page.goto("/instances/demo/console");
+
+  // The instance name and status are shown above the tabs, as on the detail page.
+  await expect(page.getByRole("heading", { name: "demo" })).toBeVisible();
+  await expect(page.getByText("Stopped")).toBeVisible();
+
+  // The full set of instance tabs is present, with Console highlighted.
+  const console = page.getByRole("link", { name: "Console" });
+  await expect(console).toBeVisible();
+  await expect(console).toHaveClass(/border-primary/);
+
+  // Tabs are full-page navigations here, so clicking one leaves the console.
+  await page.getByRole("link", { name: "Metrics" }).click();
+  await expect(page).toHaveURL(/\/instances\/demo\?tab=metrics$/);
+  await expect(page.locator("#metrics")).toBeVisible();
+});

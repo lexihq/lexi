@@ -102,6 +102,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		Devices:    true,
 		Networks:   true,
 		Storage:    true,
+		Move:       true,
 	}
 }
 

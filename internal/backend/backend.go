@@ -44,6 +44,7 @@ type Capabilities struct {
 	Devices    bool // add/remove instance-local devices
 	Networks   bool // list/inspect/create/delete networks
 	Storage    bool // list pools + custom volume/snapshot management
+	Move       bool // rename + relocate to another storage pool
 }
 
 // Instance is a system container or virtual machine.
@@ -229,6 +230,8 @@ type Backend interface {
 	SetSnapshotSchedule(ctx context.Context, name string, s SnapshotSchedule) error
 
 	CloneInstance(ctx context.Context, src, dst string) error
+	RenameInstance(ctx context.Context, name, newName string) error
+	MoveInstance(ctx context.Context, name, pool string) error
 
 	UpdateLimits(ctx context.Context, name string, l Limits) error
 	Metrics(ctx context.Context, name string) (Metrics, error)

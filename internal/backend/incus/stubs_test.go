@@ -61,6 +61,9 @@ type instanceServerStub struct {
 	deletedSnap     string                      // name captured by DeleteStoragePoolVolumeSnapshot
 	restoredVol     *api.StorageVolumePut       // captured by UpdateStoragePoolVolume
 
+	renamedInstance  [2]string         // name/newName captured by RenameInstance
+	migratedInstance *api.InstancePost // captured by MigrateInstance
+
 	snapshotSnaps []api.InstanceSnapshot     // returned by GetInstanceSnapshots
 	snapshotPost  *api.InstanceSnapshotsPost // captured by CreateInstanceSnapshot
 	renamedSnap   [3]string                  // name/snap/newName captured by RenameInstanceSnapshot
@@ -171,6 +174,16 @@ func (s *instanceServerStub) GetProfiles() ([]api.Profile, error) {
 
 func (s *instanceServerStub) GetProfile(string) (*api.Profile, string, error) {
 	return s.profile, "etag", s.profileErr
+}
+
+func (s *instanceServerStub) RenameInstance(name string, p api.InstancePost) (incusclient.Operation, error) {
+	s.renamedInstance = [2]string{name, p.Name}
+	return &operationStub{}, nil
+}
+
+func (s *instanceServerStub) MigrateInstance(_ string, p api.InstancePost) (incusclient.Operation, error) {
+	s.migratedInstance = &p
+	return &operationStub{}, nil
 }
 
 func (s *instanceServerStub) UpdateInstance(_ string, put api.InstancePut, _ string) (incusclient.Operation, error) {

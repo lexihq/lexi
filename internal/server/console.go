@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/ui"
+	"github.com/goccy/go-json"
 	"github.com/gorilla/websocket"
 )
 

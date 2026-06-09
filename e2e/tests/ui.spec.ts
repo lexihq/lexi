@@ -208,3 +208,24 @@ test("restart, pause, and resume an instance from the list row", async ({ page }
   await rowAction(name, "Delete");
   await expect(row).toHaveCount(0);
 });
+
+test("browse profiles and attach one to an instance", async ({ page }) => {
+  // Profiles list + read-only detail.
+  await page.goto("/profiles");
+  await expect(page.getByRole("link", { name: "default" })).toBeVisible();
+  await page.getByRole("link", { name: "gpu" }).click();
+  await expect(page).toHaveURL(/\/profiles\/gpu$/);
+
+  // Attach gpu to the seeded "demo" instance from its Summary tab.
+  await page.goto("/instances/demo");
+  const profiles = page.locator("#profiles");
+  await profiles.getByRole("checkbox", { name: "gpu" }).check();
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().includes("/instances/demo/profiles"),
+    ),
+    profiles.getByRole("button", { name: "Apply profiles" }).click(),
+  ]);
+  // The swapped-in control keeps gpu checked.
+  await expect(page.locator("#profiles").getByRole("checkbox", { name: "gpu" })).toBeChecked();
+});

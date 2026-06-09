@@ -198,6 +198,32 @@ func TestInstanceProfilesFormReflectsAssigned(t *testing.T) {
 	assertContains(t, html, `value="gpu"`)
 }
 
+func TestConfigPanelRendersRowsAndDevices(t *testing.T) {
+	html := render(t, ConfigPanel("demo", backend.InstanceConfig{
+		Config:  map[string]string{"security.nesting": "true"},
+		Devices: map[string]map[string]string{"root": {"type": "disk", "path": "/"}},
+	}))
+	assertContains(t, html, `hx-post="/instances/demo/config"`)
+	assertContains(t, html, `value="security.nesting"`)
+	assertContains(t, html, `value="true"`)
+	assertContains(t, html, "root") // device name
+	assertContains(t, html, "disk") // device value
+	assertContains(t, html, `name="key"`)
+}
+
+func TestInstanceBodyGatesConfigTab(t *testing.T) {
+	on := render(t, InstanceBody(backend.Capabilities{Config: true},
+		backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "config"))
+	assertContains(t, on, `hx-get="/instances/demo/config"`)
+
+	off := render(t, InstanceBody(backend.Capabilities{},
+		backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "config"))
+	if strings.Contains(off, `hx-get="/instances/demo/config"`) {
+		t.Fatalf("config tab must be hidden without the capability, got %q", off)
+	}
+	assertContains(t, off, "Details") // falls back to summary
+}
+
 func render(t *testing.T, component templ.Component) string {
 	t.Helper()
 	var buf bytes.Buffer

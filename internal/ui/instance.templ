@@ -59,6 +59,9 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 			if caps.Console {
 				@tabLink(inst.Name, "logs", "Logs", "scroll-text", active)
 			}
+			if caps.Config {
+				@tabLink(inst.Name, "config", "Configuration", "settings", active)
+			}
 		</div>
 		switch active {
 			case "snapshots":
@@ -74,6 +77,13 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 				<div
 					id="logs"
 					hx-get={ "/instances/" + inst.Name + "/logs" }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+				></div>
+			case "config":
+				<div
+					id="config"
+					hx-get={ "/instances/" + inst.Name + "/config" }
 					hx-trigger="load"
 					hx-swap="outerHTML"
 				></div>
@@ -113,6 +123,10 @@ func effectiveTab(caps backend.Capabilities, tab string) string {
 	case "logs":
 		if caps.Console {
 			return "logs"
+		}
+	case "config":
+		if caps.Config {
+			return "config"
 		}
 	}
 	return "summary"
@@ -205,6 +219,46 @@ templ LimitsForm(inst backend.Instance) {
 				Apply limits
 			}
 		</form>
+	</section>
+}
+
+// ConfigPanel is the lazy-loaded Configuration tab body: a whole-map key/value
+// editor over the instance's editable config, plus a read-only device list.
+// Submitting replaces the editable config (blank-key rows are dropped, so
+// clearing a key removes it); the trailing blank row adds one.
+templ ConfigPanel(name string, cfg backend.InstanceConfig) {
+	<section id="config" class="space-y-8">
+		<div class="rounded-lg border bg-card p-4">
+			<h2 class="mb-3 text-lg font-medium">Configuration</h2>
+			<form
+				method="post"
+				action={ templ.URL("/instances/" + name + "/config") }
+				hx-post={ "/instances/" + name + "/config" }
+				hx-target="#config"
+				hx-swap="outerHTML"
+				class="space-y-2"
+			>
+				for _, k := range sortedKeys(cfg.Config) {
+					<div class="flex gap-2">
+						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+						<input name="value" value={ cfg.Config[k] } class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+					</div>
+				}
+				<div class="flex gap-2">
+					<input name="key" placeholder="key (e.g. security.nesting)" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+					<input name="value" placeholder="value" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+				</div>
+				<p class="text-xs text-muted-foreground">Clear a key and apply to remove it.</p>
+				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					@icon.Icon("save")(icon.Props{Class: "size-4"})
+					Apply config
+				}
+			</form>
+		</div>
+		<div class="rounded-lg border bg-card p-4">
+			<h2 class="mb-3 text-lg font-medium">Devices</h2>
+			@deviceList(cfg.Devices)
+		</div>
 	</section>
 }
 

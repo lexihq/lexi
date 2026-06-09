@@ -198,8 +198,41 @@ func TestInstanceProfilesFormReflectsAssigned(t *testing.T) {
 	assertContains(t, html, `value="gpu"`)
 }
 
+func TestDevicesSectionLocalHasRemoveInheritedDoesNot(t *testing.T) {
+	caps := backend.Capabilities{Config: true, Devices: true}
+	html := render(t, DevicesSection(caps, "demo", backend.InstanceConfig{
+		Devices: map[string]map[string]string{
+			"root": {"type": "disk", "path": "/"},         // inherited
+			"web":  {"type": "proxy", "listen": "tcp::80"}, // local
+		},
+		LocalDevices: map[string]map[string]string{
+			"web": {"type": "proxy", "listen": "tcp::80"},
+		},
+	}))
+	assertContains(t, html, `hx-post="/instances/demo/devices/web/delete"`) // local removable
+	if strings.Contains(html, `/instances/demo/devices/root/delete`) {
+		t.Fatalf("inherited device must not have a Remove button: %q", html)
+	}
+	assertContains(t, html, `name="type" value="proxy"`) // an add form
+	assertContains(t, html, `name="type" value="disk"`)
+}
+
+func TestDevicesSectionGatesEditingOnCapability(t *testing.T) {
+	cfg := backend.InstanceConfig{
+		Devices:      map[string]map[string]string{"web": {"type": "proxy"}},
+		LocalDevices: map[string]map[string]string{"web": {"type": "proxy"}},
+	}
+	off := render(t, DevicesSection(backend.Capabilities{Config: true}, "demo", cfg))
+	if strings.Contains(off, "/devices/web/delete") {
+		t.Fatalf("Remove must be hidden without caps.Devices: %q", off)
+	}
+	if strings.Contains(off, `name="type"`) {
+		t.Fatalf("add forms must be hidden without caps.Devices: %q", off)
+	}
+}
+
 func TestConfigPanelRendersRowsAndDevices(t *testing.T) {
-	html := render(t, ConfigPanel("demo", backend.InstanceConfig{
+	html := render(t, ConfigPanel(backend.Capabilities{Config: true, Devices: true}, "demo", backend.InstanceConfig{
 		Config:  map[string]string{"security.nesting": "true"},
 		Devices: map[string]map[string]string{"root": {"type": "disk", "path": "/"}},
 	}))

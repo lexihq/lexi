@@ -47,3 +47,48 @@ func TestConfigPanelUnknownInstanceIs404(t *testing.T) {
 	res := request(t, New(b), "GET", "/instances/ghost/config", "", true)
 	assertStatus(t, res, http.StatusNotFound)
 }
+
+func TestDeviceConfigFromFormDropsBlanks(t *testing.T) {
+	got := deviceConfigFromForm("proxy", url.Values{
+		"listen":  {"tcp:0.0.0.0:80"},
+		"connect": {"tcp:127.0.0.1:80"},
+		"bind":    {""},        // dropped
+		"path":    {"ignored"}, // not a proxy field
+	})
+	assert.Equal(t, map[string]string{
+		"type":    "proxy",
+		"listen":  "tcp:0.0.0.0:80",
+		"connect": "tcp:127.0.0.1:80",
+	}, got)
+}
+
+func TestAddDeviceAppliesAndReturnsDevices(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	res := formRequest(t, New(b), "/instances/demo/devices",
+		url.Values{"type": {"proxy"}, "device": {"web"},
+			"listen": {"tcp:0.0.0.0:80"}, "connect": {"tcp:127.0.0.1:80"}}, true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "web")
+	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "proxy", cfg.LocalDevices["web"]["type"])
+}
+
+func TestRemoveDeviceAppliesAndReturnsDevices(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, b.AddDevice(t.Context(), "demo", "web", map[string]string{"type": "proxy"}))
+	res := formRequest(t, New(b), "/instances/demo/devices/web/delete", url.Values{}, true)
+	assertStatus(t, res, http.StatusOK)
+	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.NotContains(t, cfg.LocalDevices, "web")
+}
+
+func TestRemoveUnknownDeviceIs404(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	res := formRequest(t, New(b), "/instances/demo/devices/ghost/delete", url.Values{}, true)
+	assertStatus(t, res, http.StatusNotFound)
+}

@@ -1,7 +1,9 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/ui"
@@ -36,9 +38,15 @@ func (h handlers) createNetwork(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	name := strings.TrimSpace(r.Form.Get("name"))
+	netType := strings.TrimSpace(r.Form.Get("type"))
+	if name == "" || netType == "" {
+		h.fail(w, fmt.Errorf("network name and type are required: %w", backend.ErrInvalid))
+		return
+	}
 	n := backend.Network{
-		Name:        r.Form.Get("name"),
-		Type:        r.Form.Get("type"),
+		Name:        name,
+		Type:        netType,
 		Description: r.Form.Get("description"),
 		Config:      zipConfigPairs(r.Form["key"], r.Form["value"]),
 	}

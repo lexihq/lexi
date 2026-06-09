@@ -179,14 +179,18 @@ func TestSidebarGatesNetworksLinkOnCapability(t *testing.T) {
 	}
 }
 
-func TestNetworksTableShowsManagedBadgeAndDeleteOnlyOnManaged(t *testing.T) {
+func TestNetworksTableShowsManagedBadgeAndDeleteOnlyWhenDeletable(t *testing.T) {
 	html := render(t, NetworksTable([]backend.Network{
-		{Name: "incusbr0", Type: "bridge", Managed: true},
-		{Name: "eth0", Type: "physical", Managed: false},
+		{Name: "incusbr0", Type: "bridge", Managed: true},                       // free → deletable
+		{Name: "eth0", Type: "physical", Managed: false},                        // unmanaged → no delete
+		{Name: "busy", Type: "bridge", Managed: true, UsedBy: []string{"demo"}}, // in use → no delete
 	}))
 	assertContains(t, html, `hx-post="/networks/incusbr0/delete"`)
 	if strings.Contains(html, "/networks/eth0/delete") {
 		t.Fatalf("unmanaged network must not have a delete button: %q", html)
+	}
+	if strings.Contains(html, "/networks/busy/delete") {
+		t.Fatalf("in-use network must not have a delete button: %q", html)
 	}
 }
 

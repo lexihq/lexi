@@ -55,6 +55,12 @@ func (f *Fake) DeleteNetwork(_ context.Context, name string) error {
 	if !net.Managed {
 		return invalid("network %q is unmanaged", name)
 	}
+	// Incus parity: a network referenced by an instance cannot be deleted.
+	for _, in := range f.instances {
+		if f.instanceUsesNetwork(in, name) {
+			return invalid("network %q is in use", name)
+		}
+	}
 	delete(f.networks, name)
 	return nil
 }

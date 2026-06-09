@@ -44,3 +44,11 @@ func TestNetworkUsedByDerivedFromNic(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, br.UsedBy, "demo")
 }
+
+func TestDeleteInUseNetworkIsInvalid(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo"}))
+	// demo's default profile references incusbr0, so it cannot be deleted (Incus
+	// parity: "network is currently in use").
+	require.ErrorIs(t, f.DeleteNetwork(ctx(), "incusbr0"), backend.ErrInvalid)
+}

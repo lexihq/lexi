@@ -39,6 +39,13 @@ func TestCreateNetworkAppliesAndRedirects(t *testing.T) {
 	assert.Equal(t, "true", net.Config["ipv4.nat"])
 }
 
+func TestCreateNetworkBlankNameIs400(t *testing.T) {
+	b := fake.New()
+	res := formRequest(t, New(b), "/networks",
+		url.Values{"name": {"  "}, "type": {"bridge"}}, false)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
 func TestDeleteNetworkRemovesAndReturnsList(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateNetwork(t.Context(), backend.Network{Name: "br1", Type: "bridge"}))

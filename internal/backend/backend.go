@@ -45,6 +45,9 @@ type Capabilities struct {
 	Networks   bool // list/inspect/create/delete networks
 	Storage    bool // list pools + custom volume/snapshot management
 	Move       bool // rename + relocate to another storage pool
+	// ImageManagement is local image store management: publish, copy from the
+	// images remote, delete, and alias ops.
+	ImageManagement bool
 }
 
 // Instance is a system container or virtual machine.
@@ -197,6 +200,18 @@ type Image struct {
 	Type         string // "container" | "virtual-machine"
 }
 
+// LocalImage is an image in the host's local image store (as opposed to Image,
+// which is a per-alias entry of the remote catalog backing the create picker).
+type LocalImage struct {
+	Fingerprint string
+	Aliases     []string
+	Description string
+	Arch        string // incus arch name, e.g. "aarch64", "x86_64"
+	SizeBytes   int64
+	Type        string // "container" | "virtual-machine"
+	CreatedAt   time.Time
+}
+
 // CreateOptions parameterizes CreateInstance.
 type CreateOptions struct {
 	Name        string
@@ -279,4 +294,15 @@ type Backend interface {
 	Exec(ctx context.Context, name string, req ExecRequest) error
 
 	ListImages(ctx context.Context) ([]Image, error) // for the create dropdown
+
+	ListLocalImages(ctx context.Context) ([]LocalImage, error)
+	// PublishImage creates a local image from the (stopped) instance, tagged
+	// with alias when non-empty.
+	PublishImage(ctx context.Context, instance, alias string) error
+	// CopyImage pulls the image behind alias from the images remote into the
+	// local store, copying its aliases.
+	CopyImage(ctx context.Context, alias string) error
+	DeleteImage(ctx context.Context, fingerprint string) error
+	AddImageAlias(ctx context.Context, fingerprint, alias string) error
+	RemoveImageAlias(ctx context.Context, alias string) error
 }

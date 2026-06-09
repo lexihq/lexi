@@ -83,3 +83,103 @@ func distroFromAlias(alias string) string {
 	distro, _, _ := strings.Cut(alias, "/")
 	return distro
 }
+
+// ListLocalImages returns the daemon's local image store.
+func (b *incusBackend) ListLocalImages(_ context.Context) ([]backend.LocalImage, error) {
+	images, err := b.srv.GetImages()
+	if err != nil {
+		return nil, fmt.Errorf("list local images: %w", mapErr(err))
+	}
+	out := make([]backend.LocalImage, 0, len(images))
+	for i := range images {
+		img := &images[i]
+		aliases := make([]string, 0, len(img.Aliases))
+		for _, al := range img.Aliases {
+			aliases = append(aliases, al.Name)
+		}
+		out = append(out, backend.LocalImage{
+			Fingerprint: img.Fingerprint,
+			Aliases:     aliases,
+			Description: img.Properties["description"],
+			Arch:        img.Architecture,
+			SizeBytes:   img.Size,
+			Type:        img.Type,
+			CreatedAt:   img.CreatedAt,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Fingerprint < out[j].Fingerprint })
+	return out, nil
+}
+
+// PublishImage creates a local image from the (stopped; Incus enforces it)
+// instance, then tags it with alias when one is given.
+func (b *incusBackend) PublishImage(ctx context.Context, instance, alias string) error {
+	op, err := b.srv.CreateImage(api.ImagesPost{
+		Source: &api.ImagesPostSource{Type: "instance", Name: instance},
+	}, nil)
+	if err := waitOp(ctx, op, err, "publish image from %q", instance); err != nil {
+		return err
+	}
+	if alias == "" {
+		return nil
+	}
+	fp, _ := op.Get().Metadata["fingerprint"].(string)
+	if fp == "" {
+		return fmt.Errorf("publish image from %q: operation returned no fingerprint", instance)
+	}
+	return b.AddImageAlias(ctx, fp, alias)
+}
+
+// CopyImage pulls the image behind alias from the images remote into the local
+// store, copying its aliases along.
+func (b *incusBackend) CopyImage(ctx context.Context, alias string) error {
+	is, err := incusclient.ConnectSimpleStreams(imagesRemote, nil)
+	if err != nil {
+		return fmt.Errorf("connect images remote: %w", err)
+	}
+	return b.copyImageFrom(ctx, is, alias)
+}
+
+func (b *incusBackend) copyImageFrom(ctx context.Context, is incusclient.ImageServer, alias string) error {
+	entry, _, err := is.GetImageAlias(alias)
+	if err != nil {
+		return fmt.Errorf("resolve image alias %q: %w", alias, mapErr(err))
+	}
+	img, _, err := is.GetImage(entry.Target)
+	if err != nil {
+		return fmt.Errorf("get remote image %q: %w", alias, mapErr(err))
+	}
+	op, err := b.srv.CopyImage(is, *img, &incusclient.ImageCopyArgs{CopyAliases: true})
+	if err != nil {
+		return fmt.Errorf("copy image %q: %w", alias, mapErr(err))
+	}
+	if err := waitRemoteOperation(ctx, op); err != nil {
+		return fmt.Errorf("copy image %q: %w", alias, mapErr(err))
+	}
+	return nil
+}
+
+func (b *incusBackend) DeleteImage(ctx context.Context, fingerprint string) error {
+	op, err := b.srv.DeleteImage(fingerprint)
+	return waitOp(ctx, op, err, "delete image %q", fingerprint)
+}
+
+func (b *incusBackend) AddImageAlias(_ context.Context, fingerprint, alias string) error {
+	err := b.srv.CreateImageAlias(api.ImageAliasesPost{
+		ImageAliasesEntry: api.ImageAliasesEntry{
+			Name:                 alias,
+			ImageAliasesEntryPut: api.ImageAliasesEntryPut{Target: fingerprint},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("create image alias %q: %w", alias, mapErr(err))
+	}
+	return nil
+}
+
+func (b *incusBackend) RemoveImageAlias(_ context.Context, alias string) error {
+	if err := b.srv.DeleteImageAlias(alias); err != nil {
+		return fmt.Errorf("delete image alias %q: %w", alias, mapErr(err))
+	}
+	return nil
+}

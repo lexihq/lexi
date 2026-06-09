@@ -42,6 +42,7 @@ type Fake struct {
 	profiles  map[string]backend.Profile
 	networks  map[string]backend.Network
 	pools     map[string]*storagePool
+	images    map[string]*backend.LocalImage // keyed by fingerprint
 	clock     time.Time
 }
 
@@ -74,6 +75,16 @@ func New() *Fake {
 			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
 			"zfs0":    {StoragePool: backend.StoragePool{Name: "zfs0", Driver: "zfs", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
 		},
+		images: map[string]*backend.LocalImage{
+			"fake-debian-12-aarch64": {
+				Fingerprint: "fake-debian-12-aarch64",
+				Aliases:     []string{"debian/12"},
+				Description: "Debian 12 (bookworm) arm64",
+				Arch:        "aarch64",
+				Type:        "container",
+				CreatedAt:   time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC),
+			},
+		},
 		instances: make(map[string]*instance),
 		clock:     time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 	}
@@ -103,6 +114,8 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		Networks:   true,
 		Storage:    true,
 		Move:       true,
+
+		ImageManagement: true,
 	}
 }
 

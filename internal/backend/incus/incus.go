@@ -72,6 +72,8 @@ func New() (*incusBackend, error) {
 			Networks:   true,
 			Storage:    true,
 			Move:       true,
+
+			ImageManagement: true,
 		},
 		cpuSamples: make(map[string]cpuSample),
 	}, nil

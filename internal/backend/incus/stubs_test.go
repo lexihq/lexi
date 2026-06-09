@@ -70,6 +70,18 @@ type instanceServerStub struct {
 	renamedSnap   [3]string                  // name/snap/newName captured by RenameInstanceSnapshot
 	snap          *api.InstanceSnapshot      // returned by GetInstanceSnapshot
 	snapExpiry    *api.InstanceSnapshotPut   // captured by UpdateInstanceSnapshot
+
+	localImages   []api.Image                 // returned by GetImages
+	imagesErr     error                       // error for image calls
+	createdImage  *api.ImagesPost             // captured by CreateImage
+	createImageOp incusclient.Operation       // operation returned by CreateImage
+	imageCopySrc  incusclient.ImageServer     // captured by CopyImage
+	imageCopied   *api.Image                  // captured by CopyImage
+	imageCopyArgs *incusclient.ImageCopyArgs  // captured by CopyImage
+	imageCopyOp   incusclient.RemoteOperation // operation returned by CopyImage
+	deletedImage  string                      // captured by DeleteImage
+	createdAlias  *api.ImageAliasesPost       // captured by CreateImageAlias
+	deletedAlias  string                      // captured by DeleteImageAlias
 }
 
 func (s *instanceServerStub) CreateInstanceSnapshot(_ string, p api.InstanceSnapshotsPost) (incusclient.Operation, error) {
@@ -281,6 +293,67 @@ func (s *instanceServerStub) UpdateInstanceState(_ string, req api.InstanceState
 	return &operationStub{}, nil
 }
 
+func (s *instanceServerStub) GetImages() ([]api.Image, error) {
+	return s.localImages, s.imagesErr
+}
+
+func (s *instanceServerStub) CreateImage(image api.ImagesPost, _ *incusclient.ImageCreateArgs) (incusclient.Operation, error) {
+	s.createdImage = &image
+	if s.imagesErr != nil {
+		return nil, s.imagesErr
+	}
+	if s.createImageOp != nil {
+		return s.createImageOp, nil
+	}
+	return &operationStub{}, nil
+}
+
+func (s *instanceServerStub) CopyImage(source incusclient.ImageServer, image api.Image, args *incusclient.ImageCopyArgs) (incusclient.RemoteOperation, error) {
+	s.imageCopySrc = source
+	s.imageCopied = &image
+	s.imageCopyArgs = args
+	if s.imagesErr != nil {
+		return nil, s.imagesErr
+	}
+	return s.imageCopyOp, nil
+}
+
+func (s *instanceServerStub) DeleteImage(fingerprint string) (incusclient.Operation, error) {
+	s.deletedImage = fingerprint
+	if s.imagesErr != nil {
+		return nil, s.imagesErr
+	}
+	return &operationStub{}, nil
+}
+
+func (s *instanceServerStub) CreateImageAlias(alias api.ImageAliasesPost) error {
+	s.createdAlias = &alias
+	return s.imagesErr
+}
+
+func (s *instanceServerStub) DeleteImageAlias(name string) error {
+	s.deletedAlias = name
+	return s.imagesErr
+}
+
+// imageServerStub fakes the simplestreams remote for copyImageFrom tests.
+type imageServerStub struct {
+	incusclient.ImageServer
+
+	alias    *api.ImageAliasesEntry
+	aliasErr error
+	image    *api.Image
+	imageErr error
+}
+
+func (s *imageServerStub) GetImageAlias(string) (*api.ImageAliasesEntry, string, error) {
+	return s.alias, "", s.aliasErr
+}
+
+func (s *imageServerStub) GetImage(string) (*api.Image, string, error) {
+	return s.image, "", s.imageErr
+}
+
 type operationStub struct {
 	incusclient.Operation
 
@@ -288,6 +361,11 @@ type operationStub struct {
 	waitContextUsed bool
 	cancelUsed      bool
 	onWait          func()
+	get             api.Operation // returned by Get after waiting
+}
+
+func (o *operationStub) Get() api.Operation {
+	return o.get
 }
 
 func (o *operationStub) WaitContext(context.Context) error {

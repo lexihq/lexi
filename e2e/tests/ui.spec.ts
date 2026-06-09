@@ -306,6 +306,29 @@ test("create and delete a network in the Networks section", async ({ page }) => 
   await expect(page.locator("#networks-table").getByText("e2e-net")).toHaveCount(0);
 });
 
+test("create and delete a custom volume in the Storage section", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Storage" }).click();
+  await expect(page).toHaveURL(/\/storage$/);
+  await page.getByRole("link", { name: "default" }).click();
+  await expect(page).toHaveURL(/\/storage\/default$/);
+
+  const volumes = page.locator("#volumes");
+  await expect(volumes).toBeVisible();
+  await volumes.locator('input[name="name"]').fill("e2e-vol");
+  await page.getByRole("button", { name: "Create volume" }).click();
+
+  await expect(page).toHaveURL(/\/storage\/default$/);
+  await expect(page.locator("#volumes").getByText("e2e-vol")).toBeVisible();
+
+  // Same htmx swap-then-click race as the snapshot/device Delete: retry until
+  // the delete takes effect (a single lost click would otherwise fail).
+  await expect(async () => {
+    await page.locator("#volumes").getByRole("button", { name: "Delete" }).click();
+    await expect(page.locator("#volumes").getByText("e2e-vol")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});
+
 test("backend errors surface as a toast", async ({ page }) => {
   await page.goto("/networks/new");
   // incusbr0 is seeded → creating it again conflicts (409).

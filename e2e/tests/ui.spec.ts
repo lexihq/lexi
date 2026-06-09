@@ -214,6 +214,39 @@ test("set an instance snapshot schedule", async ({ page }) => {
   await expect(page.locator('#snapshot-schedule input[name="pattern"]')).toHaveValue("snap%d");
 });
 
+test("rename and move an instance from the list row", async ({ page }) => {
+  const name = "e2e-move";
+  await page.goto("/instances/new");
+  await page.locator("#image-search").pressSequentially("debian");
+  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
+  await expect(firstImage).toBeVisible();
+  await firstImage.check();
+  await page.locator("#name").fill(name);
+  await page.getByRole("button", { name: "Create instance" }).click();
+
+  // Rename (hx-boost=false → native POST, full navigation to the new detail page).
+  const row = page.locator(`#instance-${name}`);
+  await expect(row).toBeVisible();
+  await row.locator('input[name="new_name"]').fill("e2e-moved");
+  await row.getByRole("button", { name: "Rename" }).click();
+  await expect(page).toHaveURL(/\/instances\/e2e-moved$/);
+
+  // Move to a seeded pool from the list row (fake records it as a validated no-op).
+  await page.goto("/");
+  const moved = page.locator("#instance-e2e-moved");
+  await expect(moved).toBeVisible();
+  await moved.locator('input[name="pool"]').fill("default");
+  await moved.getByRole("button", { name: "Move" }).click();
+  await expect(page).toHaveURL(/\/instances\/e2e-moved$/);
+
+  // Clean up.
+  await page.goto("/");
+  await expect(async () => {
+    await page.locator("#instance-e2e-moved").getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.locator("#instance-e2e-moved")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});
+
 test("export downloads a tarball that re-imports as a new instance", async ({ page }) => {
   await page.goto("/instances/demo");
 

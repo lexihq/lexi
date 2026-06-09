@@ -134,6 +134,29 @@ func TestInstanceRowCanHideUnsupportedActions(t *testing.T) {
 	}
 }
 
+func TestInstanceRowShowsRestartAlwaysAndPauseResumeByStatus(t *testing.T) {
+	caps := backend.Capabilities{Pause: true}
+
+	running := render(t, InstanceRow(caps, backend.Instance{Name: "demo", Status: "Running"}))
+	assertContains(t, running, "/instances/demo/restart")
+	assertContains(t, running, "/instances/demo/pause")
+	if strings.Contains(running, "/instances/demo/resume") {
+		t.Fatalf("running instance must not show Resume, got %q", running)
+	}
+
+	frozen := render(t, InstanceRow(caps, backend.Instance{Name: "demo", Status: "Frozen"}))
+	assertContains(t, frozen, "/instances/demo/resume")
+	if strings.Contains(frozen, "/instances/demo/pause") {
+		t.Fatalf("frozen instance must not show Pause, got %q", frozen)
+	}
+
+	noPause := render(t, InstanceRow(backend.Capabilities{}, backend.Instance{Name: "demo", Status: "Running"}))
+	assertContains(t, noPause, "/instances/demo/restart")
+	if strings.Contains(noPause, "/instances/demo/pause") || strings.Contains(noPause, "/instances/demo/resume") {
+		t.Fatalf("pause/resume must be hidden without the Pause capability, got %q", noPause)
+	}
+}
+
 func render(t *testing.T, component templ.Component) string {
 	t.Helper()
 	var buf bytes.Buffer

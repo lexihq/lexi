@@ -15,11 +15,16 @@ import (
 // case (snapshots/limits inline, metrics/logs/config lazily via hx-get).
 
 templ SnapshotTable(name string, snapshots []backend.Snapshot) {
+	{{ en := url.PathEscape(name) }}
 	<section id="snapshots" class="rounded-lg border bg-card p-4">
 		<div class="mb-4 flex items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Snapshots</h2>
-			<form method="post" action={ templ.URL("/instances/" + name + "/snapshots") } hx-post={ "/instances/" + name + "/snapshots" } hx-target="#snapshots" hx-swap="outerHTML" class="flex gap-2">
+			<form method="post" action={ templ.URL("/instances/" + en + "/snapshots") } hx-post={ "/instances/" + en + "/snapshots" } hx-target="#snapshots" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="snapshot" placeholder="snapshot name"/>
+				<input type="datetime-local" name="expires_at" class="h-9 rounded-md border bg-background px-2 text-sm" title="Expiry (optional)"/>
+				<label class="flex items-center gap-1 text-sm text-muted-foreground">
+					<input type="checkbox" name="stateful"/> stateful
+				</label>
 				@button.Button(button.Props{Type: button.TypeSubmit}) {
 					@icon.Icon("camera")(icon.Props{Class: "size-4"})
 					Create snapshot
@@ -30,20 +35,45 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 			@table.Header() {
 				@table.Row() {
 					@table.Head() { Name }
+					@table.Head() { Stateful }
+					@table.Head() { Expires }
 					@table.Head() { Actions }
 				}
 			}
 			@table.Body() {
 				for _, snap := range snapshots {
+					{{ es := url.PathEscape(snap.Name) }}
 					@table.Row() {
 						@table.Cell() { { snap.Name } }
 						@table.Cell() {
-							<div class="flex gap-2">
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + name + "/snapshots/" + snap.Name + "/restore", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
+							if snap.Stateful {
+								<span class="rounded bg-accent px-1.5 py-0.5 text-xs">stateful</span>
+							}
+						}
+						@table.Cell() {
+							if !snap.ExpiresAt.IsZero() {
+								<span class="text-xs text-muted-foreground">{ snap.ExpiresAt.Format("2006-01-02 15:04") }</span>
+							}
+						}
+						@table.Cell() {
+							<div class="flex flex-wrap items-center gap-2">
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/restore", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
 									@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
 									Restore
 								}
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/instances/" + name + "/snapshots/" + snap.Name + "/delete", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
+								<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/" + es + "/rename") } hx-post={ "/instances/" + en + "/snapshots/" + es + "/rename" } hx-target="#snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
+									<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="new_name" placeholder="new name"/>
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+										Rename
+									}
+								</form>
+								<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/" + es + "/expiry") } hx-post={ "/instances/" + en + "/snapshots/" + es + "/expiry" } hx-target="#snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
+									<input type="datetime-local" name="expires_at" class="h-8 rounded-md border bg-background px-1 text-sm"/>
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+										Set expiry
+									}
+								</form>
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/delete", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
 									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 									Delete
 								}

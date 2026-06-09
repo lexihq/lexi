@@ -66,6 +66,8 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/devices", h.addDevice)
 	mux.HandleFunc("POST /instances/{name}/devices/{device}/delete", h.removeDevice)
 	mux.HandleFunc("POST /instances/{name}/snapshots", h.createSnapshot)
+	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/rename", h.renameSnapshot)
+	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/expiry", h.updateSnapshotExpiry)
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/restore", h.restoreSnapshot)
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/delete", h.deleteSnapshot)
 

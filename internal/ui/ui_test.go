@@ -248,6 +248,21 @@ func TestStorageVolumeSnapshotsTableHasCreateAndActions(t *testing.T) {
 	assertContains(t, html, `hx-post="/storage/default/volumes/vol1/snapshots/snap0/delete"`)
 }
 
+func TestSnapshotTableShowsStatefulCheckboxAndExpiry(t *testing.T) {
+	html := render(t, SnapshotTable("demo", nil))
+	assertContains(t, html, `name="stateful"`)
+	assertContains(t, html, `type="datetime-local"`)
+	assertContains(t, html, `name="expires_at"`)
+}
+
+func TestSnapshotTableShowsStatefulBadgeAndRowActions(t *testing.T) {
+	html := render(t, SnapshotTable("demo", []backend.Snapshot{{Name: "snap0", Stateful: true}}))
+	assertContains(t, html, ">stateful<")
+	assertContains(t, html, `hx-post="/instances/demo/snapshots/snap0/rename"`)
+	assertContains(t, html, `hx-post="/instances/demo/snapshots/snap0/expiry"`)
+	assertContains(t, html, `name="new_name"`)
+}
+
 func TestErrorToastRendersMessage(t *testing.T) {
 	html := render(t, ErrorToast("boom"))
 	assertContains(t, html, "boom")

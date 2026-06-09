@@ -219,7 +219,6 @@ func TestStorageVolumesTableShowsDeleteAndCreateForm(t *testing.T) {
 	assertContains(t, html, `action="/storage/default/volumes"`)
 	assertContains(t, html, `value="filesystem"`)
 	assertContains(t, html, `value="block"`)
-	assertContains(t, html, `/storage/default/volumes/vol1`)
 	assertContains(t, html, `hx-post="/storage/default/volumes/vol1/delete"`)
 }
 

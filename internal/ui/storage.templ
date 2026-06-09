@@ -107,7 +107,7 @@ templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
 				for _, v := range vols {
 					@table.Row() {
 						@table.Cell() {
-							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/storage/" + pool + "/volumes/" + v.Name) }>{ v.Name }</a>
+							<span class="font-medium">{ v.Name }</span>
 						}
 						@table.Cell() {
 							{ v.ContentType }

@@ -24,10 +24,11 @@ func TestToPool(t *testing.T) {
 func TestToVolume(t *testing.T) {
 	v := &api.StorageVolume{Name: "vol1", Type: "custom", ContentType: "filesystem", UsedBy: []string{"/1.0/instances/c1"}}
 	v.Config = map[string]string{"size": "1GiB"}
-	got := toVolume(v)
+	got := toVolume("default", v)
 	assert.Equal(t, "vol1", got.Name)
 	assert.Equal(t, "custom", got.Type)
 	assert.Equal(t, "filesystem", got.ContentType)
+	assert.Equal(t, "default", got.Pool)
 	assert.Equal(t, "1GiB", got.Config["size"])
 	assert.Equal(t, []string{"/1.0/instances/c1"}, got.UsedBy)
 }
@@ -41,6 +42,7 @@ func TestListVolumesFiltersCustom(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, vols, 1)
 	assert.Equal(t, "vol1", vols[0].Name)
+	assert.Equal(t, "default", vols[0].Pool)
 }
 
 func TestCreateVolumeSendsPost(t *testing.T) {

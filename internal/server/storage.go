@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -56,7 +57,7 @@ func (h handlers) createVolume(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	http.Redirect(w, r, "/storage/"+pool, http.StatusSeeOther)
+	h.renderVolumesOrRedirect(w, r, pool)
 }
 
 // deleteVolume removes a custom volume, then re-renders the volumes table on HTMX.
@@ -66,14 +67,23 @@ func (h handlers) deleteVolume(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
+	h.renderVolumesOrRedirect(w, r, pool)
+}
+
+// renderVolumesOrRedirect re-renders the swappable volumes table on HTMX (so the
+// inline create/delete forms swap #volumes in place), else redirects to the pool.
+func (h handlers) renderVolumesOrRedirect(w http.ResponseWriter, r *http.Request, pool string) {
+	if !isHTMX(r) {
+		// Set Location directly (with the pool escaped) rather than http.Redirect,
+		// mirroring redirectToInstance — avoids an open-redirect on tainted input.
+		w.Header().Set("Location", "/storage/"+url.PathEscape(pool))
+		w.WriteHeader(http.StatusSeeOther)
+		return
+	}
 	vols, err := h.backend.ListVolumes(r.Context(), pool)
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
-	if isHTMX(r) {
-		h.render(w, r, http.StatusOK, ui.StorageVolumesTable(pool, vols))
-		return
-	}
-	http.Redirect(w, r, "/storage/"+pool, http.StatusSeeOther)
+	h.render(w, r, http.StatusOK, ui.StorageVolumesTable(pool, vols))
 }

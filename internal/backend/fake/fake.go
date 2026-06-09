@@ -31,8 +31,6 @@ type storagePool struct {
 
 type storageVolume struct {
 	backend.StorageVolume
-
-	snapshots []backend.StorageVolumeSnapshot // used in Phase 2
 }
 
 // Fake is a mutex-guarded, in-memory Backend with a deterministic clock.

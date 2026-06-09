@@ -41,6 +41,19 @@ func TestCreateVolumeAppliesAndRedirects(t *testing.T) {
 	assert.Equal(t, "1GiB", v.Config["size"])
 }
 
+func TestCreateVolumeHTMXReturnsTablePartial(t *testing.T) {
+	b := fake.New()
+	res := formRequest(t, New(b), "/storage/default/volumes",
+		url.Values{"name": {"vol1"}, "content_type": {"filesystem"}}, true)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, `id="volumes"`)
+	assert.Contains(t, body, "vol1")
+	// Must be the swappable partial, not the full page shell (which would nest a
+	// second app layout inside #volumes after the htmx swap).
+	assert.NotContains(t, body, "<!doctype")
+}
+
 func TestCreateVolumeBlankNameIs400(t *testing.T) {
 	b := fake.New()
 	res := formRequest(t, New(b), "/storage/default/volumes",

@@ -36,7 +36,7 @@ func (b *incusBackend) ListVolumes(_ context.Context, pool string) ([]backend.St
 	out := make([]backend.StorageVolume, 0)
 	for i := range vs {
 		if vs[i].Type == "custom" {
-			out = append(out, toVolume(&vs[i]))
+			out = append(out, toVolume(pool, &vs[i]))
 		}
 	}
 	return out, nil
@@ -47,7 +47,7 @@ func (b *incusBackend) GetVolume(_ context.Context, pool, name string) (backend.
 	if err != nil {
 		return backend.StorageVolume{}, fmt.Errorf("get volume %q/%q: %w", pool, name, mapErr(err))
 	}
-	return toVolume(v), nil
+	return toVolume(pool, v), nil
 }
 
 func (b *incusBackend) CreateVolume(_ context.Context, pool string, v backend.StorageVolume) error {
@@ -70,6 +70,6 @@ func toPool(p *api.StoragePool) backend.StoragePool {
 	return backend.StoragePool{Name: p.Name, Driver: p.Driver, Description: p.Description, Config: p.Config, UsedBy: p.UsedBy}
 }
 
-func toVolume(v *api.StorageVolume) backend.StorageVolume {
-	return backend.StorageVolume{Name: v.Name, Type: v.Type, ContentType: v.ContentType, Config: v.Config, UsedBy: v.UsedBy}
+func toVolume(pool string, v *api.StorageVolume) backend.StorageVolume {
+	return backend.StorageVolume{Name: v.Name, Type: v.Type, ContentType: v.ContentType, Pool: pool, Config: v.Config, UsedBy: v.UsedBy}
 }

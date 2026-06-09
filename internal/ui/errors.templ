@@ -1,0 +1,16 @@
+package ui
+
+import "github.com/adam/lxcon/internal/components/toast"
+
+// ErrorToast renders a backend error as a dismissible top-right toast. It is the
+// body of every 4xx/5xx response (see server.renderError); errors.js forces the
+// htmx swap that appends it to <body>, where toast.js auto-initializes it.
+templ ErrorToast(message string) {
+	@toast.Toast(toast.Props{
+		Variant:     toast.VariantError,
+		Position:    toast.PositionTopRight,
+		Description: message,
+		Duration:    6000,
+		Dismissible: true,
+	})
+}

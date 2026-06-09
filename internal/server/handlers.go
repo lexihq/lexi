@@ -1,9 +1,8 @@
 package server
 
 import (
+	"context"
 	"errors"
-	"fmt"
-	"html"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -52,7 +51,7 @@ func (h handlers) fail(w http.ResponseWriter, err error) {
 
 func (h handlers) renderError(w http.ResponseWriter, code int, message string) {
 	writeHTML(w, code)
-	if _, err := fmt.Fprintf(w, `<div role="alert">%s</div>`, html.EscapeString(message)); err != nil {
+	if err := ui.ErrorToast(message).Render(context.Background(), w); err != nil {
 		slog.Warn("write error response", "err", err)
 	}
 }

@@ -39,6 +39,14 @@ func TestCreateNetworkAppliesAndRedirects(t *testing.T) {
 	assert.Equal(t, "true", net.Config["ipv4.nat"])
 }
 
+func TestRenderErrorEmitsToast(t *testing.T) {
+	res := request(t, New(fake.New()), "GET", "/networks/ghost", "", true)
+	assertStatus(t, res, http.StatusNotFound)
+	body := res.Body.String()
+	assert.Contains(t, body, "data-tui-toast")
+	assert.Contains(t, body, "not found")
+}
+
 func TestCreateNetworkBlankNameIs400(t *testing.T) {
 	b := fake.New()
 	res := formRequest(t, New(b), "/networks",

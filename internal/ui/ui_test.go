@@ -201,6 +201,12 @@ func TestNetworkCreatePageRendersTypeOptions(t *testing.T) {
 	assertContains(t, html, `name="name"`)
 }
 
+func TestErrorToastRendersMessage(t *testing.T) {
+	html := render(t, ErrorToast("boom"))
+	assertContains(t, html, "boom")
+	assertContains(t, html, "data-tui-toast")
+}
+
 func TestProfilesPageListsProfiles(t *testing.T) {
 	caps := backend.Capabilities{Profiles: true}
 	html := render(t, ProfilesPage(caps, []backend.Profile{

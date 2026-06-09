@@ -146,6 +146,37 @@ test("snapshot create, restore, and delete on the detail page", async ({ page })
   }).toPass({ timeout: 10000 });
 });
 
+test("snapshot stateful flag, expiry, and rename on the detail page", async ({ page }) => {
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Snapshots" }).click();
+  const snapshots = page.locator("#snapshots");
+  await expect(snapshots).toBeVisible();
+
+  // Create a stateful snapshot with an expiry (the fake records the flag as-is).
+  await snapshots.locator('input[name="snapshot"]').fill("e2e-state");
+  await snapshots.locator('input[name="expires_at"]').first().fill("2026-06-01T00:00");
+  await snapshots.locator('input[name="stateful"]').check();
+  await page.getByRole("button", { name: "Create snapshot" }).click();
+
+  const body = page.locator("#snapshots tbody");
+  await expect(body.getByText("e2e-state")).toBeVisible();
+  await expect(body.getByText("stateful", { exact: true })).toBeVisible();
+
+  // Rename it (htmx swap-then-click retry).
+  await expect(async () => {
+    const row = page.locator("#snapshots tbody").getByRole("row").filter({ hasText: "e2e-state" });
+    await row.locator('input[name="new_name"]').fill("e2e-state2");
+    await row.getByRole("button", { name: "Rename" }).click();
+    await expect(page.locator("#snapshots tbody").getByText("e2e-state2")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
+  // Clean up: delete (retry).
+  await expect(async () => {
+    await page.locator("#snapshots tbody").getByRole("button", { name: "Delete" }).click();
+    await expect(page.locator("#snapshots tbody").getByText("e2e-state2")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});
+
 test("export downloads a tarball that re-imports as a new instance", async ({ page }) => {
   await page.goto("/instances/demo");
 

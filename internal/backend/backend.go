@@ -42,6 +42,7 @@ type Capabilities struct {
 	Profiles   bool // list/view profiles + attach to instances
 	Config     bool // edit arbitrary config keys + view devices
 	Devices    bool // add/remove instance-local devices
+	Networks   bool // list/inspect/create/delete networks
 }
 
 // Instance is a system container or virtual machine.
@@ -72,6 +73,18 @@ type Profile struct {
 	Config      map[string]string
 	Devices     map[string]map[string]string // device name → {key: value}
 	UsedBy      []string                     // instance names using it
+}
+
+// Network is an Incus network. Managed networks (bridges, OVN, ...) are
+// configurable and deletable; unmanaged ones are host interfaces Incus only
+// reports. Config/UsedBy/Managed are read-only outputs (ignored on create).
+type Network struct {
+	Name        string
+	Type        string // bridge | ovn | macvlan | physical | ...
+	Managed     bool
+	Description string
+	Config      map[string]string
+	UsedBy      []string
 }
 
 // InstanceConfig is an instance's editable local config plus its devices. Config
@@ -181,6 +194,11 @@ type Backend interface {
 	AddDevice(ctx context.Context, name, device string, config map[string]string) error
 	// RemoveDevice detaches a local device. The device must exist (ErrNotFound).
 	RemoveDevice(ctx context.Context, name, device string) error
+
+	ListNetworks(ctx context.Context) ([]Network, error)
+	GetNetwork(ctx context.Context, name string) (Network, error)
+	CreateNetwork(ctx context.Context, n Network) error
+	DeleteNetwork(ctx context.Context, name string) error
 
 	// ExportInstance streams a portable backup tarball of the instance to w.
 	ExportInstance(ctx context.Context, name string, w io.Writer) error

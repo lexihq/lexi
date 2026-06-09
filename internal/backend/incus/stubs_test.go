@@ -42,6 +42,29 @@ type instanceServerStub struct {
 	profileErr        error                 // error for GetProfiles/GetProfile
 	updatedPut        *api.InstancePut      // captured by UpdateInstance
 	updateOp          incusclient.Operation // operation returned by UpdateInstance
+	networks          []api.Network         // returned by GetNetworks
+	network           *api.Network          // returned by GetNetwork
+	networkErr        error                 // error for network calls
+	createdNet        *api.NetworksPost     // captured by CreateNetwork
+	deletedNet        string                // captured by DeleteNetwork
+}
+
+func (s *instanceServerStub) GetNetworks() ([]api.Network, error) {
+	return s.networks, s.networkErr
+}
+
+func (s *instanceServerStub) GetNetwork(string) (*api.Network, string, error) {
+	return s.network, "etag", s.networkErr
+}
+
+func (s *instanceServerStub) CreateNetwork(n api.NetworksPost) error {
+	s.createdNet = &n
+	return s.networkErr
+}
+
+func (s *instanceServerStub) DeleteNetwork(name string) error {
+	s.deletedNet = name
+	return s.networkErr
 }
 
 func (s *instanceServerStub) GetProfiles() ([]api.Profile, error) {

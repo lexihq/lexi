@@ -28,6 +28,7 @@ type Fake struct {
 	mu        sync.Mutex
 	instances map[string]*instance
 	profiles  map[string]backend.Profile
+	networks  map[string]backend.Network
 	clock     time.Time
 }
 
@@ -48,6 +49,13 @@ func New() *Fake {
 				Config:  map[string]string{},
 				Devices: map[string]map[string]string{"gpu0": {"type": "gpu"}},
 			},
+		},
+		networks: map[string]backend.Network{
+			"incusbr0": {
+				Name: "incusbr0", Type: "bridge", Managed: true, Description: "Default bridge",
+				Config: map[string]string{"ipv4.address": "10.0.3.1/24", "ipv4.nat": "true"},
+			},
+			"eth0": {Name: "eth0", Type: "physical", Managed: false},
 		},
 		instances: make(map[string]*instance),
 		clock:     time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
@@ -75,6 +83,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		Profiles:   true,
 		Config:     true,
 		Devices:    true,
+		Networks:   true,
 	}
 }
 

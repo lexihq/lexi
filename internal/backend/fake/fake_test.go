@@ -1,7 +1,6 @@
 package fake
 
 import (
-	"context"
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -28,8 +27,6 @@ func TestSentinelErrors(t *testing.T) {
 	require.ErrorIs(t, b.CreateSnapshot(ctx(), "demo", "s1"), backend.ErrConflict)
 }
 
-func ctx() context.Context { return context.Background() }
-
 func TestCapabilitiesAdvertisesSnapshotAndClone(t *testing.T) {
 	caps := New().Capabilities()
 	if !caps.Snapshots || !caps.Clone {
@@ -43,12 +40,5 @@ func TestCapabilitiesAdvertisesSnapshotAndClone(t *testing.T) {
 	}
 	if caps.ServerInfo == "" {
 		t.Fatal("ServerInfo should be set")
-	}
-}
-
-func mustCreate(t *testing.T, b *Fake, name string) {
-	t.Helper()
-	if err := b.CreateInstance(ctx(), backend.CreateOptions{Name: name, Image: "debian/12"}); err != nil {
-		t.Fatalf("create %s: %v", name, err)
 	}
 }

@@ -37,3 +37,37 @@ func TestStoragePoolsAndVolumes(t *testing.T) {
 	_, err = f.GetStoragePool(ctx(), "ghost")
 	require.ErrorIs(t, err, backend.ErrNotFound)
 }
+
+func TestVolumeSnapshots(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "vol1", ContentType: "filesystem"}))
+
+	snaps, err := f.ListVolumeSnapshots(ctx(), "default", "vol1")
+	require.NoError(t, err)
+	assert.Empty(t, snaps)
+
+	require.NoError(t, f.CreateVolumeSnapshot(ctx(), "default", "vol1", "snap0"))
+	snaps, err = f.ListVolumeSnapshots(ctx(), "default", "vol1")
+	require.NoError(t, err)
+	require.Len(t, snaps, 1)
+	assert.Equal(t, "snap0", snaps[0].Name)
+	assert.False(t, snaps[0].CreatedAt.IsZero())
+
+	require.NoError(t, f.RestoreVolumeSnapshot(ctx(), "default", "vol1", "snap0"))
+	require.NoError(t, f.DeleteVolumeSnapshot(ctx(), "default", "vol1", "snap0"))
+	snaps, err = f.ListVolumeSnapshots(ctx(), "default", "vol1")
+	require.NoError(t, err)
+	assert.Empty(t, snaps)
+
+	// Duplicate snapshot conflicts.
+	require.NoError(t, f.CreateVolumeSnapshot(ctx(), "default", "vol1", "dup"))
+	require.ErrorIs(t, f.CreateVolumeSnapshot(ctx(), "default", "vol1", "dup"), backend.ErrConflict)
+
+	// Not-found paths: unknown pool, unknown volume, unknown snapshot.
+	require.ErrorIs(t, f.CreateVolumeSnapshot(ctx(), "ghost", "vol1", "s"), backend.ErrNotFound)
+	require.ErrorIs(t, f.CreateVolumeSnapshot(ctx(), "default", "ghost", "s"), backend.ErrNotFound)
+	_, err = f.ListVolumeSnapshots(ctx(), "default", "ghost")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+	require.ErrorIs(t, f.RestoreVolumeSnapshot(ctx(), "default", "vol1", "ghost"), backend.ErrNotFound)
+	require.ErrorIs(t, f.DeleteVolumeSnapshot(ctx(), "default", "vol1", "ghost"), backend.ErrNotFound)
+}

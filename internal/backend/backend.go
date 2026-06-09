@@ -236,6 +236,10 @@ type Backend interface {
 	GetVolume(ctx context.Context, pool, name string) (StorageVolume, error)
 	CreateVolume(ctx context.Context, pool string, v StorageVolume) error
 	DeleteVolume(ctx context.Context, pool, name string) error
+	ListVolumeSnapshots(ctx context.Context, pool, volume string) ([]StorageVolumeSnapshot, error)
+	CreateVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error
+	RestoreVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error
+	DeleteVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error
 
 	// ExportInstance streams a portable backup tarball of the instance to w.
 	ExportInstance(ctx context.Context, name string, w io.Writer) error

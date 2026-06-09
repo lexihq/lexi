@@ -73,3 +73,44 @@ func toPool(p *api.StoragePool) backend.StoragePool {
 func toVolume(pool string, v *api.StorageVolume) backend.StorageVolume {
 	return backend.StorageVolume{Name: v.Name, Type: v.Type, ContentType: v.ContentType, Pool: pool, Config: v.Config, UsedBy: v.UsedBy}
 }
+
+func (b *incusBackend) ListVolumeSnapshots(_ context.Context, pool, volume string) ([]backend.StorageVolumeSnapshot, error) {
+	ss, err := b.srv.GetStoragePoolVolumeSnapshots(pool, "custom", volume)
+	if err != nil {
+		return nil, fmt.Errorf("list snapshots %q/%q: %w", pool, volume, mapErr(err))
+	}
+	out := make([]backend.StorageVolumeSnapshot, 0, len(ss))
+	for i := range ss {
+		out = append(out, toVolumeSnapshot(&ss[i]))
+	}
+	return out, nil
+}
+
+func (b *incusBackend) CreateVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error {
+	op, err := b.srv.CreateStoragePoolVolumeSnapshot(pool, "custom", volume, api.StorageVolumeSnapshotsPost{Name: snapshot})
+	return waitOp(ctx, op, err, "snapshot volume %q/%q", pool, volume)
+}
+
+func (b *incusBackend) DeleteVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error {
+	op, err := b.srv.DeleteStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot)
+	return waitOp(ctx, op, err, "delete snapshot %q/%q/%q", pool, volume, snapshot)
+}
+
+// RestoreVolumeSnapshot does a GET-then-PUT setting put.Restore.
+// UpdateStoragePoolVolume is synchronous (no operation to wait on).
+func (b *incusBackend) RestoreVolumeSnapshot(_ context.Context, pool, volume, snapshot string) error {
+	v, etag, err := b.srv.GetStoragePoolVolume(pool, "custom", volume)
+	if err != nil {
+		return fmt.Errorf("get volume %q/%q: %w", pool, volume, mapErr(err))
+	}
+	put := v.Writable()
+	put.Restore = snapshot
+	if err := b.srv.UpdateStoragePoolVolume(pool, "custom", volume, put, etag); err != nil {
+		return fmt.Errorf("restore volume %q/%q@%q: %w", pool, volume, snapshot, mapErr(err))
+	}
+	return nil
+}
+
+func toVolumeSnapshot(s *api.StorageVolumeSnapshot) backend.StorageVolumeSnapshot {
+	return backend.StorageVolumeSnapshot{Name: s.Name, CreatedAt: s.CreatedAt}
+}

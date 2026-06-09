@@ -65,3 +65,31 @@ func TestDeleteVolumeCallsThrough(t *testing.T) {
 	require.NoError(t, b.DeleteVolume(t.Context(), "default", "vol1"))
 	assert.Equal(t, [3]string{"default", "custom", "vol1"}, s.deletedVol)
 }
+
+func TestToVolumeSnapshot(t *testing.T) {
+	s := &api.StorageVolumeSnapshot{Name: "snap0"}
+	got := toVolumeSnapshot(s)
+	assert.Equal(t, "snap0", got.Name)
+}
+
+func TestCreateVolumeSnapshotWaits(t *testing.T) {
+	s := &instanceServerStub{}
+	b := &incusBackend{srv: s}
+	require.NoError(t, b.CreateVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))
+	assert.Equal(t, "snap0", s.createdSnap)
+}
+
+func TestRestoreVolumeSnapshotSetsRestorePut(t *testing.T) {
+	s := &instanceServerStub{volume: &api.StorageVolume{Name: "vol1", Type: "custom"}}
+	b := &incusBackend{srv: s}
+	require.NoError(t, b.RestoreVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))
+	require.NotNil(t, s.restoredVol)
+	assert.Equal(t, "snap0", s.restoredVol.Restore)
+}
+
+func TestDeleteVolumeSnapshotCallsThrough(t *testing.T) {
+	s := &instanceServerStub{}
+	b := &incusBackend{srv: s}
+	require.NoError(t, b.DeleteVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))
+	assert.Equal(t, "snap0", s.deletedSnap)
+}

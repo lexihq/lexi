@@ -124,3 +124,73 @@ func (f *Fake) lookupVolume(pool, name string) (*storageVolume, error) {
 	}
 	return v, nil
 }
+
+func (f *Fake) ListVolumeSnapshots(_ context.Context, pool, volume string) ([]backend.StorageVolumeSnapshot, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	v, err := f.lookupVolume(pool, volume)
+	if err != nil {
+		return nil, err
+	}
+	out := append([]backend.StorageVolumeSnapshot(nil), v.snapshots...)
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+func (f *Fake) CreateVolumeSnapshot(_ context.Context, pool, volume, snapshot string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	v, err := f.lookupVolume(pool, volume)
+	if err != nil {
+		return err
+	}
+	for _, s := range v.snapshots {
+		if s.Name == snapshot {
+			return conflict("snapshot %q already exists", snapshot)
+		}
+	}
+	v.snapshots = append(v.snapshots, backend.StorageVolumeSnapshot{Name: snapshot, CreatedAt: f.now()})
+	return nil
+}
+
+func (f *Fake) RestoreVolumeSnapshot(_ context.Context, pool, volume, snapshot string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	v, err := f.lookupVolume(pool, volume)
+	if err != nil {
+		return err
+	}
+	if !hasSnapshot(v.snapshots, snapshot) {
+		return notFoundf("snapshot %q", snapshot)
+	}
+	return nil
+}
+
+func (f *Fake) DeleteVolumeSnapshot(_ context.Context, pool, volume, snapshot string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	v, err := f.lookupVolume(pool, volume)
+	if err != nil {
+		return err
+	}
+	for i, s := range v.snapshots {
+		if s.Name == snapshot {
+			v.snapshots = append(v.snapshots[:i], v.snapshots[i+1:]...)
+			return nil
+		}
+	}
+	return notFoundf("snapshot %q", snapshot)
+}
+
+func hasSnapshot(snaps []backend.StorageVolumeSnapshot, name string) bool {
+	for _, s := range snaps {
+		if s.Name == name {
+			return true
+		}
+	}
+	return false
+}

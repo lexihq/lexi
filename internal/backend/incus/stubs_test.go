@@ -55,6 +55,36 @@ type instanceServerStub struct {
 	storageErr error                   // error for storage calls
 	createdVol *api.StorageVolumesPost // captured by CreateStoragePoolVolume
 	deletedVol [3]string               // pool/volType/name captured by DeleteStoragePoolVolume
+
+	volumeSnapshots []api.StorageVolumeSnapshot // returned by GetStoragePoolVolumeSnapshots
+	createdSnap     string                      // name captured by CreateStoragePoolVolumeSnapshot
+	deletedSnap     string                      // name captured by DeleteStoragePoolVolumeSnapshot
+	restoredVol     *api.StorageVolumePut       // captured by UpdateStoragePoolVolume
+}
+
+func (s *instanceServerStub) GetStoragePoolVolumeSnapshots(string, string, string) ([]api.StorageVolumeSnapshot, error) {
+	return s.volumeSnapshots, s.storageErr
+}
+
+func (s *instanceServerStub) CreateStoragePoolVolumeSnapshot(_, _, _ string, snapshot api.StorageVolumeSnapshotsPost) (incusclient.Operation, error) {
+	s.createdSnap = snapshot.Name
+	if s.storageErr != nil {
+		return nil, s.storageErr
+	}
+	return &operationStub{}, nil
+}
+
+func (s *instanceServerStub) DeleteStoragePoolVolumeSnapshot(_, _, _, name string) (incusclient.Operation, error) {
+	s.deletedSnap = name
+	if s.storageErr != nil {
+		return nil, s.storageErr
+	}
+	return &operationStub{}, nil
+}
+
+func (s *instanceServerStub) UpdateStoragePoolVolume(_, _, _ string, volume api.StorageVolumePut, _ string) error {
+	s.restoredVol = &volume
+	return s.storageErr
 }
 
 func (s *instanceServerStub) GetStoragePools() ([]api.StoragePool, error) {

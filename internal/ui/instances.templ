@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -94,6 +95,22 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
 							@icon.Icon("copy")(icon.Props{Class: "size-4"})
 							Clone
+						}
+					</form>
+				}
+				if caps.Move {
+					<form method="post" action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/rename") } hx-boost="false" class="flex gap-2">
+						<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="new_name" placeholder="rename to"/>
+						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+							@icon.Icon("pencil")(icon.Props{Class: "size-4"})
+							Rename
+						}
+					</form>
+					<form method="post" action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/move") } hx-boost="false" class="flex gap-2">
+						<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="pool" placeholder="move to pool"/>
+						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+							@icon.Icon("move")(icon.Props{Class: "size-4"})
+							Move
 						}
 					</form>
 				}

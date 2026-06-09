@@ -272,6 +272,19 @@ func TestSnapshotScheduleFormPrefilled(t *testing.T) {
 	assertContains(t, html, `value="snap%d"`)
 }
 
+func TestInstanceRowShowsMoveControlsWhenCapable(t *testing.T) {
+	html := render(t, InstanceRow(backend.Capabilities{Move: true}, backend.Instance{Name: "demo", Status: "Stopped"}))
+	assertContains(t, html, `action="/instances/demo/rename"`)
+	assertContains(t, html, `action="/instances/demo/move"`)
+	assertContains(t, html, `name="new_name"`)
+	assertContains(t, html, `name="pool"`)
+
+	off := render(t, InstanceRow(backend.Capabilities{}, backend.Instance{Name: "demo", Status: "Stopped"}))
+	if strings.Contains(off, "/instances/demo/rename") {
+		t.Fatalf("move controls must be hidden without caps.Move: %q", off)
+	}
+}
+
 func TestErrorToastRendersMessage(t *testing.T) {
 	html := render(t, ErrorToast("boom"))
 	assertContains(t, html, "boom")

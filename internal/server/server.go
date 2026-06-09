@@ -58,6 +58,8 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/resume", h.resume)
 	mux.HandleFunc("POST /instances/{name}/delete", h.delete)
 	mux.HandleFunc("POST /instances/{name}/clone", h.clone)
+	mux.HandleFunc("POST /instances/{name}/rename", h.renameInstance)
+	mux.HandleFunc("POST /instances/{name}/move", h.moveInstance)
 	mux.HandleFunc("POST /instances/{name}/limits", h.updateLimits)
 	mux.HandleFunc("POST /instances/{name}/profiles", h.setInstanceProfiles)
 	mux.HandleFunc("GET /instances/{name}/config", h.config)

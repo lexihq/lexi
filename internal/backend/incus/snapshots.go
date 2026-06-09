@@ -77,6 +77,9 @@ func (b *incusBackend) GetSnapshotSchedule(_ context.Context, name string) (back
 
 func (b *incusBackend) SetSnapshotSchedule(ctx context.Context, name string, s backend.SnapshotSchedule) error {
 	return b.mutateInstance(ctx, name, func(put *api.InstancePut) {
+		if put.Config == nil {
+			put.Config = map[string]string{}
+		}
 		setOrDelete(put.Config, "snapshots.schedule", s.Schedule)
 		setOrDelete(put.Config, "snapshots.expiry", s.Expiry)
 		setOrDelete(put.Config, "snapshots.pattern", s.Pattern)

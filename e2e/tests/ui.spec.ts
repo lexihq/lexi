@@ -15,15 +15,18 @@ test("create from the image browser, then start/stop/clone/delete in the list", 
   // swap-then-click race), losing the click. We only re-click when no response
   // was observed, so a registered action is never fired twice.
   const rowAction = async (instance: string, button: string) => {
+    // Only a lost click (no POST observed within the inner timeout) should retry;
+    // a POST that returns an error still resolves waitForResponse, so the retry
+    // never re-fires a registered action — the outer state assertions surface
+    // real failures.
     await expect(async () => {
-      const [resp] = await Promise.all([
+      await Promise.all([
         page.waitForResponse(
           (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
           { timeout: 3000 },
         ),
         page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
       ]);
-      expect(resp.ok()).toBeTruthy();
     }).toPass({ timeout: 15000 });
   };
 
@@ -195,9 +198,17 @@ test("set an instance snapshot schedule", async ({ page }) => {
   await schedule.fill("@daily");
   await page.locator('#snapshot-schedule input[name="expiry"]').fill("2w");
   await page.locator('#snapshot-schedule input[name="pattern"]').fill("snap%d");
-  await page.getByRole("button", { name: "Save schedule" }).click();
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().includes("/instances/demo/snapshots/schedule"),
+    ),
+    page.getByRole("button", { name: "Save schedule" }).click(),
+  ]);
 
-  // After the swap, the form reflects the saved values.
+  // Re-open the tab so the form re-fetches from the backend — this verifies the
+  // values were persisted, not just that our typed-in inputs are still present.
+  await page.getByRole("link", { name: "Summary" }).click();
+  await page.getByRole("link", { name: "Snapshots" }).click();
   await expect(page.locator('#snapshot-schedule input[name="schedule"]')).toHaveValue("@daily");
   await expect(page.locator('#snapshot-schedule input[name="expiry"]')).toHaveValue("2w");
   await expect(page.locator('#snapshot-schedule input[name="pattern"]')).toHaveValue("snap%d");
@@ -233,15 +244,18 @@ test("restart, pause, and resume an instance from the list row", async ({ page }
   // swap-then-click race), losing the click. We only re-click when no response
   // was observed, so a registered action is never fired twice.
   const rowAction = async (instance: string, button: string) => {
+    // Only a lost click (no POST observed within the inner timeout) should retry;
+    // a POST that returns an error still resolves waitForResponse, so the retry
+    // never re-fires a registered action — the outer state assertions surface
+    // real failures.
     await expect(async () => {
-      const [resp] = await Promise.all([
+      await Promise.all([
         page.waitForResponse(
           (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
           { timeout: 3000 },
         ),
         page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
       ]);
-      expect(resp.ok()).toBeTruthy();
     }).toPass({ timeout: 15000 });
   };
 

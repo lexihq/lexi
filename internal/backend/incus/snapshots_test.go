@@ -95,6 +95,15 @@ func TestSetSnapshotScheduleWritesKeys(t *testing.T) {
 	assert.False(t, hasExpiry, "empty expiry should be cleared")
 }
 
+func TestSetSnapshotScheduleInitsNilConfig(t *testing.T) {
+	// Incus can return an instance with a nil local Config; writing must not panic.
+	s := &instanceServerStub{instance: &api.Instance{}} // Config is nil
+	b := &incusBackend{srv: s}
+	require.NoError(t, b.SetSnapshotSchedule(t.Context(), "demo", backend.SnapshotSchedule{Schedule: "@daily"}))
+	require.NotNil(t, s.updatedPut)
+	assert.Equal(t, "@daily", s.updatedPut.Config["snapshots.schedule"])
+}
+
 func TestManagedConfigKeyExcludesSnapshotSchedule(t *testing.T) {
 	assert.True(t, managedConfigKey("snapshots.schedule"))
 	assert.True(t, managedConfigKey("snapshots.expiry"))

@@ -157,10 +157,15 @@ func TestInstanceRowShowsRestartAlwaysAndPauseResumeByStatus(t *testing.T) {
 	}
 }
 
-func TestSidebarShowsProfilesLink(t *testing.T) {
-	html := render(t, Sidebar(Nav{Section: NavProfiles}))
-	assertContains(t, html, "/profiles")
-	assertContains(t, html, "Profiles")
+func TestSidebarGatesProfilesLinkOnCapability(t *testing.T) {
+	withProfiles := render(t, Sidebar(backend.Capabilities{Profiles: true}, Nav{Section: NavProfiles}))
+	assertContains(t, withProfiles, "/profiles")
+	assertContains(t, withProfiles, "Profiles")
+
+	without := render(t, Sidebar(backend.Capabilities{}, Nav{Section: NavInstances}))
+	if strings.Contains(without, "/profiles") {
+		t.Fatalf("profiles link must be hidden without the capability, got %q", without)
+	}
 }
 
 func TestProfilesPageListsProfiles(t *testing.T) {

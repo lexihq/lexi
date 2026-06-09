@@ -297,3 +297,14 @@ test("create and delete a network in the Networks section", async ({ page }) => 
   await table.getByRole("row", { name: /e2e-net/ }).getByRole("button", { name: "Delete" }).click();
   await expect(page.locator("#networks-table").getByText("e2e-net")).toHaveCount(0);
 });
+
+test("backend errors surface as a toast", async ({ page }) => {
+  await page.goto("/networks/new");
+  // incusbr0 is seeded → creating it again conflicts (409).
+  await page.locator('input[name="name"]').fill("incusbr0");
+  await page.getByRole("button", { name: "Create" }).click();
+
+  await expect(page.locator("[data-tui-toast]")).toBeVisible();
+  // The form is not replaced by the error response.
+  await expect(page.locator('input[name="name"]')).toBeVisible();
+});

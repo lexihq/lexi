@@ -1,0 +1,203 @@
+package incus
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+
+	"github.com/adam/lxcon/internal/backend"
+	incusclient "github.com/lxc/incus/v6/client"
+	"github.com/lxc/incus/v6/shared/api"
+)
+
+func (b *incusBackend) ListInstances(_ context.Context) ([]backend.Instance, error) {
+	full, err := b.srv.GetInstancesFull(api.InstanceTypeAny)
+	if err != nil {
+		return nil, fmt.Errorf("list instances: %w", err)
+	}
+	out := make([]backend.Instance, 0, len(full))
+	for i := range full {
+		out = append(out, toInstance(&full[i].Instance, full[i].State, len(full[i].Snapshots)))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+func (b *incusBackend) GetInstance(_ context.Context, name string) (backend.Instance, error) {
+	full, _, err := b.srv.GetInstanceFull(name)
+	if err != nil {
+		return backend.Instance{}, fmt.Errorf("get instance %q: %w", name, mapErr(err))
+	}
+	return toInstance(&full.Instance, full.State, len(full.Snapshots)), nil
+}
+
+func (b *incusBackend) CreateInstance(ctx context.Context, opt backend.CreateOptions) error {
+	req, err := createRequest(opt)
+	if err != nil {
+		return err
+	}
+	op, err := b.srv.CreateInstance(req)
+	if err != nil {
+		return fmt.Errorf("create instance %q: %w", opt.Name, mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		return fmt.Errorf("create instance %q: %w", opt.Name, mapErr(err))
+	}
+	return nil
+}
+
+func (b *incusBackend) StartInstance(ctx context.Context, name string) error {
+	return b.changeState(ctx, name, "start", false)
+}
+
+func (b *incusBackend) StopInstance(ctx context.Context, name string) error {
+	return b.changeState(ctx, name, "stop", true)
+}
+
+func (b *incusBackend) RestartInstance(ctx context.Context, name string) error {
+	return b.changeState(ctx, name, "restart", false)
+}
+
+func (b *incusBackend) PauseInstance(ctx context.Context, name string) error {
+	return b.changeState(ctx, name, "freeze", false)
+}
+
+func (b *incusBackend) ResumeInstance(ctx context.Context, name string) error {
+	return b.changeState(ctx, name, "unfreeze", false)
+}
+
+func (b *incusBackend) changeState(ctx context.Context, name, action string, force bool) error {
+	op, err := b.srv.UpdateInstanceState(name, api.InstanceStatePut{
+		Action:  action,
+		Timeout: -1,
+		Force:   force,
+	}, "")
+	if err != nil {
+		return fmt.Errorf("%s instance %q: %w", action, name, mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		return fmt.Errorf("%s instance %q: %w", action, name, mapErr(err))
+	}
+	return nil
+}
+
+func (b *incusBackend) DeleteInstance(ctx context.Context, name string) error {
+	state, _, err := b.srv.GetInstanceState(name)
+	if err != nil {
+		return fmt.Errorf("get state of %q: %w", name, mapErr(err))
+	}
+	if state.Status != "Stopped" {
+		if err := b.changeState(ctx, name, "stop", true); err != nil {
+			return err
+		}
+	}
+	op, err := b.srv.DeleteInstance(name)
+	if err != nil {
+		return fmt.Errorf("delete instance %q: %w", name, mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		return fmt.Errorf("delete instance %q: %w", name, mapErr(err))
+	}
+	b.clearCPUSample(name)
+	return nil
+}
+
+func (b *incusBackend) CloneInstance(ctx context.Context, src, dst string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	source, _, err := b.srv.GetInstance(src)
+	if err != nil {
+		return fmt.Errorf("get source instance %q: %w", src, mapErr(err))
+	}
+	op, err := b.srv.CopyInstance(b.srv, *source, &incusclient.InstanceCopyArgs{Name: dst})
+	if err != nil {
+		return fmt.Errorf("clone %q to %q: %w", src, dst, mapErr(err))
+	}
+	if err := waitRemoteOperation(ctx, op); err != nil {
+		return fmt.Errorf("clone %q to %q: %w", src, dst, mapErr(err))
+	}
+	return nil
+}
+
+func waitRemoteOperation(ctx context.Context, op incusclient.RemoteOperation) error {
+	done := make(chan error, 1)
+	go func() {
+		done <- op.Wait()
+	}()
+
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		if err := op.CancelTarget(); err != nil {
+			return errors.Join(ctx.Err(), fmt.Errorf("cancel remote operation: %w", err))
+		}
+		return ctx.Err()
+	}
+}
+
+func toInstance(in *api.Instance, state *api.InstanceState, snapshots int) backend.Instance {
+	return backend.Instance{
+		Name:         in.Name,
+		Status:       in.Status,
+		Image:        in.ExpandedConfig["image.description"],
+		IPv4:         ipv4Addresses(state),
+		Snapshots:    snapshots,
+		CreatedAt:    in.CreatedAt,
+		LimitsCPU:    in.ExpandedConfig["limits.cpu"],
+		LimitsMemory: in.ExpandedConfig["limits.memory"],
+		Profiles:     append([]string(nil), in.Profiles...),
+	}
+}
+
+// ipv4Addresses extracts global IPv4 addresses across the instance's non-loopback
+// interfaces.
+func ipv4Addresses(state *api.InstanceState) []string {
+	if state == nil {
+		return nil
+	}
+	var out []string
+	for iface, net := range state.Network {
+		if iface == "lo" {
+			continue
+		}
+		for _, a := range net.Addresses {
+			if a.Family == "inet" && a.Scope == "global" {
+				out = append(out, a.Address)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func createRequest(opt backend.CreateOptions) (api.InstancesPost, error) {
+	instanceType := api.InstanceTypeContainer
+	switch opt.Type {
+	case "", string(api.InstanceTypeContainer):
+	case string(api.InstanceTypeVM):
+		instanceType = api.InstanceTypeVM
+	default:
+		return api.InstancesPost{}, fmt.Errorf("image type %q: %w", opt.Type, backend.ErrUnsupported)
+	}
+
+	source := api.InstanceSource{
+		Type:     "image",
+		Server:   imagesRemote,
+		Protocol: "simplestreams",
+	}
+	if opt.Fingerprint != "" {
+		source.Fingerprint = opt.Fingerprint
+	} else {
+		source.Alias = opt.Image
+	}
+
+	return api.InstancesPost{
+		Name:   opt.Name,
+		Type:   instanceType,
+		Start:  opt.Start,
+		Source: source,
+	}, nil
+}

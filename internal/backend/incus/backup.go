@@ -1,0 +1,161 @@
+package incus
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"time"
+
+	"github.com/adam/lxcon/internal/backend"
+	incusclient "github.com/lxc/incus/v6/client"
+	"github.com/lxc/incus/v6/shared/api"
+	"github.com/lxc/incus/v6/shared/cancel"
+)
+
+// ExportInstance creates a backup, spools it to a temp file (the client API
+// needs an io.WriteSeeker), then streams the spooled file to w. The server-side
+// backup is removed via a deferred best-effort cleanup so it is deleted on every
+// path, including errors between creation and streaming. The backup name is
+// timestamped to avoid colliding with concurrent runs.
+func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Writer) error {
+	backupName := fmt.Sprintf("lxcon-export-%d", time.Now().UnixNano())
+
+	op, err := b.srv.CreateInstanceBackup(name, api.InstanceBackupsPost{
+		Name:                 backupName,
+		CompressionAlgorithm: "gzip",
+	})
+	if err != nil {
+		return fmt.Errorf("create backup of %q: %w", name, mapErr(err))
+	}
+	// Once the operation exists, clean up on every return path. deleteBackup
+	// treats a missing backup as a no-op, so this is harmless if creation failed.
+	defer b.deleteBackup(name, backupName)
+	if err := op.WaitContext(ctx); err != nil {
+		// A canceled wait leaves the server operation running; cancel it so the
+		// backup does not finish and leak after we have given up. The deferred
+		// cleanup covers the race where it completes before the cancel lands.
+		if ctx.Err() != nil {
+			if cancelErr := op.Cancel(); cancelErr != nil {
+				log.Printf("lxcon: cancel backup operation for %q: %v", name, cancelErr)
+			}
+		}
+		return fmt.Errorf("create backup of %q: %w", name, mapErr(err))
+	}
+
+	tmp, err := os.CreateTemp("", "lxcon-export-*.tar.gz")
+	if err != nil {
+		return fmt.Errorf("spool backup of %q: %w", name, err)
+	}
+	defer cleanupExportTemp(tmp)
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	canceler := cancel.NewHTTPRequestCanceller()
+	stopCancel := context.AfterFunc(ctx, func() {
+		if err := canceler.Cancel(); err != nil && canceler.Cancelable() {
+			log.Printf("lxcon: cancel backup download for %q: %v", name, err)
+		}
+	})
+	defer stopCancel()
+
+	if _, err := b.srv.GetInstanceBackupFile(name, backupName, &incusclient.BackupFileRequest{
+		BackupFile: contextWriteSeeker{ctx: ctx, WriteSeeker: tmp},
+		Canceler:   canceler,
+	}); err != nil {
+		return fmt.Errorf("download backup of %q: %w", name, mapErr(err))
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("rewind backup of %q: %w", name, err)
+	}
+	if _, err := io.Copy(w, tmp); err != nil {
+		return fmt.Errorf("stream backup of %q: %w", name, err)
+	}
+	return nil
+}
+
+// ImportInstance creates an instance named name from a backup tarball streamed
+// from r (as produced by ExportInstance).
+func (b *incusBackend) ImportInstance(ctx context.Context, name string, r io.Reader) error {
+	op, err := b.srv.CreateInstanceFromBackup(incusclient.InstanceBackupArgs{
+		BackupFile: contextReader{ctx: ctx, Reader: r},
+		Name:       name,
+	})
+	if err != nil {
+		return fmt.Errorf("import instance %q: %w", name, mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		if ctx.Err() != nil {
+			if cancelErr := op.Cancel(); cancelErr != nil {
+				log.Printf("lxcon: cancel import operation for %q: %v", name, cancelErr)
+			}
+		}
+		return fmt.Errorf("import instance %q: %w", name, mapErr(err))
+	}
+	return nil
+}
+
+type contextReader struct {
+	io.Reader
+
+	ctx context.Context
+}
+
+func (r contextReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	n, err := r.Reader.Read(p)
+	if ctxErr := r.ctx.Err(); ctxErr != nil {
+		return n, ctxErr
+	}
+	return n, err
+}
+
+type contextWriteSeeker struct {
+	io.WriteSeeker
+
+	ctx context.Context
+}
+
+func (w contextWriteSeeker) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return w.WriteSeeker.Write(p)
+}
+
+func cleanupExportTemp(tmp *os.File) {
+	path := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		log.Printf("lxcon: close export temp file %q: %v", path, err)
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		log.Printf("lxcon: remove export temp file %q: %v", path, err)
+	}
+}
+
+// deleteBackup removes the temporary server-side backup created during export.
+// It is best-effort cleanup invoked via defer with its own bounded context,
+// detached from the request: a client disconnecting as the download finishes
+// must not abort cleanup and leak the backup. A failure cannot change the
+// already-streamed result, so it is logged (not returned) to keep leaked backups
+// discoverable; a missing backup means there was nothing to clean and is ignored.
+func (b *incusBackend) deleteBackup(name, backupName string) {
+	ctx, cancel := context.WithTimeout(context.Background(), backupDeleteTimeout)
+	defer cancel()
+
+	op, err := b.srv.DeleteInstanceBackup(name, backupName)
+	if err != nil {
+		if !errors.Is(mapErr(err), backend.ErrNotFound) {
+			log.Printf("lxcon: delete export backup %q for %q: %v", backupName, name, err)
+		}
+		return
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		log.Printf("lxcon: await deletion of export backup %q for %q: %v", backupName, name, err)
+	}
+}

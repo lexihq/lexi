@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 
@@ -53,7 +53,7 @@ func (h handlers) fail(w http.ResponseWriter, err error) {
 func (h handlers) renderError(w http.ResponseWriter, code int, message string) {
 	writeHTML(w, code)
 	if _, err := fmt.Fprintf(w, `<div role="alert">%s</div>`, html.EscapeString(message)); err != nil {
-		log.Printf("lxcon: write error response: %v", err)
+		slog.Warn("write error response", "err", err)
 	}
 }
 

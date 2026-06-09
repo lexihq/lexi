@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -39,7 +39,7 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 		// cleanup covers the race where it completes before the cancel lands.
 		if ctx.Err() != nil {
 			if cancelErr := op.Cancel(); cancelErr != nil {
-				log.Printf("lxcon: cancel backup operation for %q: %v", name, cancelErr)
+				slog.Warn("cancel backup operation", "instance", name, "err", cancelErr)
 			}
 		}
 		return fmt.Errorf("create backup of %q: %w", name, mapErr(err))
@@ -57,7 +57,7 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 	canceler := cancel.NewHTTPRequestCanceller()
 	stopCancel := context.AfterFunc(ctx, func() {
 		if err := canceler.Cancel(); err != nil && canceler.Cancelable() {
-			log.Printf("lxcon: cancel backup download for %q: %v", name, err)
+			slog.Warn("cancel backup download", "instance", name, "err", err)
 		}
 	})
 	defer stopCancel()
@@ -90,7 +90,7 @@ func (b *incusBackend) ImportInstance(ctx context.Context, name string, r io.Rea
 	if err := op.WaitContext(ctx); err != nil {
 		if ctx.Err() != nil {
 			if cancelErr := op.Cancel(); cancelErr != nil {
-				log.Printf("lxcon: cancel import operation for %q: %v", name, cancelErr)
+				slog.Warn("cancel import operation", "instance", name, "err", cancelErr)
 			}
 		}
 		return fmt.Errorf("import instance %q: %w", name, mapErr(err))
@@ -131,10 +131,10 @@ func (w contextWriteSeeker) Write(p []byte) (int, error) {
 func cleanupExportTemp(tmp *os.File) {
 	path := tmp.Name()
 	if err := tmp.Close(); err != nil {
-		log.Printf("lxcon: close export temp file %q: %v", path, err)
+		slog.Warn("close export temp file", "path", path, "err", err)
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		log.Printf("lxcon: remove export temp file %q: %v", path, err)
+		slog.Warn("remove export temp file", "path", path, "err", err)
 	}
 }
 
@@ -151,11 +151,11 @@ func (b *incusBackend) deleteBackup(name, backupName string) {
 	op, err := b.srv.DeleteInstanceBackup(name, backupName)
 	if err != nil {
 		if !errors.Is(mapErr(err), backend.ErrNotFound) {
-			log.Printf("lxcon: delete export backup %q for %q: %v", backupName, name, err)
+			slog.Warn("delete export backup", "backup", backupName, "instance", name, "err", err)
 		}
 		return
 	}
 	if err := op.WaitContext(ctx); err != nil {
-		log.Printf("lxcon: await deletion of export backup %q for %q: %v", backupName, name, err)
+		slog.Warn("await deletion of export backup", "backup", backupName, "instance", name, "err", err)
 	}
 }

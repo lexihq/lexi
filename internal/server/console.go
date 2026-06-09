@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -78,13 +78,13 @@ func (h handlers) consoleWS(w http.ResponseWriter, r *http.Request) {
 		closeMsg = websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error())
 	}
 	if err := conn.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second)); err != nil {
-		log.Printf("lxcon: write console WebSocket close message: %v", err)
+		slog.Warn("write console WebSocket close message", "err", err)
 	}
 }
 
 func closeAndLog(name string, closer io.Closer) {
 	if err := closer.Close(); err != nil {
-		log.Printf("lxcon: close %s: %v", name, err)
+		slog.Warn("close console session", "name", name, "err", err)
 	}
 }
 

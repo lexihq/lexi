@@ -7,7 +7,8 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/backend/fake"
@@ -21,14 +22,16 @@ func main() {
 
 	b := fake.New()
 	if err := b.CreateInstance(context.Background(), backend.CreateOptions{Name: *instance, Image: "debian/12"}); err != nil {
-		log.Fatalf("fakeserver: seed instance: %v", err)
+		slog.Error("seed instance", "err", err)
+		os.Exit(1)
 	}
 
 	srv := server.New(b)
 	srv.Addr = *addr
 
-	log.Printf("fakeserver listening on %s (instance %q)", *addr, *instance)
+	slog.Info("fakeserver listening", "addr", *addr, "instance", *instance)
 	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("fakeserver: serve on %s: %v", *addr, err)
+		slog.Error("serve", "addr", *addr, "err", err)
+		os.Exit(1)
 	}
 }

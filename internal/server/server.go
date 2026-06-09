@@ -2,7 +2,7 @@
 package server
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -20,7 +20,7 @@ func New(b backend.Backend) *http.Server {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static.FS)))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		if _, err := w.Write([]byte("ok\n")); err != nil {
-			log.Printf("lxcon: write health response: %v", err)
+			slog.Warn("write health response", "err", err)
 		}
 	})
 	mux.HandleFunc("GET /", h.list)

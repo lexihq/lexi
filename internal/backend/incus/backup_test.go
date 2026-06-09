@@ -3,7 +3,7 @@ package incus
 import (
 	"bytes"
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,9 +104,9 @@ func TestCleanupExportTempLogsCloseFailure(t *testing.T) {
 	require.NoError(t, tmp.Close())
 
 	var logs bytes.Buffer
-	previous := log.Writer()
-	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(previous) })
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 
 	cleanupExportTemp(tmp)
 
@@ -121,9 +121,9 @@ func TestCleanupExportTempLogsRemoveFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	var logs bytes.Buffer
-	previous := log.Writer()
-	log.SetOutput(&logs)
-	t.Cleanup(func() { log.SetOutput(previous) })
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
 
 	cleanupExportTemp(tmp)
 

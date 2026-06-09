@@ -3,7 +3,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/adam/lxcon/internal/backend/incus"
@@ -19,20 +19,23 @@ func main() {
 
 	if *incusRemote != "" {
 		if err := os.Setenv("LXCON_INCUS_REMOTE", *incusRemote); err != nil {
-			log.Fatalf("lxcon: set incus remote: %v", err)
+			slog.Error("set incus remote", "err", err)
+			os.Exit(1)
 		}
 	}
 
 	b, err := incus.New()
 	if err != nil {
-		log.Fatalf("lxcon: initialize incus backend: %v", err)
+		slog.Error("initialize incus backend", "err", err)
+		os.Exit(1)
 	}
 
 	srv := server.New(b)
 	srv.Addr = *addr
 
-	log.Printf("lxcon listening on %s", *addr)
+	slog.Info("listening", "addr", *addr)
 	if err := srv.ListenAndServe(); err != nil {
-		log.Fatalf("lxcon: serve on %s: %v", *addr, err)
+		slog.Error("serve", "addr", *addr, "err", err)
+		os.Exit(1)
 	}
 }

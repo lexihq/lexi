@@ -40,6 +40,7 @@ type Capabilities struct {
 	Limits     bool // CPU and memory limits
 	Pause      bool // freeze/unfreeze (pause/resume)
 	Profiles   bool // list/view profiles + attach to instances
+	Config     bool // edit arbitrary config keys + view devices
 }
 
 // Instance is a system container or virtual machine.
@@ -70,6 +71,14 @@ type Profile struct {
 	Config      map[string]string
 	Devices     map[string]map[string]string // device name → {key: value}
 	UsedBy      []string                     // instance names using it
+}
+
+// InstanceConfig is an instance's editable local config plus its read-only
+// (expanded) devices. Config excludes volatile.* and limits.cpu/limits.memory,
+// which are managed elsewhere and preserved on update.
+type InstanceConfig struct {
+	Config  map[string]string
+	Devices map[string]map[string]string
 }
 
 // Metrics is a point-in-time resource snapshot. CPUPercent is derived from the
@@ -162,6 +171,9 @@ type Backend interface {
 	// SetInstanceProfiles replaces the instance's profile list (ordered; later
 	// profiles override earlier ones).
 	SetInstanceProfiles(ctx context.Context, name string, profiles []string) error
+
+	GetInstanceConfig(ctx context.Context, name string) (InstanceConfig, error)
+	UpdateInstanceConfig(ctx context.Context, name string, config map[string]string) error
 
 	// ExportInstance streams a portable backup tarball of the instance to w.
 	ExportInstance(ctx context.Context, name string, w io.Writer) error

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ type instance struct {
 	backend.Instance
 
 	snapshots []backend.Snapshot
+	config    map[string]string
 }
 
 // Fake is a mutex-guarded, in-memory Backend with a deterministic clock.
@@ -77,6 +79,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		Limits:     true,
 		Pause:      true,
 		Profiles:   true,
+		Config:     true,
 	}
 }
 
@@ -132,6 +135,7 @@ func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) erro
 			CreatedAt: f.now(),
 			Profiles:  []string{"default"},
 		},
+		config: map[string]string{},
 	}
 	return nil
 }
@@ -172,6 +176,41 @@ func (f *Fake) SetInstanceProfiles(_ context.Context, name string, profiles []st
 		}
 	}
 	in.Profiles = append([]string(nil), profiles...)
+	return nil
+}
+
+func (f *Fake) GetInstanceConfig(_ context.Context, name string) (backend.InstanceConfig, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return backend.InstanceConfig{}, notFound(name)
+	}
+	cfg := maps.Clone(in.config)
+	// Read-only devices = merge of the instance's assigned profiles' devices.
+	devices := map[string]map[string]string{}
+	for _, pn := range in.Profiles {
+		p, ok := f.profiles[pn]
+		if !ok {
+			continue
+		}
+		for devName, dev := range p.Devices {
+			devices[devName] = maps.Clone(dev)
+		}
+	}
+	return backend.InstanceConfig{Config: cfg, Devices: devices}, nil
+}
+
+func (f *Fake) UpdateInstanceConfig(_ context.Context, name string, config map[string]string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return notFound(name)
+	}
+	in.config = maps.Clone(config)
 	return nil
 }
 

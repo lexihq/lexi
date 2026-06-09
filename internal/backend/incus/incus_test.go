@@ -327,6 +327,52 @@ func TestSetInstanceProfilesGetThenPut(t *testing.T) {
 	assert.Equal(t, []string{"default", "gpu"}, srv.updatedPut.Profiles)
 }
 
+func TestEditableConfigDropsVolatileAndLimits(t *testing.T) {
+	got := editableConfig(map[string]string{
+		"security.nesting":     "true",
+		"boot.autostart":       "1",
+		"volatile.eth0.hwaddr": "00:16:3e:aa:bb:cc",
+		"limits.cpu":           "2",
+		"limits.memory":        "2GiB",
+	})
+	assert.Equal(t, map[string]string{"security.nesting": "true", "boot.autostart": "1"}, got)
+}
+
+func TestGetInstanceConfigFiltersAndCarriesDevices(t *testing.T) {
+	srv := &instanceServerStub{instance: &api.Instance{
+		InstancePut: api.InstancePut{Config: map[string]string{
+			"security.nesting":    "true",
+			"volatile.base_image": "abc",
+			"limits.cpu":          "2",
+		}},
+		ExpandedDevices: map[string]map[string]string{"root": {"type": "disk", "path": "/"}},
+	}}
+	b := &incusBackend{srv: srv}
+	cfg, err := b.GetInstanceConfig(context.Background(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"security.nesting": "true"}, cfg.Config)
+	assert.Equal(t, "disk", cfg.Devices["root"]["type"])
+}
+
+func TestUpdateInstanceConfigPreservesVolatileAndLimits(t *testing.T) {
+	srv := &instanceServerStub{instance: &api.Instance{
+		InstancePut: api.InstancePut{Config: map[string]string{
+			"security.nesting":    "true", // old editable key, should be dropped
+			"volatile.base_image": "abc",  // preserved
+			"limits.cpu":          "2",    // preserved
+		}},
+	}}
+	b := &incusBackend{srv: srv}
+	require.NoError(t, b.UpdateInstanceConfig(context.Background(), "demo",
+		map[string]string{"boot.autostart": "1"}))
+	require.NotNil(t, srv.updatedPut)
+	assert.Equal(t, api.ConfigMap{
+		"boot.autostart":      "1",
+		"volatile.base_image": "abc",
+		"limits.cpu":          "2",
+	}, srv.updatedPut.Config)
+}
+
 func TestLifecycleActionsSendCorrectIncusAction(t *testing.T) {
 	cases := []struct {
 		name   string

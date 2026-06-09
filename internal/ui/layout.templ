@@ -1,6 +1,9 @@
 package ui
 
-import "github.com/adam/lxcon/internal/backend"
+import (
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/components/icon"
+)
 
 // NavInstances is the active-section key for the Instances nav entry.
 const NavInstances = "instances"
@@ -71,6 +74,21 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 						{ children... }
 					</main>
 				</div>
+				if caps.Operations {
+					<footer class="border-t bg-card">
+						<input id="ops-toggle" type="checkbox" class="peer hidden"/>
+						<label for="ops-toggle" class="flex cursor-pointer items-center gap-2 px-4 py-1.5 text-sm text-muted-foreground hover:text-foreground">
+							@icon.Icon("list-todo")(icon.Props{Class: "size-4"})
+							Tasks
+						</label>
+						<div
+							class="hidden max-h-48 overflow-y-auto border-t px-4 peer-checked:block"
+							hx-get="/partials/operations"
+							hx-trigger="load, every 5s"
+							hx-swap="innerHTML"
+						></div>
+					</footer>
+				}
 			</div>
 		</body>
 	</html>

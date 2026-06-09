@@ -1,0 +1,39 @@
+package ui
+
+import "github.com/adam/lxcon/internal/backend"
+
+// OperationRows is the polled body of the bottom Tasks panel: the daemon's
+// running and recently finished operations, newest first.
+templ OperationRows(ops []backend.Operation) {
+	if len(ops) == 0 {
+		<p class="py-2 text-sm text-muted-foreground">No recent tasks.</p>
+	} else {
+		<table class="w-full text-sm">
+			<tbody>
+				for _, op := range ops {
+					<tr class="border-b last:border-0">
+						<td class="py-1.5 pr-3">{ op.Description }</td>
+						<td class="py-1.5 pr-3 text-xs text-muted-foreground">{ op.Class }</td>
+						<td class="py-1.5 pr-3">
+							<span class={ "rounded border px-1.5 py-0.5 text-xs", opStatusClass(op.Status) } title={ op.Err }>{ op.Status }</span>
+						</td>
+						<td class="py-1.5 text-right text-xs text-muted-foreground">{ op.CreatedAt.Format("15:04:05") }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	}
+}
+
+// opStatusClass colors the status badge: green success, red failure, blue
+// anything still in flight.
+func opStatusClass(status string) string {
+	switch status {
+	case "Success":
+		return "text-green-500"
+	case "Failure":
+		return "text-red-500"
+	default:
+		return "text-blue-500"
+	}
+}

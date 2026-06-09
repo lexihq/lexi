@@ -212,6 +212,32 @@ func TestSidebarGatesStorageLink(t *testing.T) {
 	}
 }
 
+func TestLayoutGatesOperationsPanel(t *testing.T) {
+	caps := testCaps()
+	caps.Operations = true
+	with := render(t, InstancesPage(caps, nil))
+	assertContains(t, with, `hx-get="/partials/operations"`)
+	assertContains(t, with, "Tasks")
+
+	without := render(t, InstancesPage(testCaps(), nil))
+	if strings.Contains(without, "/partials/operations") {
+		t.Fatalf("operations panel must be hidden without the capability, got %q", without)
+	}
+}
+
+func TestOperationRowsRenderStatusAndEmptyState(t *testing.T) {
+	html := render(t, OperationRows([]backend.Operation{
+		{Description: `Starting instance "demo"`, Class: "task", Status: "Success"},
+		{Description: `Stopping instance "demo"`, Class: "task", Status: "Failure", Err: "boom"},
+	}))
+	assertContains(t, html, "Starting instance")
+	assertContains(t, html, "Success")
+	assertContains(t, html, `title="boom"`)
+
+	empty := render(t, OperationRows(nil))
+	assertContains(t, empty, "No recent tasks")
+}
+
 func TestSidebarGatesImagesLink(t *testing.T) {
 	with := render(t, Sidebar(backend.Capabilities{ImageManagement: true}, Nav{Section: NavImages}))
 	assertContains(t, with, "/images")

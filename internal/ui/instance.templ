@@ -1,12 +1,9 @@
 package ui
 
 import (
-	"fmt"
-
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
 	"github.com/adam/lxcon/internal/components/icon"
-	"github.com/adam/lxcon/internal/components/table"
 )
 
 // InstancePage is the per-instance detail shell: a header (name/status + Export
@@ -151,180 +148,9 @@ templ tabLink(name, tab, label, iconName, active string) {
 	</a>
 }
 
-templ SnapshotTable(name string, snapshots []backend.Snapshot) {
-	<section id="snapshots" class="rounded-lg border bg-card p-4">
-		<div class="mb-4 flex items-center justify-between gap-4">
-			<h2 class="text-lg font-medium">Snapshots</h2>
-			<form method="post" action={ templ.URL("/instances/" + name + "/snapshots") } hx-post={ "/instances/" + name + "/snapshots" } hx-target="#snapshots" hx-swap="outerHTML" class="flex gap-2">
-				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="snapshot" placeholder="snapshot name"/>
-				@button.Button(button.Props{Type: button.TypeSubmit}) {
-					@icon.Icon("camera")(icon.Props{Class: "size-4"})
-					Create snapshot
-				}
-			</form>
-		</div>
-		@table.Table() {
-			@table.Header() {
-				@table.Row() {
-					@table.Head() { Name }
-					@table.Head() { Actions }
-				}
-			}
-			@table.Body() {
-				for _, snap := range snapshots {
-					@table.Row() {
-						@table.Cell() { { snap.Name } }
-						@table.Cell() {
-							<div class="flex gap-2">
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + name + "/snapshots/" + snap.Name + "/restore", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
-									@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
-									Restore
-								}
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/instances/" + name + "/snapshots/" + snap.Name + "/delete", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
-									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
-									Delete
-								}
-							</div>
-						}
-					}
-				}
-			}
-		}
-	</section>
-}
-
-// LimitsForm renders the resource-limits editor; it re-renders itself in place
-// after an HTMX submit so the inputs reflect the applied values.
-templ LimitsForm(inst backend.Instance) {
-	<section id="limits" class="mb-8 rounded-lg border bg-card p-4">
-		<h2 class="mb-3 text-lg font-medium">Resource limits</h2>
-		<form
-			method="post"
-			action={ templ.URL("/instances/" + inst.Name + "/limits") }
-			hx-post={ "/instances/" + inst.Name + "/limits" }
-			hx-target="#limits"
-			hx-swap="outerHTML"
-			class="grid items-end gap-3 sm:grid-cols-3"
-		>
-			<div class="space-y-1">
-				<label class="text-sm text-muted-foreground" for="cpu">CPU</label>
-				<input id="cpu" name="cpu" value={ inst.LimitsCPU } placeholder="e.g. 2" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
-			</div>
-			<div class="space-y-1">
-				<label class="text-sm text-muted-foreground" for="memory">Memory</label>
-				<input id="memory" name="memory" value={ inst.LimitsMemory } placeholder="e.g. 2GiB" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
-			</div>
-			@button.Button(button.Props{Type: button.TypeSubmit}) {
-				@icon.Icon("save")(icon.Props{Class: "size-4"})
-				Apply limits
-			}
-		</form>
-	</section>
-}
-
-// ConfigPanel is the lazy-loaded Configuration tab body: a whole-map key/value
-// editor over the instance's editable config, plus a read-only device list.
-// Submitting replaces the editable config (blank-key rows are dropped, so
-// clearing a key removes it); the trailing blank row adds one.
-templ ConfigPanel(name string, cfg backend.InstanceConfig) {
-	<section id="config" class="space-y-8">
-		<div class="rounded-lg border bg-card p-4">
-			<h2 class="mb-3 text-lg font-medium">Configuration</h2>
-			<form
-				method="post"
-				action={ templ.URL("/instances/" + name + "/config") }
-				hx-post={ "/instances/" + name + "/config" }
-				hx-target="#config"
-				hx-swap="outerHTML"
-				class="space-y-2"
-			>
-				for _, k := range sortedKeys(cfg.Config) {
-					<div class="flex gap-2">
-						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
-						<input name="value" value={ cfg.Config[k] } class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
-					</div>
-				}
-				<div class="flex gap-2">
-					<input name="key" placeholder="key (e.g. security.nesting)" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
-					<input name="value" placeholder="value" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
-				</div>
-				<p class="text-xs text-muted-foreground">Clear a key and apply to remove it.</p>
-				@button.Button(button.Props{Type: button.TypeSubmit}) {
-					@icon.Icon("save")(icon.Props{Class: "size-4"})
-					Apply config
-				}
-			</form>
-		</div>
-		<div class="rounded-lg border bg-card p-4">
-			<h2 class="mb-3 text-lg font-medium">Devices</h2>
-			@deviceList(cfg.Devices)
-		</div>
-	</section>
-}
-
-// MetricsPanel renders a point-in-time resource snapshot. It re-fetches itself
-// every 3s; the initial load is driven by the metrics tab case in InstanceBody.
-templ MetricsPanel(name string, m backend.Metrics) {
-	<section
-		id="metrics"
-		class="mb-8 rounded-lg border bg-card p-4"
-		hx-get={ "/instances/" + name + "/metrics" }
-		hx-trigger="every 3s"
-		hx-swap="outerHTML"
-	>
-		<h2 class="mb-3 text-lg font-medium">Live metrics</h2>
-		<dl class="grid gap-3 text-sm sm:grid-cols-3">
-			<div><dt class="text-muted-foreground">CPU</dt><dd>{ formatPercent(m.CPUPercent) }</dd></div>
-			<div><dt class="text-muted-foreground">Memory</dt><dd>{ humanBytes(m.MemoryUsage) } / { humanBytes(m.MemoryTotal) }</dd></div>
-			<div><dt class="text-muted-foreground">Disk</dt><dd>{ humanBytes(m.DiskUsage) }</dd></div>
-			<div><dt class="text-muted-foreground">Network RX</dt><dd>{ humanBytes(m.NetworkRx) }</dd></div>
-			<div><dt class="text-muted-foreground">Network TX</dt><dd>{ humanBytes(m.NetworkTx) }</dd></div>
-			<div><dt class="text-muted-foreground">Processes</dt><dd>{ fmt.Sprintf("%d", m.Processes) }</dd></div>
-		</dl>
-	</section>
-}
-
-// LogsPanel renders the instance console log with a manual refresh that swaps
-// the panel in place. The initial load is driven by the logs tab case in
-// InstanceBody.
-templ LogsPanel(name string, log string) {
-	<section id="logs" class="mb-8 rounded-lg border bg-card p-4">
-		<div class="mb-3 flex items-center justify-between gap-4">
-			<h2 class="text-lg font-medium">Console log</h2>
-			@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-get": "/instances/" + name + "/logs", "hx-target": "#logs", "hx-swap": "outerHTML"}}) {
-				@icon.Icon("refresh-cw")(icon.Props{Class: "size-4"})
-				Refresh
-			}
-		</div>
-		if log == "" {
-			<p class="text-sm text-muted-foreground">No console output yet.</p>
-		} else {
-			<pre class="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">{ log }</pre>
-		}
-	</section>
-}
-
 func joinIPv4(addrs []string) string {
 	if len(addrs) == 0 {
 		return "—"
 	}
 	return addrs[0]
-}
-
-// humanBytes formats a byte count with binary (IEC) units.
-func humanBytes(n int64) string {
-	const unit = 1024
-	if n < unit {
-		return fmt.Sprintf("%d B", n)
-	}
-	div, exp := int64(unit), 0
-	for x := n / unit; x >= unit; x /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
-}
-
-func formatPercent(p float64) string {
-	return fmt.Sprintf("%.1f%%", p)
 }

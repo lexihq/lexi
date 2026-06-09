@@ -23,12 +23,25 @@ type instance struct {
 	devices   map[string]map[string]string
 }
 
+type storagePool struct {
+	backend.StoragePool
+
+	volumes map[string]*storageVolume
+}
+
+type storageVolume struct {
+	backend.StorageVolume
+
+	snapshots []backend.StorageVolumeSnapshot // used in Phase 2
+}
+
 // Fake is a mutex-guarded, in-memory Backend with a deterministic clock.
 type Fake struct {
 	mu        sync.Mutex
 	instances map[string]*instance
 	profiles  map[string]backend.Profile
 	networks  map[string]backend.Network
+	pools     map[string]*storagePool
 	clock     time.Time
 }
 
@@ -57,6 +70,10 @@ func New() *Fake {
 			},
 			"eth0": {Name: "eth0", Type: "physical", Managed: false},
 		},
+		pools: map[string]*storagePool{
+			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
+			"zfs0":    {StoragePool: backend.StoragePool{Name: "zfs0", Driver: "zfs", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
+		},
 		instances: make(map[string]*instance),
 		clock:     time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 	}
@@ -84,6 +101,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		Config:     true,
 		Devices:    true,
 		Networks:   true,
+		Storage:    true,
 	}
 }
 

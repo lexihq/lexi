@@ -70,6 +70,7 @@ func New() (*incusBackend, error) {
 			Config:     true,
 			Devices:    true,
 			Networks:   true,
+			Storage:    true,
 		},
 		cpuSamples: make(map[string]cpuSample),
 	}, nil

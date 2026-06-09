@@ -43,6 +43,7 @@ type Capabilities struct {
 	Config     bool // edit arbitrary config keys + view devices
 	Devices    bool // add/remove instance-local devices
 	Networks   bool // list/inspect/create/delete networks
+	Storage    bool // list pools + custom volume/snapshot management
 }
 
 // Instance is a system container or virtual machine.
@@ -85,6 +86,35 @@ type Network struct {
 	Description string
 	Config      map[string]string
 	UsedBy      []string
+}
+
+// StoragePool is an Incus storage pool. Pools are driver-specific infra
+// (dir/zfs/btrfs/lvm/ceph) created at host setup; lxcon lists them read-only.
+// Config/UsedBy are read-only outputs.
+type StoragePool struct {
+	Name        string
+	Driver      string // dir | zfs | btrfs | lvm | ceph ...
+	Description string
+	Config      map[string]string
+	UsedBy      []string
+}
+
+// StorageVolume is a custom storage volume within a pool. lxcon manages only the
+// "custom" volume type; container/image/vm volumes are managed by their
+// instances. Type/UsedBy are read-only outputs (Type is always "custom" here).
+type StorageVolume struct {
+	Name        string
+	Type        string // always "custom" in this slice
+	ContentType string // filesystem | block
+	Pool        string
+	Config      map[string]string
+	UsedBy      []string
+}
+
+// StorageVolumeSnapshot is a point-in-time snapshot of a custom volume.
+type StorageVolumeSnapshot struct {
+	Name      string
+	CreatedAt time.Time
 }
 
 // InstanceConfig is an instance's editable local config plus its devices. Config
@@ -199,6 +229,13 @@ type Backend interface {
 	GetNetwork(ctx context.Context, name string) (Network, error)
 	CreateNetwork(ctx context.Context, n Network) error
 	DeleteNetwork(ctx context.Context, name string) error
+
+	ListStoragePools(ctx context.Context) ([]StoragePool, error)
+	GetStoragePool(ctx context.Context, pool string) (StoragePool, error)
+	ListVolumes(ctx context.Context, pool string) ([]StorageVolume, error)
+	GetVolume(ctx context.Context, pool, name string) (StorageVolume, error)
+	CreateVolume(ctx context.Context, pool string, v StorageVolume) error
+	DeleteVolume(ctx context.Context, pool, name string) error
 
 	// ExportInstance streams a portable backup tarball of the instance to w.
 	ExportInstance(ctx context.Context, name string, w io.Writer) error

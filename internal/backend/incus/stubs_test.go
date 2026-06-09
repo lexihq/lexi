@@ -47,6 +47,40 @@ type instanceServerStub struct {
 	networkErr        error                 // error for network calls
 	createdNet        *api.NetworksPost     // captured by CreateNetwork
 	deletedNet        string                // captured by DeleteNetwork
+
+	pools      []api.StoragePool       // returned by GetStoragePools
+	pool       *api.StoragePool        // returned by GetStoragePool
+	volumes    []api.StorageVolume     // returned by GetStoragePoolVolumes
+	volume     *api.StorageVolume      // returned by GetStoragePoolVolume
+	storageErr error                   // error for storage calls
+	createdVol *api.StorageVolumesPost // captured by CreateStoragePoolVolume
+	deletedVol [3]string               // pool/volType/name captured by DeleteStoragePoolVolume
+}
+
+func (s *instanceServerStub) GetStoragePools() ([]api.StoragePool, error) {
+	return s.pools, s.storageErr
+}
+
+func (s *instanceServerStub) GetStoragePool(string) (*api.StoragePool, string, error) {
+	return s.pool, "etag", s.storageErr
+}
+
+func (s *instanceServerStub) GetStoragePoolVolumes(string) ([]api.StorageVolume, error) {
+	return s.volumes, s.storageErr
+}
+
+func (s *instanceServerStub) GetStoragePoolVolume(string, string, string) (*api.StorageVolume, string, error) {
+	return s.volume, "etag", s.storageErr
+}
+
+func (s *instanceServerStub) CreateStoragePoolVolume(_ string, vol api.StorageVolumesPost) error {
+	s.createdVol = &vol
+	return s.storageErr
+}
+
+func (s *instanceServerStub) DeleteStoragePoolVolume(pool, volType, name string) error {
+	s.deletedVol = [3]string{pool, volType, name}
+	return s.storageErr
 }
 
 func (s *instanceServerStub) GetNetworks() ([]api.Network, error) {

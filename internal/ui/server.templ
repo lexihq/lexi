@@ -1,0 +1,159 @@
+package ui
+
+import (
+	"fmt"
+	"net/url"
+
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/icon"
+	"github.com/adam/lxcon/internal/components/table"
+)
+
+// ServerPage is the Server section: host overview, server config editor,
+// certificate trust list, and the swappable warnings table.
+templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, config map[string]string, certs []backend.Certificate, warnings []backend.Warning) {
+	@Layout("Server", caps, Nav{Section: NavServer}) {
+		<div class="mb-6">
+			<h1 class="text-2xl font-semibold">Server</h1>
+			<p class="text-muted-foreground">The Incus host: identity, configuration, trust, and warnings.</p>
+		</div>
+		<section class="mb-8 rounded-lg border bg-card p-4">
+			<h2 class="mb-3 text-lg font-medium">Overview</h2>
+			<dl class="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+				<div><dt class="text-muted-foreground">Server version</dt><dd>{ overview.ServerVersion }</dd></div>
+				<div><dt class="text-muted-foreground">Kernel</dt><dd>{ overview.Kernel } { overview.KernelVersion }</dd></div>
+				<div><dt class="text-muted-foreground">Driver</dt><dd>{ overview.Driver } { overview.DriverVersion }</dd></div>
+				<div><dt class="text-muted-foreground">CPU threads</dt><dd>{ fmt.Sprint(overview.CPUThreads) }</dd></div>
+				<div><dt class="text-muted-foreground">Memory</dt><dd>{ sizeLabel(overview.MemoryUsed) } / { sizeLabel(overview.MemoryTotal) }</dd></div>
+			</dl>
+		</section>
+		<section class="mb-8 rounded-lg border bg-card p-4">
+			<h2 class="mb-1 text-lg font-medium">Configuration</h2>
+			<p class="mb-3 text-sm text-muted-foreground">Server config keys. Clearing a key's name removes it on apply.</p>
+			<form method="post" action="/server/config" class="max-w-xl space-y-2">
+				for _, k := range sortedKeys(config) {
+					<div class="flex gap-2">
+						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+						<input name="value" value={ config[k] } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+					</div>
+				}
+				for i := 0; i < 3; i++ {
+					<div class="flex gap-2">
+						<input name="key" placeholder="user.mykey" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+						<input name="value" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+					</div>
+				}
+				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					@icon.Icon("check")(icon.Props{Class: "size-4"})
+					Apply config
+				}
+			</form>
+		</section>
+		<section class="mb-8 rounded-lg border bg-card p-4">
+			<h2 class="mb-3 text-lg font-medium">Trusted certificates</h2>
+			if len(certs) == 0 {
+				<p class="text-sm text-muted-foreground">No trusted certificates.</p>
+			} else {
+				@table.Table() {
+					@table.Header() {
+						@table.Row() {
+							@table.Head() { Name }
+							@table.Head() { Type }
+							@table.Head() { Fingerprint }
+							@table.Head() { Access }
+						}
+					}
+					@table.Body() {
+						for _, c := range certs {
+							@table.Row() {
+								@table.Cell() {
+									{ c.Name }
+								}
+								@table.Cell() {
+									{ c.Type }
+								}
+								@table.Cell() {
+									<span class="font-mono text-xs" title={ c.Fingerprint }>{ shortFingerprint(c.Fingerprint) }</span>
+								}
+								@table.Cell() {
+									if c.Restricted {
+										<span class="rounded bg-accent px-1.5 py-0.5 text-xs">restricted</span>
+									} else {
+										<span class="text-xs text-muted-foreground">full</span>
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		</section>
+		<section class="rounded-lg border bg-card p-4">
+			<h2 class="mb-3 text-lg font-medium">Warnings</h2>
+			@WarningsTable(warnings)
+		</section>
+	}
+}
+
+// WarningsTable is the swappable warnings list (re-rendered in place by
+// delete).
+templ WarningsTable(warnings []backend.Warning) {
+	<div id="warnings">
+		if len(warnings) == 0 {
+			<p class="text-sm text-muted-foreground">No warnings.</p>
+		} else {
+			@table.Table() {
+				@table.Header() {
+					@table.Row() {
+						@table.Head() { Severity }
+						@table.Head() { Last message }
+						@table.Head() { Count }
+						@table.Head() { Last seen }
+						@table.Head() { Status }
+						@table.Head() { }
+					}
+				}
+				@table.Body() {
+					for _, w := range warnings {
+						@table.Row() {
+							@table.Cell() {
+								<span class={ "rounded border px-1.5 py-0.5 text-xs", severityClass(w.Severity) }>{ w.Severity }</span>
+							}
+							@table.Cell() {
+								<span title={ w.Type }>{ w.LastMessage }</span>
+							}
+							@table.Cell() {
+								{ fmt.Sprint(w.Count) }
+							}
+							@table.Cell() {
+								{ w.LastSeenAt.Format("2006-01-02 15:04") }
+							}
+							@table.Cell() {
+								{ w.Status }
+							}
+							@table.Cell() {
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/server/warnings/" + url.PathEscape(w.UUID) + "/delete", "hx-target": "#warnings", "hx-swap": "outerHTML"}}) {
+									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+									Delete
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	</div>
+}
+
+// severityClass colors the warning severity badge.
+func severityClass(severity string) string {
+	switch severity {
+	case "high":
+		return "text-red-500"
+	case "moderate":
+		return "text-yellow-500"
+	default:
+		return "text-muted-foreground"
+	}
+}

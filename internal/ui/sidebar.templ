@@ -65,6 +65,17 @@ templ Sidebar(caps backend.Capabilities, nav Nav) {
 				Images
 			</a>
 		}
+		if caps.ServerAdmin {
+			<a
+				href="/server"
+				class={ "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium",
+					templ.KV("bg-accent text-accent-foreground", nav.Section == NavServer),
+					templ.KV("text-muted-foreground hover:text-foreground", nav.Section != NavServer) }
+			>
+				@icon.Icon("settings")(icon.Props{Class: "size-4"})
+				Server
+			</a>
+		}
 	</nav>
 	<div class="mt-4">
 		<p class="px-3 pb-1 text-xs font-medium uppercase text-muted-foreground">Instances</p>

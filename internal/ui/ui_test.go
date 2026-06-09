@@ -212,6 +212,38 @@ func TestSidebarGatesStorageLink(t *testing.T) {
 	}
 }
 
+func TestSidebarGatesServerLink(t *testing.T) {
+	with := render(t, Sidebar(backend.Capabilities{ServerAdmin: true}, Nav{Section: NavServer}))
+	assertContains(t, with, "/server")
+	assertContains(t, with, "Server")
+
+	without := render(t, Sidebar(backend.Capabilities{}, Nav{Section: NavInstances}))
+	if strings.Contains(without, `href="/server"`) {
+		t.Fatalf("server link must be hidden without the capability, got %q", without)
+	}
+}
+
+func TestServerPageRendersSections(t *testing.T) {
+	html := render(t, ServerPage(testCaps(),
+		backend.ServerOverview{ServerVersion: "6.23", Kernel: "Linux", KernelVersion: "6.8", Driver: "lxc", DriverVersion: "6.0", CPUThreads: 16, MemoryUsed: 1 << 30, MemoryTotal: 8 << 30},
+		map[string]string{"core.https_address": ":8443"},
+		[]backend.Certificate{{Name: "laptop", Type: "client", Fingerprint: "abcdef0123456789", Restricted: true}},
+		[]backend.Warning{{UUID: "w-1", Severity: "high", Status: "new", Count: 2, LastMessage: "boom"}}))
+
+	assertContains(t, html, "6.23")
+	assertContains(t, html, `value="core.https_address"`)
+	assertContains(t, html, `action="/server/config"`)
+	assertContains(t, html, "laptop")
+	assertContains(t, html, "restricted")
+	assertContains(t, html, "boom")
+	assertContains(t, html, `hx-post="/server/warnings/w-1/delete"`)
+}
+
+func TestWarningsTableEmptyState(t *testing.T) {
+	html := render(t, WarningsTable(nil))
+	assertContains(t, html, "No warnings")
+}
+
 func TestFilesPanelRendersEntriesAndControls(t *testing.T) {
 	html := render(t, FilesPanel("demo", "/etc", []backend.FileEntry{
 		{Name: "ssl", Dir: true, Mode: "0755"},

@@ -554,3 +554,33 @@ test("tasks panel lists operations and picks up new ones", async ({ page }) => {
   }).toPass({ timeout: 10000 });
   await expect(footer.getByText(`Deleting instance "${name}"`)).toBeVisible({ timeout: 10000 });
 });
+
+test("files tab: browse, download, and upload", async ({ page }) => {
+  await page.goto("/instances/demo?tab=files");
+  const files = page.locator("#files");
+  await expect(files).toBeVisible();
+
+  // Descend from the root into /etc. The panel content is freshly hx-loaded,
+  // so retry a lost click (swap-then-click race).
+  await expect(async () => {
+    await files.getByRole("button", { name: "etc" }).click();
+    await expect(files.getByText("hostname")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
+  // Download /etc/hostname (first file row alphabetically) and check the name.
+  const downloadPromise = page.waitForEvent("download");
+  await files.getByRole("link", { name: "Download" }).first().click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("hostname");
+
+  // Upload a file into /etc and see its row appear.
+  await files.locator('input[type="file"]').setInputFiles({
+    name: "e2e-upload.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("hello from e2e"),
+  });
+  await expect(async () => {
+    await files.getByRole("button", { name: "Upload" }).click();
+    await expect(files.getByText("e2e-upload.txt")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});

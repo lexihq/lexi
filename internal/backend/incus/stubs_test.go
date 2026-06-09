@@ -106,6 +106,10 @@ func (s *instanceServerStub) GetInstanceFile(_ string, path string) (io.ReadClos
 		return nil, nil, errNotFoundStatus()
 	}
 	resp := f.resp
+	if resp.Type == "directory" {
+		// Mirror the real client: directories come back with no content body.
+		return nil, &resp, nil
+	}
 	return io.NopCloser(strings.NewReader(f.content)), &resp, nil
 }
 

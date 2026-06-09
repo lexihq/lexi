@@ -87,7 +87,11 @@ func (b *incusBackend) PushFile(_ context.Context, instance, path string, r io.R
 
 // closeAndLogFile closes a file-content reader, logging (not failing) close
 // errors — the content has either been fully consumed or deliberately skipped.
+// The reader is nil for directories (the client returns no body for them).
 func closeAndLogFile(path string, c io.Closer) {
+	if c == nil {
+		return
+	}
 	if err := c.Close(); err != nil {
 		slog.Warn("close instance file", "path", path, "err", err)
 	}

@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -34,6 +35,7 @@ func (f *Fake) CreateSnapshot(_ context.Context, name, snapshot string, opts bac
 	in.snapshots = append(in.snapshots, backend.Snapshot{
 		Name: snapshot, CreatedAt: f.now(), Stateful: opts.Stateful, ExpiresAt: opts.ExpiresAt,
 	})
+	f.logOp(fmt.Sprintf("Creating snapshot %q of %q", snapshot, name))
 	return nil
 }
 
@@ -129,6 +131,7 @@ func (f *Fake) RestoreSnapshot(_ context.Context, name, snapshot string) error {
 	}
 	for _, s := range in.snapshots {
 		if s.Name == snapshot {
+			f.logOp(fmt.Sprintf("Restoring snapshot %q of %q", snapshot, name))
 			return nil
 		}
 	}
@@ -146,6 +149,7 @@ func (f *Fake) DeleteSnapshot(_ context.Context, name, snapshot string) error {
 	for i, s := range in.snapshots {
 		if s.Name == snapshot {
 			in.snapshots = append(in.snapshots[:i], in.snapshots[i+1:]...)
+			f.logOp(fmt.Sprintf("Deleting snapshot %q of %q", snapshot, name))
 			return nil
 		}
 	}

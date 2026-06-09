@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"fmt"
 	"sort"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -52,30 +53,31 @@ func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) erro
 		config:  map[string]string{},
 		devices: map[string]map[string]string{},
 	}
+	f.logOp(fmt.Sprintf("Creating instance %q", opt.Name))
 	return nil
 }
 
 func (f *Fake) StartInstance(_ context.Context, name string) error {
-	return f.setStatus(name, "Running")
+	return f.setStatus(name, "Running", "Starting")
 }
 
 func (f *Fake) StopInstance(_ context.Context, name string) error {
-	return f.setStatus(name, "Stopped")
+	return f.setStatus(name, "Stopped", "Stopping")
 }
 
 func (f *Fake) RestartInstance(_ context.Context, name string) error {
-	return f.setStatus(name, "Running")
+	return f.setStatus(name, "Running", "Restarting")
 }
 
 func (f *Fake) PauseInstance(_ context.Context, name string) error {
-	return f.setStatus(name, "Frozen")
+	return f.setStatus(name, "Frozen", "Pausing")
 }
 
 func (f *Fake) ResumeInstance(_ context.Context, name string) error {
-	return f.setStatus(name, "Running")
+	return f.setStatus(name, "Running", "Resuming")
 }
 
-func (f *Fake) setStatus(name, status string) error {
+func (f *Fake) setStatus(name, status, verb string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -84,6 +86,7 @@ func (f *Fake) setStatus(name, status string) error {
 		return notFound(name)
 	}
 	in.Status = status
+	f.logOp(fmt.Sprintf("%s instance %q", verb, name))
 	return nil
 }
 
@@ -95,6 +98,7 @@ func (f *Fake) DeleteInstance(_ context.Context, name string) error {
 		return notFound(name)
 	}
 	delete(f.instances, name)
+	f.logOp(fmt.Sprintf("Deleting instance %q", name))
 	return nil
 }
 
@@ -117,5 +121,6 @@ func (f *Fake) CloneInstance(_ context.Context, src, dst string) error {
 			CreatedAt: f.now(),
 		},
 	}
+	f.logOp(fmt.Sprintf("Cloning instance %q to %q", src, dst))
 	return nil
 }

@@ -83,6 +83,13 @@ type instanceServerStub struct {
 	createdAlias  *api.ImageAliasesPost       // captured by CreateImageAlias
 	deletedAlias  string                      // captured by DeleteImageAlias
 	aliasErr      error                       // error for image alias calls
+
+	operations    []api.Operation // returned by GetOperations
+	operationsErr error           // error for GetOperations
+}
+
+func (s *instanceServerStub) GetOperations() ([]api.Operation, error) {
+	return s.operations, s.operationsErr
 }
 
 func (s *instanceServerStub) CreateInstanceSnapshot(_ string, p api.InstanceSnapshotsPost) (incusclient.Operation, error) {

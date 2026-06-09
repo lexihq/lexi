@@ -48,6 +48,8 @@ type Capabilities struct {
 	// ImageManagement is local image store management: publish, copy from the
 	// images remote, delete, and alias ops.
 	ImageManagement bool
+	// Operations is the daemon task log (running + recent operations).
+	Operations bool
 }
 
 // Instance is a system container or virtual machine.
@@ -200,6 +202,17 @@ type Image struct {
 	Type         string // "container" | "virtual-machine"
 }
 
+// Operation is a daemon task: an async operation that is running or recently
+// finished (Incus prunes completed operations after a few seconds).
+type Operation struct {
+	ID          string
+	Description string
+	Class       string // task | websocket | token
+	Status      string // Running | Success | Failure | ...
+	Err         string // failure detail, "" when none
+	CreatedAt   time.Time
+}
+
 // LocalImage is an image in the host's local image store (as opposed to Image,
 // which is a per-alias entry of the remote catalog backing the create picker).
 type LocalImage struct {
@@ -305,4 +318,8 @@ type Backend interface {
 	DeleteImage(ctx context.Context, fingerprint string) error
 	AddImageAlias(ctx context.Context, fingerprint, alias string) error
 	RemoveImageAlias(ctx context.Context, alias string) error
+
+	// ListOperations returns running and recently finished daemon tasks,
+	// newest first.
+	ListOperations(ctx context.Context) ([]Operation, error)
 }

@@ -43,6 +43,8 @@ type Fake struct {
 	networks  map[string]backend.Network
 	pools     map[string]*storagePool
 	images    map[string]*backend.LocalImage // keyed by fingerprint
+	ops       []backend.Operation            // newest first, capped at maxOps
+	opSeq     int
 	clock     time.Time
 }
 
@@ -116,6 +118,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		Move:       true,
 
 		ImageManagement: true,
+		Operations:      true,
 	}
 }
 

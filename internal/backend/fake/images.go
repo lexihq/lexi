@@ -63,6 +63,7 @@ func (f *Fake) PublishImage(_ context.Context, instance, alias string) error {
 		img.Aliases = []string{alias}
 	}
 	f.images[img.Fingerprint] = img
+	f.logOp(fmt.Sprintf("Publishing image from instance %q", instance))
 	return nil
 }
 
@@ -86,6 +87,7 @@ func (f *Fake) CopyImage(_ context.Context, alias string) error {
 			Type:        c.Type,
 			CreatedAt:   f.now(),
 		}
+		f.logOp(fmt.Sprintf("Copying image %q", alias))
 		return nil
 	}
 	return notFoundf("image alias %q", alias)
@@ -99,6 +101,7 @@ func (f *Fake) DeleteImage(_ context.Context, fingerprint string) error {
 		return notFoundf("image %q", fingerprint)
 	}
 	delete(f.images, fingerprint)
+	f.logOp(fmt.Sprintf("Deleting image %q", fingerprint))
 	return nil
 }
 

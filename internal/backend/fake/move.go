@@ -1,6 +1,9 @@
 package fake
 
-import "context"
+import (
+	"context"
+	"fmt"
+)
 
 func (f *Fake) RenameInstance(_ context.Context, name, newName string) error {
 	f.mu.Lock()
@@ -16,6 +19,7 @@ func (f *Fake) RenameInstance(_ context.Context, name, newName string) error {
 	in.Name = newName
 	delete(f.instances, name)
 	f.instances[newName] = in
+	f.logOp(fmt.Sprintf("Renaming instance %q to %q", name, newName))
 	return nil
 }
 
@@ -30,5 +34,6 @@ func (f *Fake) MoveInstance(_ context.Context, name, pool string) error {
 		return notFoundf("storage pool %q", pool)
 	}
 	// The fake doesn't model per-instance pool placement; a validated no-op.
+	f.logOp(fmt.Sprintf("Moving instance %q to pool %q", name, pool))
 	return nil
 }

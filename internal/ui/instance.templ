@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"net/url"
+
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
 	"github.com/adam/lxcon/internal/components/icon"
@@ -39,6 +41,13 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 		switch active {
 			case "snapshots":
 				@SnapshotTable(inst.Name, snapshots)
+				<div
+					id="snapshot-schedule"
+					hx-get={ "/instances/" + url.PathEscape(inst.Name) + "/snapshots/schedule" }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+					class="mt-4"
+				></div>
 			case "metrics":
 				<div
 					id="metrics"

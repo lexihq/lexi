@@ -78,3 +78,31 @@ func TestUpdateSnapshotExpiryReturnsTable(t *testing.T) {
 	assertStatus(t, res, http.StatusOK)
 	assert.Contains(t, res.Body.String(), "s0")
 }
+
+func TestSnapshotScheduleFormRenders(t *testing.T) {
+	res := request(t, New(newInstance(t)), "GET", "/instances/demo/snapshots/schedule", "", true)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, `name="schedule"`)
+	assert.Contains(t, body, `name="expiry"`)
+	assert.Contains(t, body, `name="pattern"`)
+}
+
+func TestSetSnapshotScheduleAppliesAndReturnsForm(t *testing.T) {
+	b := newInstance(t)
+	res := formRequest(t, New(b), "/instances/demo/snapshots/schedule",
+		url.Values{"schedule": {"@daily"}, "expiry": {"2w"}, "pattern": {"snap%d"}}, true)
+	assertStatus(t, res, http.StatusOK)
+	s, err := b.GetSnapshotSchedule(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "@daily", s.Schedule)
+	assert.Equal(t, "2w", s.Expiry)
+	assert.Equal(t, "snap%d", s.Pattern)
+	assert.Contains(t, res.Body.String(), "@daily")
+}
+
+func TestSnapshotsTabIncludesScheduleLazyLoad(t *testing.T) {
+	res := request(t, New(newInstance(t)), "GET", "/instances/demo?tab=snapshots", "", true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), `/instances/demo/snapshots/schedule`)
+}

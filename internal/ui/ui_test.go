@@ -263,6 +263,15 @@ func TestSnapshotTableShowsStatefulBadgeAndRowActions(t *testing.T) {
 	assertContains(t, html, `name="new_name"`)
 }
 
+func TestSnapshotScheduleFormPrefilled(t *testing.T) {
+	html := render(t, SnapshotScheduleForm("demo", backend.SnapshotSchedule{Schedule: "@daily", Expiry: "2w", Pattern: "snap%d"}))
+	assertContains(t, html, `id="snapshot-schedule"`)
+	assertContains(t, html, `hx-post="/instances/demo/snapshots/schedule"`)
+	assertContains(t, html, `value="@daily"`)
+	assertContains(t, html, `value="2w"`)
+	assertContains(t, html, `value="snap%d"`)
+}
+
 func TestErrorToastRendersMessage(t *testing.T) {
 	html := render(t, ErrorToast("boom"))
 	assertContains(t, html, "boom")

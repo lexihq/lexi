@@ -73,6 +73,46 @@ func (h handlers) updateSnapshotExpiry(w http.ResponseWriter, r *http.Request) {
 	h.renderSnapshotsOrRedirect(w, r, name)
 }
 
+// snapshotSchedule renders the (lazily loaded) auto-snapshot schedule form.
+func (h handlers) snapshotSchedule(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	s, err := h.backend.GetSnapshotSchedule(r.Context(), name)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.render(w, r, http.StatusOK, ui.SnapshotScheduleForm(name, s))
+}
+
+// setSnapshotSchedule writes the three snapshots.* keys, then re-renders the
+// schedule form on HTMX (else redirects to the instance).
+func (h handlers) setSnapshotSchedule(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := r.PathValue("name")
+	s := backend.SnapshotSchedule{
+		Schedule: strings.TrimSpace(r.Form.Get("schedule")),
+		Expiry:   strings.TrimSpace(r.Form.Get("expiry")),
+		Pattern:  strings.TrimSpace(r.Form.Get("pattern")),
+	}
+	if err := h.backend.SetSnapshotSchedule(r.Context(), name, s); err != nil {
+		h.fail(w, err)
+		return
+	}
+	if !isHTMX(r) {
+		redirectToInstance(w, name)
+		return
+	}
+	cur, err := h.backend.GetSnapshotSchedule(r.Context(), name)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.render(w, r, http.StatusOK, ui.SnapshotScheduleForm(name, cur))
+}
+
 // parseSnapshotExpiry parses a datetime-local value as UTC; an empty value means
 // "no expiry" (zero time). The <input type="datetime-local"> carries no timezone
 // offset, so we fix the interpretation to UTC (and label the field UTC) rather

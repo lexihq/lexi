@@ -88,6 +88,34 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 	</section>
 }
 
+// SnapshotScheduleForm is the swappable per-instance auto-snapshot config
+// (snapshots.schedule/expiry/pattern). Lazily loaded into #snapshot-schedule on
+// the snapshots tab and re-rendered in place on submit.
+templ SnapshotScheduleForm(name string, schedule backend.SnapshotSchedule) {
+	{{ en := url.PathEscape(name) }}
+	<section id="snapshot-schedule" class="rounded-lg border bg-card p-4">
+		<h2 class="mb-3 text-lg font-medium">Snapshot schedule</h2>
+		<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/schedule") } hx-post={ "/instances/" + en + "/snapshots/schedule" } hx-target="#snapshot-schedule" hx-swap="outerHTML" class="flex flex-wrap items-end gap-3">
+			<label class="text-sm">
+				<span class="mb-1 block text-muted-foreground">Schedule</span>
+				<input class="h-9 w-40 rounded-md border bg-background px-3 text-sm" name="schedule" value={ schedule.Schedule } placeholder="@daily"/>
+			</label>
+			<label class="text-sm">
+				<span class="mb-1 block text-muted-foreground">Expiry</span>
+				<input class="h-9 w-28 rounded-md border bg-background px-3 text-sm" name="expiry" value={ schedule.Expiry } placeholder="2w"/>
+			</label>
+			<label class="text-sm">
+				<span class="mb-1 block text-muted-foreground">Pattern</span>
+				<input class="h-9 w-32 rounded-md border bg-background px-3 text-sm" name="pattern" value={ schedule.Pattern } placeholder="snap%d"/>
+			</label>
+			@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline}) {
+				Save schedule
+			}
+		</form>
+		<p class="mt-2 text-xs text-muted-foreground">Leave a field blank to clear it. Schedule accepts cron or shorthands like @daily; expiry is a duration like 2w.</p>
+	</section>
+}
+
 // LimitsForm renders the resource-limits editor; it re-renders itself in place
 // after an HTMX submit so the inputs reflect the applied values.
 templ LimitsForm(inst backend.Instance) {

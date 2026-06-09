@@ -40,6 +40,38 @@ func TestStartHXReturnsUpdatedRow(t *testing.T) {
 	}
 }
 
+func TestRestartPauseResumeReturnRowOnHTMX(t *testing.T) {
+	cases := []struct {
+		path   string
+		status string // status reflected in the returned row
+	}{
+		{"/instances/demo/restart", "Running"},
+		{"/instances/demo/pause", "Frozen"},
+		{"/instances/demo/resume", "Running"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.path, func(t *testing.T) {
+			b := fake.New()
+			if err := b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Start: true}); err != nil {
+				t.Fatal(err)
+			}
+
+			res := request(t, New(b), "POST", tc.path, "", true)
+
+			assertStatus(t, res, http.StatusOK)
+			body := res.Body.String()
+			assert.Contains(t, body, `id="instance-demo"`)
+			assert.Contains(t, body, tc.status)
+		})
+	}
+}
+
+func TestLifecycleActionUnknownInstanceIs404(t *testing.T) {
+	b := fake.New()
+	res := request(t, New(b), "POST", "/instances/ghost/restart", "", true)
+	assertStatus(t, res, http.StatusNotFound)
+}
+
 func TestDeleteHXRemovesRow(t *testing.T) {
 	b := fake.New()
 	if err := b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}); err != nil {

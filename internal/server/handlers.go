@@ -385,6 +385,18 @@ func (h handlers) stop(w http.ResponseWriter, r *http.Request) {
 	h.instanceAction(w, r, func(name string) error { return h.backend.StopInstance(r.Context(), name) })
 }
 
+func (h handlers) restart(w http.ResponseWriter, r *http.Request) {
+	h.instanceAction(w, r, func(name string) error { return h.backend.RestartInstance(r.Context(), name) })
+}
+
+func (h handlers) pause(w http.ResponseWriter, r *http.Request) {
+	h.instanceAction(w, r, func(name string) error { return h.backend.PauseInstance(r.Context(), name) })
+}
+
+func (h handlers) resume(w http.ResponseWriter, r *http.Request) {
+	h.instanceAction(w, r, func(name string) error { return h.backend.ResumeInstance(r.Context(), name) })
+}
+
 func (h handlers) delete(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.DeleteInstance(r.Context(), name); err != nil {

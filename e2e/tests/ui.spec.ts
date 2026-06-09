@@ -229,3 +229,31 @@ test("browse profiles and attach one to an instance", async ({ page }) => {
   // The swapped-in control keeps gpu checked.
   await expect(page.locator("#profiles").getByRole("checkbox", { name: "gpu" })).toBeChecked();
 });
+
+test("edit instance config in the Configuration tab", async ({ page }) => {
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Configuration" }).click();
+  const config = page.locator("#config");
+  await expect(config.getByText("Devices")).toBeVisible();
+
+  // Add a key via the trailing blank row.
+  await config.locator('input[name="key"]').last().fill("security.nesting");
+  await config.locator('input[name="value"]').last().fill("true");
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().includes("/instances/demo/config"),
+    ),
+    config.getByRole("button", { name: "Apply config" }).click(),
+  ]);
+  await expect(page.locator('#config input[value="security.nesting"]')).toBeVisible();
+
+  // Remove it: clear the key and apply.
+  await page.locator('#config input[value="security.nesting"]').fill("");
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().includes("/instances/demo/config"),
+    ),
+    page.locator("#config").getByRole("button", { name: "Apply config" }).click(),
+  ]);
+  await expect(page.locator('#config input[value="security.nesting"]')).toHaveCount(0);
+});

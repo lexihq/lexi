@@ -47,6 +47,10 @@ type Fake struct {
 	ops       []backend.Operation            // newest first, capped at maxOps
 	opSeq     int
 	clock     time.Time
+
+	serverConfig map[string]string
+	certificates []backend.Certificate
+	warnings     []backend.Warning
 }
 
 // New returns an empty fake backend.
@@ -88,6 +92,24 @@ func New() *Fake {
 				CreatedAt:   time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC),
 			},
 		},
+		serverConfig: map[string]string{"core.https_address": ":8443"},
+		certificates: []backend.Certificate{
+			{Name: "admin-laptop", Type: "client", Fingerprint: "fake-cert-fingerprint-1234", Restricted: false},
+		},
+		warnings: []backend.Warning{
+			{
+				UUID: "fake-warning-1", Type: "Couldn't find the CGroup network priority controller",
+				Severity: "low", Status: "new", Count: 3,
+				LastMessage: "Couldn't find the CGroup network priority controller",
+				LastSeenAt:  time.Date(2025, time.December, 31, 12, 0, 0, 0, time.UTC),
+			},
+			{
+				UUID: "fake-warning-2", Type: "Instance type not operational",
+				Severity: "moderate", Status: "acknowledged", Count: 1,
+				LastMessage: "KVM support is missing (no /dev/kvm)",
+				LastSeenAt:  time.Date(2025, time.December, 30, 9, 0, 0, 0, time.UTC),
+			},
+		},
 		instances: make(map[string]*instance),
 		clock:     time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 	}
@@ -121,6 +143,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		ImageManagement: true,
 		Operations:      true,
 		Files:           true,
+		ServerAdmin:     true,
 	}
 }
 

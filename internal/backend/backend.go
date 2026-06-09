@@ -52,6 +52,9 @@ type Capabilities struct {
 	Operations bool
 	// Files is instance file transfer: browse, download, upload.
 	Files bool
+	// ServerAdmin is the Server section: overview, config, certificates,
+	// warnings.
+	ServerAdmin bool
 }
 
 // Instance is a system container or virtual machine.
@@ -204,6 +207,38 @@ type Image struct {
 	Type         string // "container" | "virtual-machine"
 }
 
+// ServerOverview is the host summary for the Server section: daemon and host
+// identity plus the headline resources.
+type ServerOverview struct {
+	ServerVersion string
+	Kernel        string
+	KernelVersion string
+	Driver        string // e.g. "lxc | qemu"
+	DriverVersion string
+	CPUThreads    int
+	MemoryUsed    int64
+	MemoryTotal   int64
+}
+
+// Certificate is one entry of the daemon's trust store.
+type Certificate struct {
+	Name        string
+	Type        string // client | metrics | ...
+	Fingerprint string
+	Restricted  bool
+}
+
+// Warning is a daemon warning (e.g. a config problem Incus noticed).
+type Warning struct {
+	UUID        string
+	Type        string
+	Severity    string // low | moderate | high
+	Status      string // new | acknowledged | resolved
+	Count       int
+	LastMessage string
+	LastSeenAt  time.Time
+}
+
 // FileEntry is one entry of an instance directory listing.
 type FileEntry struct {
 	Name string
@@ -340,4 +375,13 @@ type Backend interface {
 	PullFile(ctx context.Context, instance, path string, w io.Writer) error
 	// PushFile creates (or overwrites) the instance file at path from r.
 	PushFile(ctx context.Context, instance, path string, r io.Reader) error
+
+	GetServerOverview(ctx context.Context) (ServerOverview, error)
+	GetServerConfig(ctx context.Context) (map[string]string, error)
+	// UpdateServerConfig replaces the server's user config map.
+	UpdateServerConfig(ctx context.Context, config map[string]string) error
+	ListCertificates(ctx context.Context) ([]Certificate, error)
+	// ListWarnings returns daemon warnings, newest last-seen first.
+	ListWarnings(ctx context.Context) ([]Warning, error)
+	DeleteWarning(ctx context.Context, uuid string) error
 }

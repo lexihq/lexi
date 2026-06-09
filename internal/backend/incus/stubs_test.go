@@ -91,6 +91,40 @@ type instanceServerStub struct {
 	createdFile *incusclient.InstanceFileArgs // captured by CreateInstanceFile
 	createdPath string                        // path captured by CreateInstanceFile
 	filesErr    error                         // error for CreateInstanceFile
+
+	server         *api.Server    // returned by GetServer
+	serverErr      error          // error for server admin calls
+	updatedServer  *api.ServerPut // captured by UpdateServer
+	resources      *api.Resources // returned by GetServerResources
+	certificates   []api.Certificate
+	warnings       []api.Warning
+	deletedWarning string // captured by DeleteWarning
+}
+
+func (s *instanceServerStub) GetServer() (*api.Server, string, error) {
+	return s.server, "server-etag", s.serverErr
+}
+
+func (s *instanceServerStub) UpdateServer(put api.ServerPut, _ string) error {
+	s.updatedServer = &put
+	return s.serverErr
+}
+
+func (s *instanceServerStub) GetServerResources() (*api.Resources, error) {
+	return s.resources, s.serverErr
+}
+
+func (s *instanceServerStub) GetCertificates() ([]api.Certificate, error) {
+	return s.certificates, s.serverErr
+}
+
+func (s *instanceServerStub) GetWarnings() ([]api.Warning, error) {
+	return s.warnings, s.serverErr
+}
+
+func (s *instanceServerStub) DeleteWarning(uuid string) error {
+	s.deletedWarning = uuid
+	return s.serverErr
 }
 
 // fileStub is one GetInstanceFile result: a file with content, or a directory

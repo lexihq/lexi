@@ -76,6 +76,7 @@ func New() (*incusBackend, error) {
 			ImageManagement: true,
 			Operations:      true,
 			Files:           true,
+			ServerAdmin:     true,
 		},
 		cpuSamples: make(map[string]cpuSample),
 	}, nil

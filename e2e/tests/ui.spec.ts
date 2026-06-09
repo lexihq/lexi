@@ -138,8 +138,12 @@ test("snapshot create, restore, and delete on the detail page", async ({ page })
   await snapshots.getByRole("button", { name: "Restore" }).click();
   await expect(snapshots).toContainText(snap);
 
-  await snapshots.getByRole("button", { name: "Delete" }).click();
-  await expect(snapshots).not.toContainText(snap);
+  // Same htmx swap-then-click race as the device Remove: retry until the delete
+  // takes effect (a single lost click would otherwise fail the assertion).
+  await expect(async () => {
+    await snapshots.getByRole("button", { name: "Delete" }).click();
+    await expect(snapshots).not.toContainText(snap, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
 });
 
 test("export downloads a tarball that re-imports as a new instance", async ({ page }) => {
@@ -273,9 +277,13 @@ test("add and remove a proxy device in the Devices tab", async ({ page }) => {
   await proxyForm.getByRole("button", { name: "Add proxy" }).click();
   await expect(devices.getByText("web", { exact: true })).toBeVisible();
 
-  // Remove it via the Remove button on the local device row.
-  await devices.getByRole("button", { name: "Remove" }).click();
-  await expect(devices.getByText("web", { exact: true })).toHaveCount(0);
+  // Remove it via the Remove button on the local device row. htmx wires the
+  // freshly-swapped-in button a tick after it renders, so a single click can be
+  // lost; retry until the delete actually takes effect.
+  await expect(async () => {
+    await devices.getByRole("button", { name: "Remove" }).click();
+    await expect(devices.getByText("web", { exact: true })).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
 });
 
 test("create and delete a network in the Networks section", async ({ page }) => {

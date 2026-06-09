@@ -1,0 +1,143 @@
+package ui
+
+import (
+	"fmt"
+	"sort"
+
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/icon"
+	"github.com/adam/lxcon/internal/components/table"
+)
+
+// ProfilesPage lists the available profiles. Each row links to the read-only
+// detail view.
+templ ProfilesPage(caps backend.Capabilities, profiles []backend.Profile) {
+	@Layout("Profiles", caps, Nav{Section: NavProfiles}) {
+		<div class="mb-6">
+			<h1 class="text-2xl font-semibold">Profiles</h1>
+			<p class="text-muted-foreground">Reusable bundles of config and devices that can be attached to instances.</p>
+		</div>
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() { Name }
+					@table.Head() { Description }
+					@table.Head() { Used by }
+				}
+			}
+			@table.Body() {
+				for _, p := range profiles {
+					@table.Row() {
+						@table.Cell() {
+							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/profiles/" + p.Name) }>{ p.Name }</a>
+						}
+						@table.Cell() { { p.Description } }
+						@table.Cell() { { fmt.Sprint(len(p.UsedBy)) } }
+					}
+				}
+			}
+		}
+	}
+}
+
+// ProfileDetailPage shows a profile's config and devices, read-only.
+templ ProfileDetailPage(caps backend.Capabilities, p backend.Profile) {
+	@Layout(p.Name, caps, Nav{Section: NavProfiles}) {
+		<div class="mb-6">
+			<a href="/profiles" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Profiles</a>
+			<h1 class="mt-2 text-2xl font-semibold">{ p.Name }</h1>
+			if p.Description != "" {
+				<p class="text-muted-foreground">{ p.Description }</p>
+			}
+		</div>
+		<section class="mb-8 rounded-lg border bg-card p-4">
+			<h2 class="mb-3 text-lg font-medium">Config</h2>
+			if len(p.Config) == 0 {
+				<p class="text-sm text-muted-foreground">No config keys.</p>
+			} else {
+				<dl class="grid gap-2 text-sm sm:grid-cols-2">
+					for _, k := range sortedKeys(p.Config) {
+						<div><dt class="text-muted-foreground">{ k }</dt><dd>{ p.Config[k] }</dd></div>
+					}
+				</dl>
+			}
+		</section>
+		<section class="rounded-lg border bg-card p-4">
+			<h2 class="mb-3 text-lg font-medium">Devices</h2>
+			if len(p.Devices) == 0 {
+				<p class="text-sm text-muted-foreground">No devices.</p>
+			} else {
+				for _, name := range sortedDeviceNames(p.Devices) {
+					<div class="mb-3">
+						<p class="text-sm font-medium">{ name }</p>
+						<dl class="grid gap-1 pl-3 text-sm sm:grid-cols-2">
+							for _, k := range sortedKeys(p.Devices[name]) {
+								<div><dt class="text-muted-foreground">{ k }</dt><dd>{ p.Devices[name][k] }</dd></div>
+							}
+						</dl>
+					</div>
+				}
+			}
+		</section>
+	}
+}
+
+// InstanceProfilesForm is the attach/detach control on the instance Summary tab:
+// a checkbox per profile (checked = assigned), posting the checked set back. The
+// server reorders so existing assignments keep their position and additions
+// append.
+templ InstanceProfilesForm(inst backend.Instance, all []backend.Profile) {
+	<section id="profiles" class="mb-8 rounded-lg border bg-card p-4">
+		<h2 class="mb-3 text-lg font-medium">Profiles</h2>
+		<form
+			method="post"
+			action={ templ.URL("/instances/" + inst.Name + "/profiles") }
+			hx-post={ "/instances/" + inst.Name + "/profiles" }
+			hx-target="#profiles"
+			hx-swap="outerHTML"
+			class="space-y-2"
+		>
+			for _, p := range all {
+				<label class="flex items-center gap-2 text-sm">
+					<input type="checkbox" name="profile" value={ p.Name } checked?={ assigned(inst.Profiles, p.Name) }/>
+					<span class="font-medium">{ p.Name }</span>
+					if p.Description != "" {
+						<span class="text-muted-foreground">— { p.Description }</span>
+					}
+				</label>
+			}
+			@button.Button(button.Props{Type: button.TypeSubmit}) {
+				@icon.Icon("save")(icon.Props{Class: "size-4"})
+				Apply profiles
+			}
+		</form>
+	</section>
+}
+
+func assigned(list []string, name string) bool {
+	for _, n := range list {
+		if n == name {
+			return true
+		}
+	}
+	return false
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedDeviceNames(devices map[string]map[string]string) []string {
+	names := make([]string, 0, len(devices))
+	for name := range devices {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}

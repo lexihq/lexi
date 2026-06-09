@@ -12,7 +12,7 @@ import (
 // InstancePage is the per-instance detail shell: a header (name/status + Export
 // action) over a tabbed body. Export stays a header action; Console is a tab
 // link to the full-page terminal.
-templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, tab string) {
+templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, profiles []backend.Profile, tab string) {
 	@Layout(inst.Name, caps, Nav{Section: NavInstances, Instance: inst.Name}) {
 		<div class="mb-6 flex items-start justify-between gap-4">
 			<div>
@@ -27,7 +27,7 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 				}
 			}
 		</div>
-		@InstanceBody(caps, inst, snapshots, tab)
+		@InstanceBody(caps, inst, snapshots, profiles, tab)
 	}
 }
 
@@ -35,7 +35,7 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 // target this element (outerHTML), so its id must match what the tab links
 // point at. Only the active tab is mounted, keeping panel ids (#metrics, #logs,
 // #snapshots, #limits) unique and stopping the metrics poll when its tab is left.
-templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, tab string) {
+templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, profiles []backend.Profile, tab string) {
 	{{ active := effectiveTab(caps, tab) }}
 	<div id="instance-body">
 		<div class="mb-4 flex gap-1 border-b">
@@ -87,6 +87,9 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 				</section>
 				if caps.Limits {
 					@LimitsForm(inst)
+				}
+				if caps.Profiles {
+					@InstanceProfilesForm(inst, profiles)
 				}
 		}
 	</div>

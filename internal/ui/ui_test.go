@@ -26,7 +26,7 @@ func TestInstancesPageRendersListAndActions(t *testing.T) {
 }
 
 func TestInstancePageSummaryTabRendersDetails(t *testing.T) {
-	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running", Image: "debian/12"}, []backend.Snapshot{{Name: "snap0"}}, "summary"))
+	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running", Image: "debian/12"}, []backend.Snapshot{{Name: "snap0"}}, nil, "summary"))
 
 	assertContains(t, html, "demo")
 	assertContains(t, html, "Running")
@@ -39,7 +39,7 @@ func TestInstancePageSummaryTabRendersDetails(t *testing.T) {
 }
 
 func TestInstancePageSnapshotsTabRendersControls(t *testing.T) {
-	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, []backend.Snapshot{{Name: "snap0"}}, "snapshots"))
+	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, []backend.Snapshot{{Name: "snap0"}}, nil, "snapshots"))
 
 	assertContains(t, html, "snap0")
 	assertContains(t, html, `hx-post="/instances/demo/snapshots"`)
@@ -64,7 +64,7 @@ func TestInstancePageGatesDisabledTabsToSummary(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			html := render(t, InstancePage(tc.caps, backend.Instance{Name: "demo", Status: "Running", Image: "debian/12"}, []backend.Snapshot{{Name: "snap0"}}, tc.tab))
+			html := render(t, InstancePage(tc.caps, backend.Instance{Name: "demo", Status: "Running", Image: "debian/12"}, []backend.Snapshot{{Name: "snap0"}}, nil, tc.tab))
 
 			assertContains(t, html, "Details") // summary fallback
 			if strings.Contains(html, tc.mustNotHave) {
@@ -77,7 +77,7 @@ func TestInstancePageGatesDisabledTabsToSummary(t *testing.T) {
 func TestInstancePageDefaultTabHighlightsSummary(t *testing.T) {
 	// The bare detail URL passes an empty tab; it must resolve to Summary and
 	// mark the Summary tab (not another) active.
-	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, ""))
+	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, nil, ""))
 
 	assertActiveTab(t, html, "Summary")
 }
@@ -155,6 +155,42 @@ func TestInstanceRowShowsRestartAlwaysAndPauseResumeByStatus(t *testing.T) {
 	if strings.Contains(noPause, "/instances/demo/pause") || strings.Contains(noPause, "/instances/demo/resume") {
 		t.Fatalf("pause/resume must be hidden without the Pause capability, got %q", noPause)
 	}
+}
+
+func TestSidebarShowsProfilesLink(t *testing.T) {
+	html := render(t, Sidebar(Nav{Section: NavProfiles}))
+	assertContains(t, html, "/profiles")
+	assertContains(t, html, "Profiles")
+}
+
+func TestProfilesPageListsProfiles(t *testing.T) {
+	caps := backend.Capabilities{Profiles: true}
+	html := render(t, ProfilesPage(caps, []backend.Profile{
+		{Name: "default", Description: "d"},
+		{Name: "gpu", Description: "g", UsedBy: []string{"demo"}},
+	}))
+	assertContains(t, html, "default")
+	assertContains(t, html, "/profiles/gpu")
+}
+
+func TestProfileDetailPageRendersConfigAndDevices(t *testing.T) {
+	caps := backend.Capabilities{Profiles: true}
+	html := render(t, ProfileDetailPage(caps, backend.Profile{
+		Name:    "gpu",
+		Config:  map[string]string{"limits.cpu": "2"},
+		Devices: map[string]map[string]string{"gpu0": {"type": "gpu"}},
+	}))
+	assertContains(t, html, "gpu0")
+	assertContains(t, html, "limits.cpu")
+}
+
+func TestInstanceProfilesFormReflectsAssigned(t *testing.T) {
+	inst := backend.Instance{Name: "demo", Profiles: []string{"default"}}
+	all := []backend.Profile{{Name: "default"}, {Name: "gpu"}}
+	html := render(t, InstanceProfilesForm(inst, all))
+	assertContains(t, html, "/instances/demo/profiles")
+	assertContains(t, html, `value="default"`)
+	assertContains(t, html, `value="gpu"`)
 }
 
 func render(t *testing.T, component templ.Component) string {

@@ -69,7 +69,7 @@ type Profile struct {
 	Description string
 	Config      map[string]string
 	Devices     map[string]map[string]string // device name → {key: value}
-	UsedBy      []string                      // instance names using it
+	UsedBy      []string                     // instance names using it
 }
 
 // Metrics is a point-in-time resource snapshot. CPUPercent is derived from the

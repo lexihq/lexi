@@ -3,27 +3,72 @@ version: "2"
 linters:
   default: none
   enable:
+    - asasalint
+    - bidichk
     - bodyclose
+    - copyloopvar
+    - dogsled
     - durationcheck
     - errcheck
+    - errchkjson
+    - errname
     - errorlint
+    - exptostd
+    - fatcontext
+    - gocheckcompilerdirectives
+    - gomoddirectives
+    - goprintffuncname
     - govet
     - ineffassign
+    - intrange
+    - iotamixing
+    - loggercheck
     - makezero
+    - mirror
     - misspell
+    - musttag
     - nilerr
     - nilnesserr
+    - nilnil
     - noctx
     - nolintlint
+    - nosprintfhostport
+    - reassign
     - recvcheck
+    - rowserrcheck
+    - sqlclosecheck
     - staticcheck
+    - thelper
     - unconvert
     - unused
+    - usetesting
     - wastedassign
+    - testifylint
+    - predeclared
+    - perfsprint
+    - modernize
+    - embeddedstructfieldcheck
+    - canonicalheader
+    - gocritic
+    - sloglint
+    - unqueryvet
+    - tagalign
+    - spancheck
+    - asciicheck
+    - gosec
   settings:
     errcheck:
       check-blank: true
       check-type-assertions: true
+  exclusions:
+    rules:
+      - path: internal/components/icon/icon_data\.go
+        linters:
+          - gosec
+      - path: _test\.go
+        text: "G304:"
+        linters:
+          - gosec
 
 formatters:
   enable:

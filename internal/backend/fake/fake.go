@@ -23,6 +23,7 @@ var _ backend.Backend = (*Fake)(nil)
 
 type instance struct {
 	backend.Instance
+
 	snapshots []backend.Snapshot
 }
 

@@ -201,6 +201,11 @@ func TestHXRequestTogglesPartialVsRedirect(t *testing.T) {
 	}
 }
 
+func TestInstanceURLPathEscapesName(t *testing.T) {
+	assert.Equal(t, "/instances/demo", instanceURL("demo"))
+	assert.Equal(t, "/instances/%2F%2Fevil.example", instanceURL("//evil.example"))
+}
+
 func TestSidebarPartialListsInstancesWithActive(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
@@ -461,7 +466,7 @@ func request(t *testing.T, srv *http.Server, method, path, body string, htmx boo
 	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), method, path, strings.NewReader(body))
 	if htmx {
-		req.Header.Set("HX-Request", "true")
+		req.Header.Set("Hx-Request", "true")
 	}
 	res := httptest.NewRecorder()
 	srv.Handler.ServeHTTP(res, req)
@@ -473,8 +478,8 @@ func request(t *testing.T, srv *http.Server, method, path, body string, htmx boo
 func boostedRequest(t *testing.T, srv *http.Server, path string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
-	req.Header.Set("HX-Request", "true")
-	req.Header.Set("HX-Boosted", "true")
+	req.Header.Set("Hx-Request", "true")
+	req.Header.Set("Hx-Boosted", "true")
 	res := httptest.NewRecorder()
 	srv.Handler.ServeHTTP(res, req)
 	return res
@@ -485,7 +490,7 @@ func formRequest(t *testing.T, srv *http.Server, path string, form url.Values, h
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	if htmx {
-		req.Header.Set("HX-Request", "true")
+		req.Header.Set("Hx-Request", "true")
 	}
 	res := httptest.NewRecorder()
 	srv.Handler.ServeHTTP(res, req)
@@ -513,7 +518,7 @@ func importRequest(t *testing.T, srv *http.Server, name string, file []byte, htm
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/instances/import", &body)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	if htmx {
-		req.Header.Set("HX-Request", "true")
+		req.Header.Set("Hx-Request", "true")
 	}
 	res := httptest.NewRecorder()
 	srv.Handler.ServeHTTP(res, req)

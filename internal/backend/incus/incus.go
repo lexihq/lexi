@@ -75,7 +75,7 @@ func New() (*incusBackend, error) {
 		srv: srv,
 		caps: backend.Capabilities{
 			Tier:       backend.TierIncus,
-			ServerInfo: fmt.Sprintf("Incus %s", info.Environment.ServerVersion),
+			ServerInfo: "Incus " + info.Environment.ServerVersion,
 			Snapshots:  true,
 			Clone:      true,
 			Backup:     true,
@@ -634,8 +634,9 @@ func (b *incusBackend) ImportInstance(ctx context.Context, name string, r io.Rea
 }
 
 type contextReader struct {
-	ctx context.Context
 	io.Reader
+
+	ctx context.Context
 }
 
 func (r contextReader) Read(p []byte) (int, error) {
@@ -650,8 +651,9 @@ func (r contextReader) Read(p []byte) (int, error) {
 }
 
 type contextWriteSeeker struct {
-	ctx context.Context
 	io.WriteSeeker
+
+	ctx context.Context
 }
 
 func (w contextWriteSeeker) Write(p []byte) (int, error) {

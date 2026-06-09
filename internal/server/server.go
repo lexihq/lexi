@@ -4,10 +4,13 @@ package server
 import (
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/static"
 )
+
+const readHeaderTimeout = 5 * time.Second
 
 // New builds an HTTP server with all lxcon routes registered. The backend is
 // injected here so handlers stay driver-agnostic as the UI grows.
@@ -48,5 +51,8 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/restore", h.restoreSnapshot)
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/delete", h.deleteSnapshot)
 
-	return &http.Server{Handler: mux}
+	return &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: readHeaderTimeout,
+	}
 }

@@ -165,9 +165,9 @@ func TestRestartPauseResumeLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Running", got.Status)
 
-	assert.ErrorIs(t, f.RestartInstance(ctx(), "ghost"), backend.ErrNotFound)
-	assert.ErrorIs(t, f.PauseInstance(ctx(), "ghost"), backend.ErrNotFound)
-	assert.ErrorIs(t, f.ResumeInstance(ctx(), "ghost"), backend.ErrNotFound)
+	require.ErrorIs(t, f.RestartInstance(ctx(), "ghost"), backend.ErrNotFound)
+	require.ErrorIs(t, f.PauseInstance(ctx(), "ghost"), backend.ErrNotFound)
+	require.ErrorIs(t, f.ResumeInstance(ctx(), "ghost"), backend.ErrNotFound)
 }
 
 func TestProfilesListAndGet(t *testing.T) {

@@ -4,8 +4,9 @@ package utils
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	"io"
+	"maps"
+	"strconv"
 	"time"
 
 	"github.com/a-h/templ"
@@ -43,9 +44,7 @@ func IfElse[T any](condition bool, trueValue T, falseValue T) T {
 func MergeAttributes(attrs ...templ.Attributes) templ.Attributes {
 	merged := templ.Attributes{}
 	for _, attr := range attrs {
-		for k, v := range attr {
-			merged[k] = v
-		}
+		maps.Copy(merged, attr)
 	}
 	return merged
 }
@@ -53,12 +52,12 @@ func MergeAttributes(attrs ...templ.Attributes) templ.Attributes {
 // RandomID generates a random ID string.
 // Example: RandomID() → "id-1a2b3c"
 func RandomID() string {
-	return fmt.Sprintf("id-%s", rand.Text())
+	return "id-" + rand.Text()
 }
 
 // ScriptVersion is a timestamp generated at app start for cache busting.
 // Used in component script tags to append ?v=<timestamp> to script URLs.
-var ScriptVersion = fmt.Sprintf("%d", time.Now().Unix())
+var ScriptVersion = strconv.FormatInt(time.Now().Unix(), 10)
 
 // ScriptURL generates cache-busted script URLs.
 // Override this to use custom cache busting (CDN, content hashing, etc.)

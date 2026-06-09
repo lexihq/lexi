@@ -237,8 +237,8 @@ func capsWithout(caps backend.Capabilities, feature string) backend.Capabilities
 // highlighted.
 func assertActiveTab(t *testing.T, html, label string) {
 	t.Helper()
-	close := ">" + label + "<"
-	idx := strings.Index(html, close)
+	closingText := ">" + label + "<"
+	idx := strings.Index(html, closingText)
 	if idx < 0 {
 		t.Fatalf("tab %q not found in %q", label, html)
 	}

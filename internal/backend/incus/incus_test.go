@@ -23,6 +23,7 @@ import (
 
 type instanceServerStub struct {
 	incusclient.InstanceServer
+
 	snapshotErr       error
 	listType          api.InstanceType
 	state             *api.InstanceState
@@ -133,6 +134,7 @@ func (s *instanceServerStub) GetInstanceConsoleLog(string, *incusclient.Instance
 
 type readCloserStub struct {
 	io.Reader
+
 	closeErr error
 }
 
@@ -150,6 +152,7 @@ func (s *instanceServerStub) UpdateInstanceState(_ string, req api.InstanceState
 
 type operationStub struct {
 	incusclient.Operation
+
 	waitErr         error
 	waitContextUsed bool
 	cancelUsed      bool
@@ -171,6 +174,7 @@ func (o *operationStub) Cancel() error {
 
 type remoteOperationStub struct {
 	incusclient.RemoteOperation
+
 	waitErr    error
 	cancelErr  error
 	started    chan struct{}
@@ -490,7 +494,7 @@ func TestImportInstanceStopsReadingWhenContextIsCanceled(t *testing.T) {
 	err := b.ImportInstance(ctx, "restored", strings.NewReader("tarball-bytes"))
 
 	require.ErrorIs(t, err, context.Canceled)
-	assert.ErrorIs(t, srv.importReadErr, context.Canceled)
+	require.ErrorIs(t, srv.importReadErr, context.Canceled)
 	assert.Empty(t, srv.importedBytes)
 }
 

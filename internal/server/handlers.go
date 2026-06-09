@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -215,7 +216,7 @@ func (h handlers) updateLimits(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, http.StatusOK, ui.LimitsForm(inst))
 		return
 	}
-	http.Redirect(w, r, "/instances/"+name, http.StatusSeeOther)
+	redirectToInstance(w, name)
 }
 
 func (h handlers) profiles(w http.ResponseWriter, r *http.Request) {
@@ -265,7 +266,7 @@ func (h handlers) setInstanceProfiles(w http.ResponseWriter, r *http.Request) {
 		h.render(w, r, http.StatusOK, ui.InstanceProfilesForm(inst, all))
 		return
 	}
-	http.Redirect(w, r, "/instances/"+name, http.StatusSeeOther)
+	redirectToInstance(w, name)
 }
 
 // mergeProfileOrder keeps currently-assigned profiles that are still checked in
@@ -316,7 +317,8 @@ func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
 	// Cap the whole request body so a large or malicious upload cannot spool an
 	// unbounded tarball to the temp filesystem before import begins.
 	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	// The request body is bounded by MaxBytesReader immediately above.
+	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
 			h.renderError(w, http.StatusRequestEntityTooLarge, "backup file is too large")
@@ -584,7 +586,7 @@ func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, action 
 
 func (h handlers) renderSnapshotsOrRedirect(w http.ResponseWriter, r *http.Request, name string) {
 	if !isHTMX(r) {
-		http.Redirect(w, r, "/instances/"+name, http.StatusSeeOther)
+		redirectToInstance(w, name)
 		return
 	}
 	snapshots, err := h.backend.ListSnapshots(r.Context(), name)
@@ -593,6 +595,15 @@ func (h handlers) renderSnapshotsOrRedirect(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.SnapshotTable(name, snapshots))
+}
+
+func instanceURL(name string) string {
+	return "/instances/" + url.PathEscape(name)
+}
+
+func redirectToInstance(w http.ResponseWriter, name string) {
+	w.Header().Set("Location", instanceURL(name))
+	w.WriteHeader(http.StatusSeeOther)
 }
 
 func (h handlers) renderError(w http.ResponseWriter, code int, message string) {
@@ -635,14 +646,14 @@ func (h handlers) renderWithSidebar(w http.ResponseWriter, r *http.Request, code
 }
 
 func isHTMX(r *http.Request) bool {
-	return r.Header.Get("HX-Request") == "true"
+	return r.Header.Get("Hx-Request") == "true"
 }
 
 // isBoosted reports whether the request came from an hx-boost navigation (as
 // opposed to an explicit hx-get/hx-post partial). Boosted requests want the
 // full page so the shell's content region swap has everything to select.
 func isBoosted(r *http.Request) bool {
-	return r.Header.Get("HX-Boosted") == "true"
+	return r.Header.Get("Hx-Boosted") == "true"
 }
 
 func writeHTML(w http.ResponseWriter, code int) {

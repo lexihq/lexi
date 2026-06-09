@@ -15,7 +15,7 @@ test("create from the image browser, then start/stop/clone/delete in the list", 
       page.waitForResponse(
         (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
       ),
-      page.locator(`#instance-${instance}`).getByRole("button", { name: button }).click(),
+      page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
     ]);
   };
 
@@ -162,4 +162,49 @@ test("export downloads a tarball that re-imports as a new instance", async ({ pa
   // Clean up the imported instance.
   await page.locator(`#instance-${imported}`).getByRole("button", { name: "Delete" }).click();
   await expect(page.locator(`#instance-${imported}`)).toHaveCount(0);
+});
+
+test("restart, pause, and resume an instance from the list row", async ({ page }) => {
+  const name = "e2e-lifecycle";
+
+  const rowAction = async (instance: string, button: string) => {
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
+      ),
+      page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
+    ]);
+  };
+
+  // Create a running instance to exercise the lifecycle controls.
+  await page.goto("/instances/new");
+  await page.locator("#image-search").pressSequentially("debian");
+  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
+  await expect(firstImage).toBeVisible();
+  await firstImage.check();
+  await page.locator("#name").fill(name);
+  await page.locator("input[name=start]").check();
+  await page.getByRole("button", { name: "Create instance" }).click();
+
+  const row = page.locator(`#instance-${name}`);
+  await expect(row).toContainText("Running");
+
+  // Restart leaves it Running.
+  await rowAction(name, "Restart");
+  await expect(row).toContainText("Running");
+
+  // Pause freezes it; the Pause button gives way to Resume.
+  await rowAction(name, "Pause");
+  await expect(row).toContainText("Frozen");
+  await expect(row.getByRole("button", { name: "Resume" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Pause" })).toHaveCount(0);
+
+  // Resume runs it again; Pause returns.
+  await rowAction(name, "Resume");
+  await expect(row).toContainText("Running");
+  await expect(row.getByRole("button", { name: "Pause" })).toBeVisible();
+
+  // Clean up.
+  await rowAction(name, "Delete");
+  await expect(row).toHaveCount(0);
 });

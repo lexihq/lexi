@@ -527,3 +527,30 @@ test("manage local images: copy, publish, alias add/remove, delete", async ({ pa
     await expect(table.getByText("e2e-pub")).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 });
+
+test("tasks panel lists operations and picks up new ones", async ({ page }) => {
+  const name = "e2e-task";
+
+  // Creating an instance records an operation in the fake's task log.
+  await page.goto("/instances/new");
+  await page.locator("#image-search").pressSequentially("debian");
+  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
+  await expect(firstImage).toBeVisible();
+  await firstImage.check();
+  await page.locator("#name").fill(name);
+  await page.getByRole("button", { name: "Create instance" }).click();
+  const row = page.locator(`#instance-${name}`);
+  await expect(row).toBeVisible();
+
+  // Expand the bottom Tasks panel; its content hx-loads on page load.
+  const footer = page.locator("footer");
+  await footer.locator('label[for="ops-toggle"]').click();
+  await expect(footer.getByText(`Creating instance "${name}"`)).toBeVisible();
+
+  // Delete the instance; the 5s poll picks the new operation up.
+  await expect(async () => {
+    await row.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(row).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+  await expect(footer.getByText(`Deleting instance "${name}"`)).toBeVisible({ timeout: 10000 });
+});

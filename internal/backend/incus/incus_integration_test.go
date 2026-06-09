@@ -256,6 +256,26 @@ func TestRoundTripLifecycle(t *testing.T) {
 	}
 }
 
+func TestInstanceConfigRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("cfg")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
+
+	require.NoError(t, b.UpdateInstanceConfig(ctx, name, map[string]string{"security.nesting": "true"}))
+	cfg, err := b.GetInstanceConfig(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "true", cfg.Config["security.nesting"])
+	assert.NotEmpty(t, cfg.Devices) // expanded devices from the default profile
+
+	require.NoError(t, b.UpdateInstanceConfig(ctx, name, map[string]string{}))
+	cfg, err = b.GetInstanceConfig(ctx, name)
+	require.NoError(t, err)
+	_, present := cfg.Config["security.nesting"]
+	assert.False(t, present)
+}
+
 func TestProfilesListAndAssign(t *testing.T) {
 	b := newBackend(t)
 	ctx := context.Background()

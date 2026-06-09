@@ -60,6 +60,40 @@ type instanceServerStub struct {
 	createdSnap     string                      // name captured by CreateStoragePoolVolumeSnapshot
 	deletedSnap     string                      // name captured by DeleteStoragePoolVolumeSnapshot
 	restoredVol     *api.StorageVolumePut       // captured by UpdateStoragePoolVolume
+
+	snapshotSnaps []api.InstanceSnapshot     // returned by GetInstanceSnapshots
+	snapshotPost  *api.InstanceSnapshotsPost // captured by CreateInstanceSnapshot
+	renamedSnap   [3]string                  // name/snap/newName captured by RenameInstanceSnapshot
+	snap          *api.InstanceSnapshot      // returned by GetInstanceSnapshot
+	snapExpiry    *api.InstanceSnapshotPut   // captured by UpdateInstanceSnapshot
+}
+
+func (s *instanceServerStub) CreateInstanceSnapshot(_ string, p api.InstanceSnapshotsPost) (incusclient.Operation, error) {
+	s.snapshotPost = &p
+	if s.snapshotErr != nil {
+		return nil, s.snapshotErr
+	}
+	return &operationStub{}, nil
+}
+
+func (s *instanceServerStub) RenameInstanceSnapshot(name, snap string, p api.InstanceSnapshotPost) (incusclient.Operation, error) {
+	s.renamedSnap = [3]string{name, snap, p.Name}
+	if s.snapshotErr != nil {
+		return nil, s.snapshotErr
+	}
+	return &operationStub{}, nil
+}
+
+func (s *instanceServerStub) GetInstanceSnapshot(string, string) (*api.InstanceSnapshot, string, error) {
+	return s.snap, "etag", s.snapshotErr
+}
+
+func (s *instanceServerStub) UpdateInstanceSnapshot(_, _ string, p api.InstanceSnapshotPut, _ string) (incusclient.Operation, error) {
+	s.snapExpiry = &p
+	if s.snapshotErr != nil {
+		return nil, s.snapshotErr
+	}
+	return &operationStub{}, nil
 }
 
 func (s *instanceServerStub) GetStoragePoolVolumeSnapshots(string, string, string) ([]api.StorageVolumeSnapshot, error) {
@@ -148,7 +182,7 @@ func (s *instanceServerStub) UpdateInstance(_ string, put api.InstancePut, _ str
 }
 
 func (s *instanceServerStub) GetInstanceSnapshots(string) ([]api.InstanceSnapshot, error) {
-	return nil, s.snapshotErr
+	return s.snapshotSnaps, s.snapshotErr
 }
 
 func (s *instanceServerStub) GetInstancesFull(instanceType api.InstanceType) ([]api.InstanceFull, error) {

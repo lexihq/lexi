@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -17,7 +18,7 @@ func (f *Fake) ListSnapshots(_ context.Context, name string) ([]backend.Snapshot
 	return append([]backend.Snapshot(nil), in.snapshots...), nil
 }
 
-func (f *Fake) CreateSnapshot(_ context.Context, name, snapshot string) error {
+func (f *Fake) CreateSnapshot(_ context.Context, name, snapshot string, opts backend.SnapshotOptions) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -30,8 +31,51 @@ func (f *Fake) CreateSnapshot(_ context.Context, name, snapshot string) error {
 			return conflict("snapshot %q already exists on %q", snapshot, name)
 		}
 	}
-	in.snapshots = append(in.snapshots, backend.Snapshot{Name: snapshot, CreatedAt: f.now()})
+	in.snapshots = append(in.snapshots, backend.Snapshot{
+		Name: snapshot, CreatedAt: f.now(), Stateful: opts.Stateful, ExpiresAt: opts.ExpiresAt,
+	})
 	return nil
+}
+
+func (f *Fake) RenameSnapshot(_ context.Context, name, snapshot, newName string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return notFound(name)
+	}
+	idx := -1
+	for i, s := range in.snapshots {
+		if s.Name == newName {
+			return conflict("snapshot %q already exists on %q", newName, name)
+		}
+		if s.Name == snapshot {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		return notFoundf("snapshot %q not found on %q", snapshot, name)
+	}
+	in.snapshots[idx].Name = newName
+	return nil
+}
+
+func (f *Fake) UpdateSnapshotExpiry(_ context.Context, name, snapshot string, expiresAt time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return notFound(name)
+	}
+	for i, s := range in.snapshots {
+		if s.Name == snapshot {
+			in.snapshots[i].ExpiresAt = expiresAt
+			return nil
+		}
+	}
+	return notFoundf("snapshot %q not found on %q", snapshot, name)
 }
 
 func (f *Fake) RestoreSnapshot(_ context.Context, name, snapshot string) error {

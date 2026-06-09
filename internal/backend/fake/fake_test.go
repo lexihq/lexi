@@ -23,8 +23,8 @@ func TestSentinelErrors(t *testing.T) {
 	require.ErrorIs(t, b.RestoreSnapshot(ctx(), "demo", "nope"), backend.ErrNotFound)
 
 	// Duplicate snapshot → ErrConflict.
-	require.NoError(t, b.CreateSnapshot(ctx(), "demo", "s1"))
-	require.ErrorIs(t, b.CreateSnapshot(ctx(), "demo", "s1"), backend.ErrConflict)
+	require.NoError(t, b.CreateSnapshot(ctx(), "demo", "s1", backend.SnapshotOptions{}))
+	require.ErrorIs(t, b.CreateSnapshot(ctx(), "demo", "s1", backend.SnapshotOptions{}), backend.ErrConflict)
 }
 
 func TestCapabilitiesAdvertisesSnapshotAndClone(t *testing.T) {

@@ -98,7 +98,7 @@ func TestRoundTripFull(t *testing.T) {
 		t.Fatalf("want Running, got %q", inst.Status)
 	}
 
-	if err := b.CreateSnapshot(ctx, name, "snap0"); err != nil {
+	if err := b.CreateSnapshot(ctx, name, "snap0", backend.SnapshotOptions{}); err != nil {
 		t.Fatalf("snapshot: %v", err)
 	}
 	snaps, err := b.ListSnapshots(ctx, name)

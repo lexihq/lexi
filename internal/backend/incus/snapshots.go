@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
@@ -20,14 +21,34 @@ func (b *incusBackend) ListSnapshots(_ context.Context, name string) ([]backend.
 			Name:      snapshotShortName(s.Name),
 			CreatedAt: s.CreatedAt,
 			Stateful:  s.Stateful,
+			ExpiresAt: s.ExpiresAt,
 		})
 	}
 	return out, nil
 }
 
-func (b *incusBackend) CreateSnapshot(ctx context.Context, name, snapshot string) error {
-	op, err := b.srv.CreateInstanceSnapshot(name, api.InstanceSnapshotsPost{Name: snapshot})
+func (b *incusBackend) CreateSnapshot(ctx context.Context, name, snapshot string, opts backend.SnapshotOptions) error {
+	post := api.InstanceSnapshotsPost{Name: snapshot, Stateful: opts.Stateful}
+	if !opts.ExpiresAt.IsZero() {
+		t := opts.ExpiresAt
+		post.ExpiresAt = &t
+	}
+	op, err := b.srv.CreateInstanceSnapshot(name, post)
 	return waitOp(ctx, op, err, "snapshot %q of %q", snapshot, name)
+}
+
+func (b *incusBackend) RenameSnapshot(ctx context.Context, name, snapshot, newName string) error {
+	op, err := b.srv.RenameInstanceSnapshot(name, snapshot, api.InstanceSnapshotPost{Name: newName})
+	return waitOp(ctx, op, err, "rename snapshot %q to %q on %q", snapshot, newName, name)
+}
+
+func (b *incusBackend) UpdateSnapshotExpiry(ctx context.Context, name, snapshot string, expiresAt time.Time) error {
+	_, etag, err := b.srv.GetInstanceSnapshot(name, snapshot)
+	if err != nil {
+		return fmt.Errorf("get snapshot %q of %q: %w", snapshot, name, mapErr(err))
+	}
+	op, err := b.srv.UpdateInstanceSnapshot(name, snapshot, api.InstanceSnapshotPut{ExpiresAt: expiresAt}, etag)
+	return waitOp(ctx, op, err, "update expiry of %q on %q", snapshot, name)
 }
 
 func (b *incusBackend) RestoreSnapshot(ctx context.Context, name, snapshot string) error {

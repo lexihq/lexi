@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/ui"
 )
 
@@ -18,7 +19,7 @@ func (h handlers) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusBadRequest, "snapshot name is required")
 		return
 	}
-	if err := h.backend.CreateSnapshot(r.Context(), name, snapshot); err != nil {
+	if err := h.backend.CreateSnapshot(r.Context(), name, snapshot, backend.SnapshotOptions{}); err != nil {
 		h.fail(w, err)
 		return
 	}

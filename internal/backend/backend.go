@@ -163,6 +163,15 @@ type Snapshot struct {
 	Name      string
 	CreatedAt time.Time
 	Stateful  bool
+	ExpiresAt time.Time // zero = never expires
+}
+
+// SnapshotOptions parameterizes CreateSnapshot. ExpiresAt zero = no expiry.
+// Stateful captures runtime state (running instance + CRIU required; Incus
+// enforces this).
+type SnapshotOptions struct {
+	Stateful  bool
+	ExpiresAt time.Time
 }
 
 // Image is an entry in the create-from-image browser. The Distribution/Release/
@@ -203,7 +212,9 @@ type Backend interface {
 	DeleteInstance(ctx context.Context, name string) error // stop-then-delete
 
 	ListSnapshots(ctx context.Context, name string) ([]Snapshot, error)
-	CreateSnapshot(ctx context.Context, name, snapshot string) error
+	CreateSnapshot(ctx context.Context, name, snapshot string, opts SnapshotOptions) error
+	RenameSnapshot(ctx context.Context, name, snapshot, newName string) error
+	UpdateSnapshotExpiry(ctx context.Context, name, snapshot string, expiresAt time.Time) error
 	RestoreSnapshot(ctx context.Context, name, snapshot string) error
 	DeleteSnapshot(ctx context.Context, name, snapshot string) error
 

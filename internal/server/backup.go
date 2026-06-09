@@ -49,13 +49,13 @@ func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
 	defer closeAndLog("uploaded backup file", file)
 
 	if err := h.backend.ImportInstance(r.Context(), name, file); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	if isHTMX(r) {
 		inst, err := h.backend.GetInstance(r.Context(), name)
 		if err != nil {
-			h.renderError(w, statusFor(err), err.Error())
+			h.fail(w, err)
 			return
 		}
 		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(), inst))
@@ -70,7 +70,7 @@ func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
 func (h handlers) export(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.backend.GetInstance(r.Context(), name); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")

@@ -94,12 +94,12 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 		Type:        selected.Type,
 		Start:       r.Form.Get("start") != "",
 	}); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	inst, err := h.backend.GetInstance(r.Context(), name)
 	if err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	if isHTMX(r) {

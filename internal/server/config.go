@@ -13,7 +13,7 @@ func (h handlers) config(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
 	if err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.ConfigPanel(name, cfg))
@@ -29,12 +29,12 @@ func (h handlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	if err := h.backend.UpdateInstanceConfig(r.Context(), name, zipConfigPairs(r.Form["key"], r.Form["value"])); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
 	if err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	if isHTMX(r) {

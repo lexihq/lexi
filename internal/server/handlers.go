@@ -20,12 +20,12 @@ type handlers struct {
 func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, action func(string) error) {
 	name := r.PathValue("name")
 	if err := action(name); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	inst, err := h.backend.GetInstance(r.Context(), name)
 	if err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	if isHTMX(r) {
@@ -42,6 +42,12 @@ func instanceURL(name string) string {
 func redirectToInstance(w http.ResponseWriter, name string) {
 	w.Header().Set("Location", instanceURL(name))
 	w.WriteHeader(http.StatusSeeOther)
+}
+
+// fail renders err as an HTMX error alert, mapping it to a status via statusFor.
+// It's the common error path for handlers that act on a named instance.
+func (h handlers) fail(w http.ResponseWriter, err error) {
+	h.renderError(w, statusFor(err), err.Error())
 }
 
 func (h handlers) renderError(w http.ResponseWriter, code int, message string) {

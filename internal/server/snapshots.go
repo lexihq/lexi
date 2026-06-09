@@ -19,7 +19,7 @@ func (h handlers) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.backend.CreateSnapshot(r.Context(), name, snapshot); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	h.renderSnapshotsOrRedirect(w, r, name)
@@ -28,7 +28,7 @@ func (h handlers) createSnapshot(w http.ResponseWriter, r *http.Request) {
 func (h handlers) restoreSnapshot(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.RestoreSnapshot(r.Context(), name, r.PathValue("snap")); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	h.renderSnapshotsOrRedirect(w, r, name)
@@ -37,7 +37,7 @@ func (h handlers) restoreSnapshot(w http.ResponseWriter, r *http.Request) {
 func (h handlers) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.DeleteSnapshot(r.Context(), name, r.PathValue("snap")); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	h.renderSnapshotsOrRedirect(w, r, name)
@@ -50,7 +50,7 @@ func (h handlers) renderSnapshotsOrRedirect(w http.ResponseWriter, r *http.Reque
 	}
 	snapshots, err := h.backend.ListSnapshots(r.Context(), name)
 	if err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.SnapshotTable(name, snapshots))

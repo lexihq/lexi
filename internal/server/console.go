@@ -106,7 +106,7 @@ func (h handlers) logs(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	log, err := h.backend.ConsoleLog(r.Context(), name)
 	if err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.LogsPanel(name, log))

@@ -35,17 +35,17 @@ func (h handlers) setInstanceProfiles(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	inst, err := h.backend.GetInstance(r.Context(), name)
 	if err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	ordered := mergeProfileOrder(inst.Profiles, r.Form["profile"])
 	if err := h.backend.SetInstanceProfiles(r.Context(), name, ordered); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	all, err := h.backend.ListProfiles(r.Context())
 	if err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	inst.Profiles = ordered

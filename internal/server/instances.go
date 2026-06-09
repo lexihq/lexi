@@ -86,7 +86,7 @@ func (h handlers) resume(w http.ResponseWriter, r *http.Request) {
 func (h handlers) delete(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.DeleteInstance(r.Context(), name); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	if isHTMX(r) {
@@ -107,12 +107,12 @@ func (h handlers) clone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.backend.CloneInstance(r.Context(), r.PathValue("name"), dst); err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	inst, err := h.backend.GetInstance(r.Context(), dst)
 	if err != nil {
-		h.renderError(w, statusFor(err), err.Error())
+		h.fail(w, err)
 		return
 	}
 	if isHTMX(r) {

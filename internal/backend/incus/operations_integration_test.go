@@ -4,6 +4,7 @@ package incus
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,6 +27,19 @@ func TestListOperationsObservesRunningOperation(t *testing.T) {
 		done <- b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage})
 	}()
 
+	// seesInstanceOp filters to instance operations so unrelated background
+	// daemon activity can't satisfy the assertion.
+	seesInstanceOp := func() bool {
+		ops, err := b.ListOperations(ctx)
+		require.NoError(t, err)
+		for _, op := range ops {
+			if strings.Contains(strings.ToLower(op.Description), "instance") {
+				return true
+			}
+		}
+		return false
+	}
+
 	var seen bool
 	for !seen {
 		select {
@@ -33,16 +47,12 @@ func TestListOperationsObservesRunningOperation(t *testing.T) {
 			require.NoError(t, err)
 			if !seen {
 				// Final look after completion: finished ops linger briefly.
-				ops, lerr := b.ListOperations(ctx)
-				require.NoError(t, lerr)
-				seen = len(ops) > 0
+				seen = seesInstanceOp()
 			}
-			require.True(t, seen, "no operation observed during instance creation")
+			require.True(t, seen, "no instance operation observed during instance creation")
 			return
 		default:
-			ops, err := b.ListOperations(ctx)
-			require.NoError(t, err)
-			seen = len(ops) > 0
+			seen = seesInstanceOp()
 			if !seen {
 				time.Sleep(50 * time.Millisecond)
 			}

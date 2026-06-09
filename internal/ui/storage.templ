@@ -1,0 +1,129 @@
+package ui
+
+import (
+	"fmt"
+
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/icon"
+	"github.com/adam/lxcon/internal/components/table"
+)
+
+// StoragePoolsPage lists storage pools read-only. Pools are driver-specific
+// infra created at host setup, so there's no create/delete here.
+templ StoragePoolsPage(caps backend.Capabilities, pools []backend.StoragePool) {
+	@Layout("Storage", caps, Nav{Section: NavStorage}) {
+		<div class="mb-6">
+			<h1 class="text-2xl font-semibold">Storage</h1>
+			<p class="text-muted-foreground">Storage pools and their custom volumes.</p>
+		</div>
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() { Name }
+					@table.Head() { Driver }
+					@table.Head() { Used by }
+				}
+			}
+			@table.Body() {
+				for _, p := range pools {
+					@table.Row() {
+						@table.Cell() {
+							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/storage/" + p.Name) }>{ p.Name }</a>
+						}
+						@table.Cell() {
+							{ p.Driver }
+						}
+						@table.Cell() {
+							{ fmt.Sprint(len(p.UsedBy)) }
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// StoragePoolPage shows a pool's config (read-only) and its custom volumes.
+templ StoragePoolPage(caps backend.Capabilities, pool backend.StoragePool, volumes []backend.StorageVolume) {
+	@Layout(pool.Name, caps, Nav{Section: NavStorage}) {
+		<div class="mb-6">
+			<a href="/storage" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Storage</a>
+			<h1 class="mt-2 text-2xl font-semibold">{ pool.Name }</h1>
+			<p class="text-muted-foreground">{ pool.Driver }</p>
+		</div>
+		<section class="mb-8 rounded-lg border bg-card p-4">
+			<h2 class="mb-3 text-lg font-medium">Config</h2>
+			if len(pool.Config) == 0 {
+				<p class="text-sm text-muted-foreground">No config keys.</p>
+			} else {
+				<dl class="grid gap-2 text-sm sm:grid-cols-2">
+					for _, k := range sortedKeys(pool.Config) {
+						<div><dt class="text-muted-foreground">{ k }</dt><dd>{ pool.Config[k] }</dd></div>
+					}
+				</dl>
+			}
+		</section>
+		@StorageVolumesTable(pool.Name, volumes)
+	}
+}
+
+// StorageVolumesTable is the swappable custom-volumes list with a create form.
+// Delete re-renders it in place via the #volumes target.
+templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
+	<section id="volumes" class="rounded-lg border bg-card p-4">
+		<div class="mb-4 flex items-center justify-between gap-4">
+			<h2 class="text-lg font-medium">Volumes</h2>
+		</div>
+		<form method="post" action={ templ.URL("/storage/" + pool + "/volumes") } hx-post={ "/storage/" + pool + "/volumes" } hx-target="#volumes" hx-swap="outerHTML" class="mb-4 space-y-2">
+			<div class="flex gap-2">
+				<input class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm" name="name" placeholder="volume name"/>
+				<select name="content_type" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm">
+					<option value="filesystem">filesystem</option>
+					<option value="block">block</option>
+				</select>
+			</div>
+			for i := 0; i < 3; i++ {
+				<div class="flex gap-2">
+					<input name="key" placeholder="size" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+					<input name="value" placeholder="1GiB" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+				</div>
+			}
+			@button.Button(button.Props{Type: button.TypeSubmit}) {
+				@icon.Icon("plus")(icon.Props{Class: "size-4"})
+				Create volume
+			}
+		</form>
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() { Name }
+					@table.Head() { Content type }
+					@table.Head() { Used by }
+					@table.Head() { }
+				}
+			}
+			@table.Body() {
+				for _, v := range vols {
+					@table.Row() {
+						@table.Cell() {
+							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/storage/" + pool + "/volumes/" + v.Name) }>{ v.Name }</a>
+						}
+						@table.Cell() {
+							{ v.ContentType }
+						}
+						@table.Cell() {
+							{ fmt.Sprint(len(v.UsedBy)) }
+						}
+						@table.Cell() {
+							@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/storage/" + pool + "/volumes/" + v.Name + "/delete", "hx-target": "#volumes", "hx-swap": "outerHTML"}}) {
+								@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+								Delete
+							}
+						}
+					}
+				}
+			}
+		}
+	</section>
+}

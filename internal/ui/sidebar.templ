@@ -43,6 +43,17 @@ templ Sidebar(caps backend.Capabilities, nav Nav) {
 				Networks
 			</a>
 		}
+		if caps.Storage {
+			<a
+				href="/storage"
+				class={ "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium",
+					templ.KV("bg-accent text-accent-foreground", nav.Section == NavStorage),
+					templ.KV("text-muted-foreground hover:text-foreground", nav.Section != NavStorage) }
+			>
+				@icon.Icon("database")(icon.Props{Class: "size-4"})
+				Storage
+			</a>
+		}
 	</nav>
 	<div class="mt-4">
 		<p class="px-3 pb-1 text-xs font-medium uppercase text-muted-foreground">Instances</p>

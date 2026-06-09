@@ -201,6 +201,28 @@ func TestNetworkCreatePageRendersTypeOptions(t *testing.T) {
 	assertContains(t, html, `name="name"`)
 }
 
+func TestSidebarGatesStorageLink(t *testing.T) {
+	with := render(t, Sidebar(backend.Capabilities{Storage: true}, Nav{Section: NavStorage}))
+	assertContains(t, with, "/storage")
+	assertContains(t, with, "Storage")
+
+	without := render(t, Sidebar(backend.Capabilities{}, Nav{Section: NavInstances}))
+	if strings.Contains(without, `href="/storage"`) {
+		t.Fatalf("storage link must be hidden without the capability, got %q", without)
+	}
+}
+
+func TestStorageVolumesTableShowsDeleteAndCreateForm(t *testing.T) {
+	html := render(t, StorageVolumesTable("default", []backend.StorageVolume{
+		{Name: "vol1", ContentType: "filesystem"},
+	}))
+	assertContains(t, html, `action="/storage/default/volumes"`)
+	assertContains(t, html, `value="filesystem"`)
+	assertContains(t, html, `value="block"`)
+	assertContains(t, html, `/storage/default/volumes/vol1`)
+	assertContains(t, html, `hx-post="/storage/default/volumes/vol1/delete"`)
+}
+
 func TestErrorToastRendersMessage(t *testing.T) {
 	html := render(t, ErrorToast("boom"))
 	assertContains(t, html, "boom")

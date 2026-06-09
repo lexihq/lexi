@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"sort"
+	"strconv"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -21,21 +22,27 @@ func (f *Fake) GetServerOverview(_ context.Context) (backend.ServerOverview, err
 	}, nil
 }
 
-func (f *Fake) GetServerConfig(_ context.Context) (map[string]string, error) {
+func (f *Fake) GetServerConfig(_ context.Context) (map[string]string, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return maps.Clone(f.serverConfig), nil
+	return maps.Clone(f.serverConfig), strconv.Itoa(f.serverConfigVersion), nil
 }
 
-func (f *Fake) UpdateServerConfig(_ context.Context, config map[string]string) error {
+func (f *Fake) UpdateServerConfig(_ context.Context, config map[string]string, version string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	// Empty version = unconditional, mirroring the Incus client's If-Match
+	// semantics; a stale version means a concurrent writer landed first.
+	if version != "" && version != strconv.Itoa(f.serverConfigVersion) {
+		return conflict("server config version %s", version)
+	}
 	f.serverConfig = maps.Clone(config)
 	if f.serverConfig == nil {
 		f.serverConfig = map[string]string{}
 	}
+	f.serverConfigVersion++
 	return nil
 }
 

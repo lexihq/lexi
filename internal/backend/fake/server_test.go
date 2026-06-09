@@ -19,18 +19,21 @@ func TestGetServerOverviewStatic(t *testing.T) {
 
 func TestServerConfigRoundTrip(t *testing.T) {
 	b := New()
-	cfg, err := b.GetServerConfig(ctx())
+	cfg, version, err := b.GetServerConfig(ctx())
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
 	if cfg["core.https_address"] == "" {
 		t.Fatalf("expected seeded core.https_address, got %+v", cfg)
 	}
+	if version == "" {
+		t.Fatal("expected a non-empty config version token")
+	}
 
-	if err := b.UpdateServerConfig(ctx(), map[string]string{"user.x": "1"}); err != nil {
+	if err := b.UpdateServerConfig(ctx(), map[string]string{"user.x": "1"}, version); err != nil {
 		t.Fatalf("update config: %v", err)
 	}
-	cfg, err = b.GetServerConfig(ctx())
+	cfg, _, err = b.GetServerConfig(ctx())
 	if err != nil {
 		t.Fatalf("get config: %v", err)
 	}
@@ -39,6 +42,37 @@ func TestServerConfigRoundTrip(t *testing.T) {
 	}
 	if _, ok := cfg["core.https_address"]; ok {
 		t.Errorf("replace semantics: dropped key survived: %+v", cfg)
+	}
+}
+
+func TestServerConfigStaleVersionIsConflict(t *testing.T) {
+	b := New()
+	_, version, err := b.GetServerConfig(ctx())
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	// A concurrent writer lands first; the held version goes stale.
+	if err := b.UpdateServerConfig(ctx(), map[string]string{"user.first": "1"}, version); err != nil {
+		t.Fatalf("first update: %v", err)
+	}
+	err = b.UpdateServerConfig(ctx(), map[string]string{"user.second": "2"}, version)
+	if !errors.Is(err, backend.ErrConflict) {
+		t.Fatalf("stale version must conflict, got %v", err)
+	}
+	cfg, _, err := b.GetServerConfig(ctx())
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if cfg["user.first"] != "1" {
+		t.Errorf("first writer's config must survive: %+v", cfg)
+	}
+}
+
+func TestServerConfigEmptyVersionIsUnconditional(t *testing.T) {
+	// Mirrors the Incus client: an empty etag sends no If-Match.
+	b := New()
+	if err := b.UpdateServerConfig(ctx(), map[string]string{"user.x": "1"}, ""); err != nil {
+		t.Fatalf("unconditional update: %v", err)
 	}
 }
 

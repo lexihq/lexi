@@ -12,7 +12,7 @@ import (
 
 // ServerPage is the Server section: host overview, server config editor,
 // certificate trust list, and the swappable warnings table.
-templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, config map[string]string, certs []backend.Certificate, warnings []backend.Warning) {
+templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, config map[string]string, configVersion string, certs []backend.Certificate, warnings []backend.Warning) {
 	@Layout("Server", caps, Nav{Section: NavServer}) {
 		<div class="mb-6">
 			<h1 class="text-2xl font-semibold">Server</h1>
@@ -35,6 +35,7 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, con
 				Careful with <span class="font-mono">core.https_address</span>: pointing it elsewhere can cut lxcon off from the daemon.
 			</p>
 			<form method="post" action="/server/config" class="max-w-xl space-y-2">
+				<input type="hidden" name="version" value={ configVersion }/>
 				for _, k := range sortedKeys(config) {
 					<div class="flex gap-2">
 						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>

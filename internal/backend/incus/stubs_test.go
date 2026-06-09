@@ -92,21 +92,23 @@ type instanceServerStub struct {
 	createdPath string                        // path captured by CreateInstanceFile
 	filesErr    error                         // error for CreateInstanceFile
 
-	server         *api.Server    // returned by GetServer
-	serverErr      error          // error for server admin calls
-	updatedServer  *api.ServerPut // captured by UpdateServer
-	resources      *api.Resources // returned by GetServerResources
-	certificates   []api.Certificate
-	warnings       []api.Warning
-	deletedWarning string // captured by DeleteWarning
+	server            *api.Server    // returned by GetServer
+	serverErr         error          // error for server admin calls
+	updatedServer     *api.ServerPut // captured by UpdateServer
+	updatedServerEtag string         // etag captured by UpdateServer
+	resources         *api.Resources // returned by GetServerResources
+	certificates      []api.Certificate
+	warnings          []api.Warning
+	deletedWarning    string // captured by DeleteWarning
 }
 
 func (s *instanceServerStub) GetServer() (*api.Server, string, error) {
 	return s.server, "server-etag", s.serverErr
 }
 
-func (s *instanceServerStub) UpdateServer(put api.ServerPut, _ string) error {
+func (s *instanceServerStub) UpdateServer(put api.ServerPut, etag string) error {
 	s.updatedServer = &put
+	s.updatedServerEtag = etag
 	return s.serverErr
 }
 

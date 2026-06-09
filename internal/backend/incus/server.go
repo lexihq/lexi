@@ -34,24 +34,38 @@ func (b *incusBackend) GetServerOverview(_ context.Context) (backend.ServerOverv
 	}, nil
 }
 
-func (b *incusBackend) GetServerConfig(_ context.Context) (map[string]string, error) {
-	srv, _, err := b.srv.GetServer()
+// GetServerConfig returns the config map plus the server etag as the opaque
+// version token callers thread back into UpdateServerConfig.
+func (b *incusBackend) GetServerConfig(_ context.Context) (map[string]string, string, error) {
+	srv, etag, err := b.srv.GetServer()
 	if err != nil {
-		return nil, fmt.Errorf("get server config: %w", mapErr(err))
+		return nil, "", fmt.Errorf("get server config: %w", mapErr(err))
 	}
-	return maps.Clone(map[string]string(srv.Config)), nil
+	return maps.Clone(map[string]string(srv.Config)), etag, nil
 }
 
-// UpdateServerConfig replaces the server config map (GET-then-PUT with etag).
-func (b *incusBackend) UpdateServerConfig(ctx context.Context, config map[string]string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	_, etag, err := b.srv.GetServer()
+// UpdateServerConfig replaces the server config map. The version is the etag
+// from GetServerConfig: the daemon rejects the PUT with 412 (mapped to
+// ErrConflict) when the config changed since that read. An empty version sends
+// no If-Match and updates unconditionally.
+//
+// The daemon does not treat a key omitted from the PUT as a removal — unset
+// means "explicitly set to empty" (what `incus config unset` sends) — so keys
+// present on the server but absent from config are added with empty values to
+// make this a true replace.
+func (b *incusBackend) UpdateServerConfig(_ context.Context, config map[string]string, version string) error {
+	srv, _, err := b.srv.GetServer()
 	if err != nil {
 		return fmt.Errorf("get server: %w", mapErr(err))
 	}
-	if err := b.srv.UpdateServer(api.ServerPut{Config: api.ConfigMap(config)}, etag); err != nil {
+	put := make(api.ConfigMap, len(config)+len(srv.Config))
+	for k := range srv.Config {
+		if _, kept := config[k]; !kept {
+			put[k] = "" // removal marker
+		}
+	}
+	maps.Copy(put, api.ConfigMap(config))
+	if err := b.srv.UpdateServer(api.ServerPut{Config: put}, version); err != nil {
 		return fmt.Errorf("update server config: %w", mapErr(err))
 	}
 	return nil

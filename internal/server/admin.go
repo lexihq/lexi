@@ -14,7 +14,7 @@ func (h handlers) serverPage(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	config, err := h.backend.GetServerConfig(r.Context())
+	config, configVersion, err := h.backend.GetServerConfig(r.Context())
 	if err != nil {
 		h.fail(w, err)
 		return
@@ -30,18 +30,20 @@ func (h handlers) serverPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderShell(w, r, http.StatusOK,
-		ui.ServerPage(h.backend.Capabilities(), overview, config, certs, warnings))
+		ui.ServerPage(h.backend.Capabilities(), overview, config, configVersion, certs, warnings))
 }
 
 // updateServerConfig replaces the server config from the submitted key/value
-// rows (instance-config-editor semantics: a removed row removes the key).
+// rows (instance-config-editor semantics: a removed row removes the key). The
+// hidden version field carries the config version the form was rendered from,
+// so a concurrent change conflicts (409) instead of being silently overwritten.
 func (h handlers) updateServerConfig(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
-	if err := h.backend.UpdateServerConfig(r.Context(), config); err != nil {
+	if err := h.backend.UpdateServerConfig(r.Context(), config, r.Form.Get("version")); err != nil {
 		h.fail(w, err)
 		return
 	}

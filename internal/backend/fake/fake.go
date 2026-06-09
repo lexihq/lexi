@@ -48,9 +48,10 @@ type Fake struct {
 	opSeq     int
 	clock     time.Time
 
-	serverConfig map[string]string
-	certificates []backend.Certificate
-	warnings     []backend.Warning
+	serverConfig        map[string]string
+	serverConfigVersion int // bumped per update; the Get/Update version token
+	certificates        []backend.Certificate
+	warnings            []backend.Warning
 }
 
 // New returns an empty fake backend.
@@ -92,7 +93,8 @@ func New() *Fake {
 				CreatedAt:   time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC),
 			},
 		},
-		serverConfig: map[string]string{"core.https_address": ":8443"},
+		serverConfig:        map[string]string{"core.https_address": ":8443"},
+		serverConfigVersion: 1,
 		certificates: []backend.Certificate{
 			{Name: "admin-laptop", Type: "client", Fingerprint: "fake-cert-fingerprint-1234", Restricted: false},
 		},

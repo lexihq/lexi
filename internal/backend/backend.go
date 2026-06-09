@@ -377,9 +377,15 @@ type Backend interface {
 	PushFile(ctx context.Context, instance, path string, r io.Reader) error
 
 	GetServerOverview(ctx context.Context) (ServerOverview, error)
-	GetServerConfig(ctx context.Context) (map[string]string, error)
-	// UpdateServerConfig replaces the server's user config map.
-	UpdateServerConfig(ctx context.Context, config map[string]string) error
+	// GetServerConfig returns the server config map plus an opaque version
+	// token for optimistic concurrency on update.
+	GetServerConfig(ctx context.Context) (map[string]string, string, error)
+	// UpdateServerConfig replaces the server's config map. A non-empty version
+	// (from GetServerConfig) makes the replace conditional: if the config
+	// changed since that read, the update fails with ErrConflict instead of
+	// silently overwriting the concurrent change. An empty version updates
+	// unconditionally.
+	UpdateServerConfig(ctx context.Context, config map[string]string, version string) error
 	ListCertificates(ctx context.Context) ([]Certificate, error)
 	// ListWarnings returns daemon warnings, newest last-seen first.
 	ListWarnings(ctx context.Context) ([]Warning, error)

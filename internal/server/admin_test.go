@@ -26,9 +26,23 @@ func TestServerConfigApplyReplacesAndRedirects(t *testing.T) {
 		url.Values{"key": {"user.greeting", ""}, "value": {"hi", ""}}, false)
 	assertStatus(t, res, http.StatusSeeOther)
 
-	cfg, err := b.GetServerConfig(t.Context())
+	cfg, _, err := b.GetServerConfig(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"user.greeting": "hi"}, cfg)
+}
+
+func TestServerConfigStaleVersionIs409(t *testing.T) {
+	b := fake.New()
+	// Bump the config version behind the form's back.
+	require.NoError(t, b.UpdateServerConfig(t.Context(), map[string]string{"user.other": "1"}, ""))
+
+	res := formRequest(t, New(b), "/server/config",
+		url.Values{"key": {"user.greeting"}, "value": {"hi"}, "version": {"1"}}, false)
+	assertStatus(t, res, http.StatusConflict)
+
+	cfg, _, err := b.GetServerConfig(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"user.other": "1"}, cfg, "concurrent writer's config must survive")
 }
 
 func TestDeleteWarningRemovesAndReturnsTable(t *testing.T) {

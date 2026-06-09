@@ -226,12 +226,13 @@ func TestSidebarGatesServerLink(t *testing.T) {
 func TestServerPageRendersSections(t *testing.T) {
 	html := render(t, ServerPage(testCaps(),
 		backend.ServerOverview{ServerVersion: "6.23", Kernel: "Linux", KernelVersion: "6.8", Driver: "lxc", DriverVersion: "6.0", CPUThreads: 16, MemoryUsed: 1 << 30, MemoryTotal: 8 << 30},
-		map[string]string{"core.https_address": ":8443"},
+		map[string]string{"core.https_address": ":8443"}, "etag-1",
 		[]backend.Certificate{{Name: "laptop", Type: "client", Fingerprint: "abcdef0123456789", Restricted: true}},
 		[]backend.Warning{{UUID: "w-1", Severity: "high", Status: "new", Count: 2, LastMessage: "boom"}}))
 
 	assertContains(t, html, "6.23")
 	assertContains(t, html, `value="core.https_address"`)
+	assertContains(t, html, `name="version" value="etag-1"`)
 	assertContains(t, html, `action="/server/config"`)
 	assertContains(t, html, "laptop")
 	assertContains(t, html, "restricted")

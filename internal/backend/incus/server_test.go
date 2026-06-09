@@ -52,13 +52,17 @@ func TestServerConfigGetAndReplace(t *testing.T) {
 	}
 	b := &incusBackend{srv: srv}
 
-	cfg, err := b.GetServerConfig(context.Background())
+	cfg, version, err := b.GetServerConfig(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"core.https_address": ":8443"}, cfg)
+	assert.Equal(t, "server-etag", version, "version must carry the server etag")
 
-	require.NoError(t, b.UpdateServerConfig(context.Background(), map[string]string{"user.x": "1"}))
+	require.NoError(t, b.UpdateServerConfig(context.Background(), map[string]string{"user.x": "1"}, version))
 	require.NotNil(t, srv.updatedServer)
-	assert.Equal(t, api.ConfigMap{"user.x": "1"}, srv.updatedServer.Config)
+	// Dropped keys must be sent as explicit empty values — the daemon does not
+	// treat omission as removal.
+	assert.Equal(t, api.ConfigMap{"user.x": "1", "core.https_address": ""}, srv.updatedServer.Config)
+	assert.Equal(t, "server-etag", srv.updatedServerEtag, "update must send the caller's etag, not a fresh one")
 }
 
 func TestListCertificatesMaps(t *testing.T) {
@@ -98,16 +102,13 @@ func TestListWarningsMapsAndSortsNewestFirst(t *testing.T) {
 }
 
 func TestUpdateServerConfigEtagRaceIsConflict(t *testing.T) {
-	srv := &instanceServerStub{
-		server:    &api.Server{},
-		serverErr: nil,
-	}
+	srv := &instanceServerStub{server: &api.Server{}}
 	b := &incusBackend{srv: srv}
-	// The GET succeeds; the PUT races another writer and gets 412.
-	require.NoError(t, b.UpdateServerConfig(context.Background(), nil))
+	require.NoError(t, b.UpdateServerConfig(context.Background(), nil, ""))
 
+	// A stale etag races another writer and gets 412 → conflict.
 	srv.serverErr = api.StatusErrorf(412, "Precondition failed")
-	err := b.UpdateServerConfig(context.Background(), map[string]string{"user.x": "1"})
+	err := b.UpdateServerConfig(context.Background(), map[string]string{"user.x": "1"}, "stale-etag")
 	require.ErrorIs(t, err, backend.ErrConflict)
 }
 

@@ -1,10 +1,12 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
 
+	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/ui"
 )
 
@@ -54,6 +56,10 @@ func (h handlers) addDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	device := strings.TrimSpace(r.Form.Get("device"))
+	if device == "" {
+		h.fail(w, fmt.Errorf("device name required: %w", backend.ErrInvalid))
+		return
+	}
 	cfg := deviceConfigFromForm(r.Form.Get("type"), r.Form)
 	if err := h.backend.AddDevice(r.Context(), name, device, cfg); err != nil {
 		h.fail(w, err)

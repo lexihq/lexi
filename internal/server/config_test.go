@@ -86,6 +86,14 @@ func TestRemoveDeviceAppliesAndReturnsDevices(t *testing.T) {
 	assert.NotContains(t, cfg.LocalDevices, "web")
 }
 
+func TestAddDeviceBlankNameIs400(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	res := formRequest(t, New(b), "/instances/demo/devices",
+		url.Values{"type": {"proxy"}, "device": {""}, "listen": {"tcp::80"}}, true)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
 func TestRemoveUnknownDeviceIs404(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))

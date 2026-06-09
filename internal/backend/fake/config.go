@@ -56,6 +56,9 @@ func (f *Fake) AddDevice(_ context.Context, name, device string, config map[stri
 	if !ok {
 		return notFound(name)
 	}
+	if in.devices == nil { // clone/import don't seed the map
+		in.devices = map[string]map[string]string{}
+	}
 	in.devices[device] = maps.Clone(config)
 	return nil
 }

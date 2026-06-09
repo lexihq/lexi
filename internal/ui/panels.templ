@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
@@ -168,7 +169,7 @@ templ DevicesSection(caps backend.Capabilities, name string, cfg backend.Instanc
 						</dl>
 					</div>
 					if caps.Devices {
-						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + name + "/devices/" + dn + "/delete", "hx-target": "#devices", "hx-swap": "outerHTML"}}) {
+						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + name + "/devices/" + url.PathEscape(dn) + "/delete", "hx-target": "#devices", "hx-swap": "outerHTML"}}) {
 							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 							Remove
 						}

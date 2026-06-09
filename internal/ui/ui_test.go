@@ -202,7 +202,7 @@ func TestDevicesSectionLocalHasRemoveInheritedDoesNot(t *testing.T) {
 	caps := backend.Capabilities{Config: true, Devices: true}
 	html := render(t, DevicesSection(caps, "demo", backend.InstanceConfig{
 		Devices: map[string]map[string]string{
-			"root": {"type": "disk", "path": "/"},         // inherited
+			"root": {"type": "disk", "path": "/"},          // inherited
 			"web":  {"type": "proxy", "listen": "tcp::80"}, // local
 		},
 		LocalDevices: map[string]map[string]string{
@@ -215,6 +215,14 @@ func TestDevicesSectionLocalHasRemoveInheritedDoesNot(t *testing.T) {
 	}
 	assertContains(t, html, `name="type" value="proxy"`) // an add form
 	assertContains(t, html, `name="type" value="disk"`)
+}
+
+func TestDevicesSectionEscapesDeviceNameInRemoveURL(t *testing.T) {
+	html := render(t, DevicesSection(backend.Capabilities{Devices: true}, "demo", backend.InstanceConfig{
+		Devices:      map[string]map[string]string{"a/b": {"type": "disk"}},
+		LocalDevices: map[string]map[string]string{"a/b": {"type": "disk"}},
+	}))
+	assertContains(t, html, "/instances/demo/devices/a%2Fb/delete")
 }
 
 func TestDevicesSectionGatesEditingOnCapability(t *testing.T) {

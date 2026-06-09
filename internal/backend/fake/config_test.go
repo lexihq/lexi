@@ -90,3 +90,15 @@ func TestDeviceAddRemoveRoundTrip(t *testing.T) {
 	require.ErrorIs(t, f.AddDevice(ctx(), "ghost", "x", map[string]string{"type": "disk"}), backend.ErrNotFound)
 	require.ErrorIs(t, f.RemoveDevice(ctx(), "demo", "nope"), backend.ErrNotFound)
 }
+
+func TestAddDeviceToClonedInstance(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "src"}))
+	require.NoError(t, f.CloneInstance(ctx(), "src", "dst"))
+
+	// Cloned instances have no seeded device map; AddDevice must not panic.
+	require.NoError(t, f.AddDevice(ctx(), "dst", "web", map[string]string{"type": "proxy"}))
+	cfg, err := f.GetInstanceConfig(ctx(), "dst")
+	require.NoError(t, err)
+	assert.Equal(t, "proxy", cfg.LocalDevices["web"]["type"])
+}

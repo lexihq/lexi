@@ -15,19 +15,25 @@ func (f *Fake) GetInstanceConfig(_ context.Context, name string) (backend.Instan
 	if !ok {
 		return backend.InstanceConfig{}, notFound(name)
 	}
-	cfg := maps.Clone(in.config)
-	// Read-only devices = merge of the instance's assigned profiles' devices.
-	devices := map[string]map[string]string{}
+	// Expanded = profile devices, then local devices win on name collision.
+	expanded := map[string]map[string]string{}
 	for _, pn := range in.Profiles {
 		p, ok := f.profiles[pn]
 		if !ok {
 			continue
 		}
 		for devName, dev := range p.Devices {
-			devices[devName] = maps.Clone(dev)
+			expanded[devName] = maps.Clone(dev)
 		}
 	}
-	return backend.InstanceConfig{Config: cfg, Devices: devices}, nil
+	for devName, dev := range in.devices {
+		expanded[devName] = maps.Clone(dev)
+	}
+	return backend.InstanceConfig{
+		Config:       maps.Clone(in.config),
+		Devices:      expanded,
+		LocalDevices: maps.Clone(in.devices),
+	}, nil
 }
 
 func (f *Fake) UpdateInstanceConfig(_ context.Context, name string, config map[string]string) error {

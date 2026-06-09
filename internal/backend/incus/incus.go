@@ -68,6 +68,7 @@ func New() (*incusBackend, error) {
 			Pause:      true,
 			Profiles:   true,
 			Config:     true,
+			Devices:    true,
 		},
 		cpuSamples: make(map[string]cpuSample),
 	}, nil

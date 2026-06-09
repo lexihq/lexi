@@ -52,3 +52,13 @@ func TestInstanceConfigRoundTrip(t *testing.T) {
 	require.ErrorIs(t, err, backend.ErrNotFound)
 	require.ErrorIs(t, f.UpdateInstanceConfig(ctx(), "ghost", nil), backend.ErrNotFound)
 }
+
+func TestGetInstanceConfigSeparatesLocalFromInherited(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo"}))
+
+	cfg, err := f.GetInstanceConfig(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Empty(t, cfg.LocalDevices)       // nothing local yet
+	assert.Contains(t, cfg.Devices, "root") // inherited from "default"
+}

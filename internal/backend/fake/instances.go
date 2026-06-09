@@ -49,7 +49,8 @@ func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) erro
 			CreatedAt: f.now(),
 			Profiles:  []string{"default"},
 		},
-		config: map[string]string{},
+		config:  map[string]string{},
+		devices: map[string]map[string]string{},
 	}
 	return nil
 }

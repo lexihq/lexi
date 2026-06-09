@@ -47,8 +47,9 @@ func (b *incusBackend) GetInstanceConfig(_ context.Context, name string) (backen
 		return backend.InstanceConfig{}, fmt.Errorf("get instance %q: %w", name, mapErr(err))
 	}
 	return backend.InstanceConfig{
-		Config:  editableConfig(inst.Config),
-		Devices: inst.ExpandedDevices,
+		Config:       editableConfig(inst.Config),
+		Devices:      inst.ExpandedDevices,
+		LocalDevices: inst.Devices,
 	}, nil
 }
 

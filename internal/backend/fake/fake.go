@@ -20,6 +20,7 @@ type instance struct {
 
 	snapshots []backend.Snapshot
 	config    map[string]string
+	devices   map[string]map[string]string
 }
 
 // Fake is a mutex-guarded, in-memory Backend with a deterministic clock.
@@ -73,6 +74,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		Pause:      true,
 		Profiles:   true,
 		Config:     true,
+		Devices:    true,
 	}
 }
 

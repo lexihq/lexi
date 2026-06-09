@@ -41,6 +41,7 @@ type Capabilities struct {
 	Pause      bool // freeze/unfreeze (pause/resume)
 	Profiles   bool // list/view profiles + attach to instances
 	Config     bool // edit arbitrary config keys + view devices
+	Devices    bool // add/remove instance-local devices
 }
 
 // Instance is a system container or virtual machine.
@@ -73,12 +74,14 @@ type Profile struct {
 	UsedBy      []string                     // instance names using it
 }
 
-// InstanceConfig is an instance's editable local config plus its read-only
-// (expanded) devices. Config excludes volatile.* and limits.cpu/limits.memory,
-// which are managed elsewhere and preserved on update.
+// InstanceConfig is an instance's editable local config plus its devices. Config
+// excludes volatile.* and limits.cpu/limits.memory, which are managed elsewhere
+// and preserved on update. Devices is the full expanded set (read-only);
+// LocalDevices is the instance-owned subset (editable).
 type InstanceConfig struct {
-	Config  map[string]string
-	Devices map[string]map[string]string
+	Config       map[string]string
+	Devices      map[string]map[string]string
+	LocalDevices map[string]map[string]string
 }
 
 // Metrics is a point-in-time resource snapshot. CPUPercent is derived from the

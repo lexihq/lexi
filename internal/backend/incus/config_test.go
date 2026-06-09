@@ -36,6 +36,24 @@ func TestGetInstanceConfigFiltersAndCarriesDevices(t *testing.T) {
 	assert.Equal(t, "disk", cfg.Devices["root"]["type"])
 }
 
+func TestGetInstanceConfigSeparatesLocalDevices(t *testing.T) {
+	srv := &instanceServerStub{instance: &api.Instance{
+		InstancePut: api.InstancePut{Devices: map[string]map[string]string{
+			"data": {"type": "disk", "source": "/mnt/x"},
+		}},
+		ExpandedDevices: map[string]map[string]string{
+			"root": {"type": "disk", "path": "/"},
+			"data": {"type": "disk", "source": "/mnt/x"},
+		},
+	}}
+	b := &incusBackend{srv: srv}
+	cfg, err := b.GetInstanceConfig(context.Background(), "demo")
+	require.NoError(t, err)
+	assert.Contains(t, cfg.LocalDevices, "data")
+	assert.NotContains(t, cfg.LocalDevices, "root") // root is inherited
+	assert.Contains(t, cfg.Devices, "root")         // expanded carries both
+}
+
 func TestUpdateInstanceConfigPreservesVolatileAndLimits(t *testing.T) {
 	srv := &instanceServerStub{instance: &api.Instance{
 		InstancePut: api.InstancePut{Config: map[string]string{

@@ -168,6 +168,35 @@ func TestSidebarGatesProfilesLinkOnCapability(t *testing.T) {
 	}
 }
 
+func TestSidebarGatesNetworksLinkOnCapability(t *testing.T) {
+	with := render(t, Sidebar(backend.Capabilities{Networks: true}, Nav{Section: NavNetworks}))
+	assertContains(t, with, "/networks")
+	assertContains(t, with, "Networks")
+
+	without := render(t, Sidebar(backend.Capabilities{}, Nav{Section: NavInstances}))
+	if strings.Contains(without, `href="/networks"`) {
+		t.Fatalf("networks link must be hidden without the capability, got %q", without)
+	}
+}
+
+func TestNetworksTableShowsManagedBadgeAndDeleteOnlyOnManaged(t *testing.T) {
+	html := render(t, NetworksTable([]backend.Network{
+		{Name: "incusbr0", Type: "bridge", Managed: true},
+		{Name: "eth0", Type: "physical", Managed: false},
+	}))
+	assertContains(t, html, `hx-post="/networks/incusbr0/delete"`)
+	if strings.Contains(html, "/networks/eth0/delete") {
+		t.Fatalf("unmanaged network must not have a delete button: %q", html)
+	}
+}
+
+func TestNetworkCreatePageRendersTypeOptions(t *testing.T) {
+	html := render(t, NetworkCreatePage(backend.Capabilities{Networks: true}))
+	assertContains(t, html, `action="/networks"`)
+	assertContains(t, html, `value="bridge"`)
+	assertContains(t, html, `name="name"`)
+}
+
 func TestProfilesPageListsProfiles(t *testing.T) {
 	caps := backend.Capabilities{Profiles: true}
 	html := render(t, ProfilesPage(caps, []backend.Profile{

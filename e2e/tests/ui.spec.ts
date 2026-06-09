@@ -305,6 +305,8 @@ test("backend errors surface as a toast", async ({ page }) => {
   await page.getByRole("button", { name: "Create" }).click();
 
   await expect(page.locator("[data-tui-toast]")).toBeVisible();
-  // The form is not replaced by the error response.
+  // The form is not replaced by the error response, and the failed boosted
+  // request must not rewrite history away from the create page.
   await expect(page.locator('input[name="name"]')).toBeVisible();
+  await expect(page).toHaveURL(/\/networks\/new$/);
 });

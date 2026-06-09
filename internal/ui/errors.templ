@@ -12,5 +12,8 @@ templ ErrorToast(message string) {
 		Description: message,
 		Duration:    6000,
 		Dismissible: true,
+		// Restore the live-region semantics the old role="alert" div had, so
+		// screen readers announce errors appended asynchronously.
+		Attributes: templ.Attributes{"role": "alert", "aria-live": "assertive"},
 	})
 }

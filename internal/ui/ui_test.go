@@ -205,6 +205,8 @@ func TestErrorToastRendersMessage(t *testing.T) {
 	html := render(t, ErrorToast("boom"))
 	assertContains(t, html, "boom")
 	assertContains(t, html, "data-tui-toast")
+	assertContains(t, html, `role="alert"`) // announced to screen readers
+	assertContains(t, html, `aria-live="assertive"`)
 }
 
 func TestProfilesPageListsProfiles(t *testing.T) {

@@ -38,6 +38,7 @@ type Capabilities struct {
 	Console    bool // false in v1
 	Metrics    bool // live resource metrics
 	Limits     bool // CPU and memory limits
+	Pause      bool // freeze/unfreeze (pause/resume)
 }
 
 // Instance is a system container or virtual machine.
@@ -129,6 +130,9 @@ type Backend interface {
 	CreateInstance(ctx context.Context, opt CreateOptions) error
 	StartInstance(ctx context.Context, name string) error
 	StopInstance(ctx context.Context, name string) error
+	RestartInstance(ctx context.Context, name string) error
+	PauseInstance(ctx context.Context, name string) error  // freeze
+	ResumeInstance(ctx context.Context, name string) error // unfreeze
 	DeleteInstance(ctx context.Context, name string) error // stop-then-delete
 
 	ListSnapshots(ctx context.Context, name string) ([]Snapshot, error)

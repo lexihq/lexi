@@ -138,9 +138,36 @@ func TestCapabilitiesAdvertisesSnapshotAndClone(t *testing.T) {
 	if !caps.Snapshots || !caps.Clone {
 		t.Fatalf("fake should support snapshots and clone, got %+v", caps)
 	}
+	if !caps.Pause {
+		t.Fatalf("fake should support pause/resume, got %+v", caps)
+	}
 	if caps.ServerInfo == "" {
 		t.Fatal("ServerInfo should be set")
 	}
+}
+
+func TestRestartPauseResumeLifecycle(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo", Start: true}))
+
+	require.NoError(t, f.RestartInstance(ctx(), "demo"))
+	got, err := f.GetInstance(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "Running", got.Status)
+
+	require.NoError(t, f.PauseInstance(ctx(), "demo"))
+	got, err = f.GetInstance(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "Frozen", got.Status)
+
+	require.NoError(t, f.ResumeInstance(ctx(), "demo"))
+	got, err = f.GetInstance(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "Running", got.Status)
+
+	assert.ErrorIs(t, f.RestartInstance(ctx(), "ghost"), backend.ErrNotFound)
+	assert.ErrorIs(t, f.PauseInstance(ctx(), "ghost"), backend.ErrNotFound)
+	assert.ErrorIs(t, f.ResumeInstance(ctx(), "ghost"), backend.ErrNotFound)
 }
 
 func TestCreateListGet(t *testing.T) {

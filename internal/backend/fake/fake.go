@@ -58,6 +58,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		Console:    true,
 		Metrics:    true,
 		Limits:     true,
+		Pause:      true,
 	}
 }
 
@@ -121,6 +122,18 @@ func (f *Fake) StartInstance(_ context.Context, name string) error {
 
 func (f *Fake) StopInstance(_ context.Context, name string) error {
 	return f.setStatus(name, "Stopped")
+}
+
+func (f *Fake) RestartInstance(_ context.Context, name string) error {
+	return f.setStatus(name, "Running")
+}
+
+func (f *Fake) PauseInstance(_ context.Context, name string) error {
+	return f.setStatus(name, "Frozen")
+}
+
+func (f *Fake) ResumeInstance(_ context.Context, name string) error {
+	return f.setStatus(name, "Running")
 }
 
 func (f *Fake) setStatus(name, status string) error {

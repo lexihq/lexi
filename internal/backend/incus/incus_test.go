@@ -41,6 +41,8 @@ type instanceServerStub struct {
 	importReadErr     error
 	consoleLog        string
 	consoleErr        error
+	stateAction       string                // last UpdateInstanceState action
+	stateOp           incusclient.Operation // operation returned by UpdateInstanceState
 }
 
 func (s *instanceServerStub) GetInstanceSnapshots(string) ([]api.InstanceSnapshot, error) {
@@ -102,6 +104,14 @@ func (s *instanceServerStub) GetInstanceConsoleLog(string, *incusclient.Instance
 		return nil, s.consoleErr
 	}
 	return io.NopCloser(strings.NewReader(s.consoleLog)), nil
+}
+
+func (s *instanceServerStub) UpdateInstanceState(_ string, req api.InstanceStatePut, _ string) (incusclient.Operation, error) {
+	s.stateAction = req.Action
+	if s.stateOp != nil {
+		return s.stateOp, nil
+	}
+	return &operationStub{}, nil
 }
 
 type operationStub struct {
@@ -248,6 +258,26 @@ func TestCPUPercentDoesNotRecreateSampleAfterDeletion(t *testing.T) {
 	b.cpuPercent("demo", 1, epoch)
 
 	assert.NotContains(t, b.cpuSamples, "demo")
+}
+
+func TestLifecycleActionsSendCorrectIncusAction(t *testing.T) {
+	cases := []struct {
+		name   string
+		call   func(b *incusBackend) error
+		action string
+	}{
+		{"restart", func(b *incusBackend) error { return b.RestartInstance(context.Background(), "demo") }, "restart"},
+		{"pause", func(b *incusBackend) error { return b.PauseInstance(context.Background(), "demo") }, "freeze"},
+		{"resume", func(b *incusBackend) error { return b.ResumeInstance(context.Background(), "demo") }, "unfreeze"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := &instanceServerStub{}
+			b := &incusBackend{srv: srv}
+			require.NoError(t, tc.call(b))
+			assert.Equal(t, tc.action, srv.stateAction)
+		})
+	}
 }
 
 func TestCloneInstanceWaitsWithContext(t *testing.T) {

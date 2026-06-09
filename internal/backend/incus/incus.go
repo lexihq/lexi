@@ -82,6 +82,7 @@ func New() (*incusBackend, error) {
 			Console:    true,
 			Metrics:    true,
 			Limits:     true,
+			Pause:      true,
 		},
 		cpuSamples: make(map[string]cpuSample),
 	}, nil
@@ -286,6 +287,18 @@ func (b *incusBackend) StartInstance(ctx context.Context, name string) error {
 
 func (b *incusBackend) StopInstance(ctx context.Context, name string) error {
 	return b.changeState(ctx, name, "stop", true)
+}
+
+func (b *incusBackend) RestartInstance(ctx context.Context, name string) error {
+	return b.changeState(ctx, name, "restart", false)
+}
+
+func (b *incusBackend) PauseInstance(ctx context.Context, name string) error {
+	return b.changeState(ctx, name, "freeze", false)
+}
+
+func (b *incusBackend) ResumeInstance(ctx context.Context, name string) error {
+	return b.changeState(ctx, name, "unfreeze", false)
 }
 
 func (b *incusBackend) changeState(ctx context.Context, name, action string, force bool) error {

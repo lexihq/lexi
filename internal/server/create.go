@@ -18,9 +18,10 @@ func (h handlers) createForm(w http.ResponseWriter, r *http.Request) {
 	h.renderShell(w, r, http.StatusOK, ui.CreatePage(h.backend.Capabilities(), images))
 }
 
-// images renders the HTMX-driven image search results, filtered by the q/arch/
-// type query params over the backend's full catalog.
-func (h handlers) images(w http.ResponseWriter, r *http.Request) {
+// imagePicker renders the HTMX-driven image search results for the create
+// form, filtered by the q/arch/type query params over the backend's full
+// catalog.
+func (h handlers) imagePicker(w http.ResponseWriter, r *http.Request) {
 	all, err := h.backend.ListImages(r.Context())
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

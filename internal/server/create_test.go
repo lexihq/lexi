@@ -62,7 +62,7 @@ func TestImagesFilter(t *testing.T) {
 	srv := New(fake.New())
 
 	t.Run("by query matches distribution", func(t *testing.T) {
-		res := request(t, srv, "GET", "/images?q=debian", "", true)
+		res := request(t, srv, "GET", "/partials/images?q=debian", "", true)
 		assert.Equal(t, http.StatusOK, res.Code)
 		body := res.Body.String()
 		assert.Contains(t, body, "debian/12")
@@ -71,7 +71,7 @@ func TestImagesFilter(t *testing.T) {
 	})
 
 	t.Run("by arch", func(t *testing.T) {
-		res := request(t, srv, "GET", "/images?arch=x86_64", "", true)
+		res := request(t, srv, "GET", "/partials/images?arch=x86_64", "", true)
 		assert.Equal(t, http.StatusOK, res.Code)
 		body := res.Body.String()
 		assert.Contains(t, body, "fedora/40")
@@ -81,7 +81,7 @@ func TestImagesFilter(t *testing.T) {
 	})
 
 	t.Run("by type", func(t *testing.T) {
-		res := request(t, srv, "GET", "/images?type=virtual-machine", "", true)
+		res := request(t, srv, "GET", "/partials/images?type=virtual-machine", "", true)
 		assert.Equal(t, http.StatusOK, res.Code)
 		body := res.Body.String()
 		assert.Contains(t, body, "ubuntu/24.04")

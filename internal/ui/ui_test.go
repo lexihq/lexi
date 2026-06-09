@@ -212,6 +212,38 @@ func TestSidebarGatesStorageLink(t *testing.T) {
 	}
 }
 
+func TestSidebarGatesImagesLink(t *testing.T) {
+	with := render(t, Sidebar(backend.Capabilities{ImageManagement: true}, Nav{Section: NavImages}))
+	assertContains(t, with, "/images")
+	assertContains(t, with, "Images")
+
+	without := render(t, Sidebar(backend.Capabilities{}, Nav{Section: NavInstances}))
+	if strings.Contains(without, `href="/images"`) {
+		t.Fatalf("images link must be hidden without the capability, got %q", without)
+	}
+}
+
+func TestImagesPageRendersFormsAndTable(t *testing.T) {
+	html := render(t, ImagesPage(testCaps(),
+		[]backend.LocalImage{{Fingerprint: "abcdef0123456789", Aliases: []string{"debian/12"}, Description: "Debian", Arch: "aarch64", SizeBytes: 300 * 1024 * 1024, Type: "container"}},
+		[]backend.Instance{{Name: "demo", Status: "Stopped"}}))
+
+	assertContains(t, html, `hx-post="/images/copy"`)
+	assertContains(t, html, `hx-post="/images/publish"`)
+	assertContains(t, html, `<option value="demo">`)
+	assertContains(t, html, "debian/12")
+	assertContains(t, html, "abcdef012345") // truncated fingerprint
+	assertContains(t, html, "300.0 MiB")
+	assertContains(t, html, `hx-post="/images/abcdef0123456789/delete"`)
+	assertContains(t, html, `hx-post="/images/abcdef0123456789/aliases"`)
+	assertContains(t, html, `hx-post="/images/aliases/delete"`)
+}
+
+func TestImagesTableEmptyState(t *testing.T) {
+	html := render(t, ImagesTable(nil))
+	assertContains(t, html, "No local images yet")
+}
+
 func TestStorageVolumesTableShowsDeleteAndCreateForm(t *testing.T) {
 	html := render(t, StorageVolumesTable("default", []backend.StorageVolume{
 		{Name: "vol1", ContentType: "filesystem"},

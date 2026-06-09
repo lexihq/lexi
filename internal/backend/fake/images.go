@@ -54,7 +54,7 @@ func (f *Fake) PublishImage(_ context.Context, instance, alias string) error {
 	created := f.now()
 	img := &backend.LocalImage{
 		Fingerprint: fmt.Sprintf("pub-%s-%d", instance, created.Unix()),
-		Description: fmt.Sprintf("Image from instance %s", instance),
+		Description: "Image from instance " + instance,
 		Arch:        "aarch64",
 		Type:        "container",
 		CreatedAt:   created,

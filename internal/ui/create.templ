@@ -28,17 +28,17 @@ templ CreatePage(caps backend.Capabilities, images []backend.Image) {
 						placeholder="Search images…"
 						autocomplete="off"
 						class="h-10 w-full rounded-md border bg-background px-3 text-sm"
-						hx-get="/images"
+						hx-get="/partials/images"
 						hx-trigger="keyup changed delay:300ms, search"
 						hx-target="#image-results"
 						hx-include="closest form"
 					/>
-					<select name="arch" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
+					<select name="arch" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/partials/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
 						<option value="">Any arch</option>
 						<option value="aarch64">aarch64</option>
 						<option value="x86_64">x86_64</option>
 					</select>
-					<select name="type" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
+					<select name="type" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/partials/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
 						<option value="">Any type</option>
 						<option value="container">container</option>
 						<option value="virtual-machine">virtual-machine</option>

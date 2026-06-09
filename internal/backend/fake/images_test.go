@@ -29,6 +29,16 @@ func TestListImagesCurated(t *testing.T) {
 	}
 }
 
+// mustLocal lists the local image store, failing the test on error.
+func mustLocal(t *testing.T, b *Fake) []backend.LocalImage {
+	t.Helper()
+	imgs, err := b.ListLocalImages(ctx())
+	if err != nil {
+		t.Fatalf("list local images: %v", err)
+	}
+	return imgs
+}
+
 // findLocal returns the local image carrying alias, or nil.
 func findLocal(t *testing.T, b *Fake, alias string) *backend.LocalImage {
 	t.Helper()
@@ -75,11 +85,11 @@ func TestPublishImage(t *testing.T) {
 func TestPublishImageNoAlias(t *testing.T) {
 	b := New()
 	mustCreate(t, b, "src")
-	before, _ := b.ListLocalImages(ctx())
+	before := mustLocal(t, b)
 	if err := b.PublishImage(ctx(), "src", ""); err != nil {
 		t.Fatalf("publish without alias: %v", err)
 	}
-	after, _ := b.ListLocalImages(ctx())
+	after := mustLocal(t, b)
 	if len(after) != len(before)+1 {
 		t.Fatalf("expected %d local images, got %d", len(before)+1, len(after))
 	}
@@ -134,11 +144,11 @@ func TestCopyImageAlreadyLocal(t *testing.T) {
 
 func TestDeleteImage(t *testing.T) {
 	b := New()
-	imgs, _ := b.ListLocalImages(ctx())
+	imgs := mustLocal(t, b)
 	if err := b.DeleteImage(ctx(), imgs[0].Fingerprint); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	after, _ := b.ListLocalImages(ctx())
+	after := mustLocal(t, b)
 	if len(after) != len(imgs)-1 {
 		t.Fatalf("expected %d local images after delete, got %d", len(imgs)-1, len(after))
 	}
@@ -153,7 +163,7 @@ func TestDeleteImageGhost(t *testing.T) {
 
 func TestAddRemoveImageAlias(t *testing.T) {
 	b := New()
-	imgs, _ := b.ListLocalImages(ctx())
+	imgs := mustLocal(t, b)
 	fp := imgs[0].Fingerprint
 	if err := b.AddImageAlias(ctx(), fp, "extra"); err != nil {
 		t.Fatalf("add alias: %v", err)
@@ -178,7 +188,7 @@ func TestAddImageAliasGhostImage(t *testing.T) {
 
 func TestAddImageAliasDuplicate(t *testing.T) {
 	b := New()
-	imgs, _ := b.ListLocalImages(ctx())
+	imgs := mustLocal(t, b)
 	fp := imgs[0].Fingerprint
 	if err := b.AddImageAlias(ctx(), fp, "dup"); err != nil {
 		t.Fatalf("add alias: %v", err)

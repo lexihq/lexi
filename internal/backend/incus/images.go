@@ -123,8 +123,8 @@ func (b *incusBackend) PublishImage(ctx context.Context, instance, alias string)
 	if alias == "" {
 		return nil
 	}
-	fp, _ := op.Get().Metadata["fingerprint"].(string)
-	if fp == "" {
+	fp, ok := op.Get().Metadata["fingerprint"].(string)
+	if !ok || fp == "" {
 		return fmt.Errorf("publish image from %q: operation returned no fingerprint", instance)
 	}
 	return b.AddImageAlias(ctx, fp, alias)

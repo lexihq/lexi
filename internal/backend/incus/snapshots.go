@@ -27,42 +27,19 @@ func (b *incusBackend) ListSnapshots(_ context.Context, name string) ([]backend.
 
 func (b *incusBackend) CreateSnapshot(ctx context.Context, name, snapshot string) error {
 	op, err := b.srv.CreateInstanceSnapshot(name, api.InstanceSnapshotsPost{Name: snapshot})
-	if err != nil {
-		return fmt.Errorf("snapshot %q of %q: %w", snapshot, name, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("snapshot %q of %q: %w", snapshot, name, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "snapshot %q of %q", snapshot, name)
 }
 
 func (b *incusBackend) RestoreSnapshot(ctx context.Context, name, snapshot string) error {
 	// GET-then-PUT preserves the instance config; Restore triggers the rollback.
-	inst, etag, err := b.srv.GetInstance(name)
-	if err != nil {
-		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
-	}
-	put := inst.Writable()
-	put.Restore = snapshot
-	op, err := b.srv.UpdateInstance(name, put, etag)
-	if err != nil {
-		return fmt.Errorf("restore %q on %q: %w", snapshot, name, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("restore %q on %q: %w", snapshot, name, mapErr(err))
-	}
-	return nil
+	return b.mutateInstance(ctx, name, func(put *api.InstancePut) {
+		put.Restore = snapshot
+	}, "restore %q on %q", snapshot, name)
 }
 
 func (b *incusBackend) DeleteSnapshot(ctx context.Context, name, snapshot string) error {
 	op, err := b.srv.DeleteInstanceSnapshot(name, snapshot)
-	if err != nil {
-		return fmt.Errorf("delete snapshot %q of %q: %w", snapshot, name, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("delete snapshot %q of %q: %w", snapshot, name, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "delete snapshot %q of %q", snapshot, name)
 }
 
 func snapshotShortName(name string) string {

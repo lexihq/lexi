@@ -31,20 +31,9 @@ func (b *incusBackend) GetProfile(_ context.Context, name string) (backend.Profi
 // SetInstanceProfiles replaces the instance's ordered profile list (GET-then-PUT,
 // matching UpdateLimits).
 func (b *incusBackend) SetInstanceProfiles(ctx context.Context, name string, profiles []string) error {
-	inst, etag, err := b.srv.GetInstance(name)
-	if err != nil {
-		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
-	}
-	put := inst.Writable()
-	put.Profiles = profiles
-	op, err := b.srv.UpdateInstance(name, put, etag)
-	if err != nil {
-		return fmt.Errorf("set profiles on %q: %w", name, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("set profiles on %q: %w", name, mapErr(err))
-	}
-	return nil
+	return b.mutateInstance(ctx, name, func(put *api.InstancePut) {
+		put.Profiles = profiles
+	}, "set profiles on %q", name)
 }
 
 func toProfile(p *api.Profile) backend.Profile {

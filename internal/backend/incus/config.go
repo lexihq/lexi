@@ -6,30 +6,19 @@ import (
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
+	"github.com/lxc/incus/v6/shared/api"
 )
 
 // UpdateLimits sets or clears limits.cpu/limits.memory on the instance's local
 // config (GET-then-PUT, matching RestoreSnapshot). Empty values delete the key.
 func (b *incusBackend) UpdateLimits(ctx context.Context, name string, l backend.Limits) error {
-	inst, etag, err := b.srv.GetInstance(name)
-	if err != nil {
-		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
-	}
-	put := inst.Writable()
-	if put.Config == nil {
-		put.Config = map[string]string{}
-	}
-	setOrDelete(put.Config, "limits.cpu", l.CPU)
-	setOrDelete(put.Config, "limits.memory", l.Memory)
-
-	op, err := b.srv.UpdateInstance(name, put, etag)
-	if err != nil {
-		return fmt.Errorf("update limits on %q: %w", name, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("update limits on %q: %w", name, mapErr(err))
-	}
-	return nil
+	return b.mutateInstance(ctx, name, func(put *api.InstancePut) {
+		if put.Config == nil {
+			put.Config = map[string]string{}
+		}
+		setOrDelete(put.Config, "limits.cpu", l.CPU)
+		setOrDelete(put.Config, "limits.memory", l.Memory)
+	}, "update limits on %q", name)
 }
 
 // managedConfigKey reports whether a config key is managed outside the config
@@ -67,32 +56,21 @@ func (b *incusBackend) GetInstanceConfig(_ context.Context, name string) (backen
 // UpdateLimits), preserving the managed keys and ignoring any a client tries to
 // set through the editor.
 func (b *incusBackend) UpdateInstanceConfig(ctx context.Context, name string, config map[string]string) error {
-	inst, etag, err := b.srv.GetInstance(name)
-	if err != nil {
-		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
-	}
-	put := inst.Writable()
-	next := map[string]string{}
-	for k, v := range put.Config {
-		if managedConfigKey(k) {
+	return b.mutateInstance(ctx, name, func(put *api.InstancePut) {
+		next := map[string]string{}
+		for k, v := range put.Config {
+			if managedConfigKey(k) {
+				next[k] = v
+			}
+		}
+		for k, v := range config {
+			if managedConfigKey(k) {
+				continue
+			}
 			next[k] = v
 		}
-	}
-	for k, v := range config {
-		if managedConfigKey(k) {
-			continue
-		}
-		next[k] = v
-	}
-	put.Config = next
-	op, err := b.srv.UpdateInstance(name, put, etag)
-	if err != nil {
-		return fmt.Errorf("update config on %q: %w", name, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("update config on %q: %w", name, mapErr(err))
-	}
-	return nil
+		put.Config = next
+	}, "update config on %q", name)
 }
 
 func setOrDelete(m map[string]string, key, val string) {

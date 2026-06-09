@@ -38,13 +38,7 @@ func (b *incusBackend) CreateInstance(ctx context.Context, opt backend.CreateOpt
 		return err
 	}
 	op, err := b.srv.CreateInstance(req)
-	if err != nil {
-		return fmt.Errorf("create instance %q: %w", opt.Name, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("create instance %q: %w", opt.Name, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "create instance %q", opt.Name)
 }
 
 func (b *incusBackend) StartInstance(ctx context.Context, name string) error {
@@ -73,13 +67,7 @@ func (b *incusBackend) changeState(ctx context.Context, name, action string, for
 		Timeout: -1,
 		Force:   force,
 	}, "")
-	if err != nil {
-		return fmt.Errorf("%s instance %q: %w", action, name, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("%s instance %q: %w", action, name, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "%s instance %q", action, name)
 }
 
 func (b *incusBackend) DeleteInstance(ctx context.Context, name string) error {
@@ -93,11 +81,8 @@ func (b *incusBackend) DeleteInstance(ctx context.Context, name string) error {
 		}
 	}
 	op, err := b.srv.DeleteInstance(name)
-	if err != nil {
-		return fmt.Errorf("delete instance %q: %w", name, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("delete instance %q: %w", name, mapErr(err))
+	if err := waitOp(ctx, op, err, "delete instance %q", name); err != nil {
+		return err
 	}
 	b.clearCPUSample(name)
 	return nil
@@ -119,6 +104,33 @@ func (b *incusBackend) CloneInstance(ctx context.Context, src, dst string) error
 		return fmt.Errorf("clone %q to %q: %w", src, dst, mapErr(err))
 	}
 	return nil
+}
+
+// waitOp finishes an Incus operation call: it maps the immediate error, then
+// waits with ctx, attributing both to the same label (so the wording can't drift
+// between the two paths). Pass the (op, err) pair straight from the client call.
+func waitOp(ctx context.Context, op incusclient.Operation, err error, format string, args ...any) error {
+	if err != nil {
+		return fmt.Errorf("%s: %w", fmt.Sprintf(format, args...), mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		return fmt.Errorf("%s: %w", fmt.Sprintf(format, args...), mapErr(err))
+	}
+	return nil
+}
+
+// mutateInstance applies a GET-then-PUT update: it fetches the instance, lets
+// mutate adjust the writable copy, then PUTs and waits. The fetch error is
+// labelled "get instance"; the update/wait error uses format/args.
+func (b *incusBackend) mutateInstance(ctx context.Context, name string, mutate func(*api.InstancePut), format string, args ...any) error {
+	inst, etag, err := b.srv.GetInstance(name)
+	if err != nil {
+		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
+	}
+	put := inst.Writable()
+	mutate(&put)
+	op, err := b.srv.UpdateInstance(name, put, etag)
+	return waitOp(ctx, op, err, format, args...)
 }
 
 func waitRemoteOperation(ctx context.Context, op incusclient.RemoteOperation) error {

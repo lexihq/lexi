@@ -67,7 +67,9 @@ func TestDeleteVolumeCallsThrough(t *testing.T) {
 }
 
 func TestToVolumeSnapshot(t *testing.T) {
-	s := &api.StorageVolumeSnapshot{Name: "snap0"}
+	// Incus reports the name as "<volume>/<snapshot>"; the mapper returns the bare
+	// snapshot name.
+	s := &api.StorageVolumeSnapshot{Name: "vol1/snap0"}
 	got := toVolumeSnapshot(s)
 	assert.Equal(t, "snap0", got.Name)
 }

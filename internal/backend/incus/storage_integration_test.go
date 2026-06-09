@@ -48,3 +48,30 @@ func TestVolumeCRUDRoundTrip(t *testing.T) {
 	_, err = b.GetVolume(ctx, pool.Name, name)
 	require.ErrorIs(t, err, backend.ErrNotFound)
 }
+
+func TestVolumeSnapshotRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	pool := pickPool(t, b, ctx)
+	name := fmt.Sprintf("lxvol%d", time.Now().UnixNano()%100000)
+	t.Cleanup(func() { _ = b.DeleteVolume(ctx, pool.Name, name) })
+
+	require.NoError(t, b.CreateVolume(ctx, pool.Name, backend.StorageVolume{
+		Name: name, ContentType: "filesystem", Config: map[string]string{"size": "32MiB"},
+	}))
+
+	require.NoError(t, b.CreateVolumeSnapshot(ctx, pool.Name, name, "snap0"))
+	snaps, err := b.ListVolumeSnapshots(ctx, pool.Name, name)
+	require.NoError(t, err)
+	require.Len(t, snaps, 1)
+	assert.Equal(t, "snap0", snaps[0].Name)
+
+	require.NoError(t, b.RestoreVolumeSnapshot(ctx, pool.Name, name, "snap0"))
+
+	require.NoError(t, b.DeleteVolumeSnapshot(ctx, pool.Name, name, "snap0"))
+	snaps, err = b.ListVolumeSnapshots(ctx, pool.Name, name)
+	require.NoError(t, err)
+	assert.Empty(t, snaps)
+
+	require.NoError(t, b.DeleteVolume(ctx, pool.Name, name))
+}

@@ -112,5 +112,7 @@ func (b *incusBackend) RestoreVolumeSnapshot(_ context.Context, pool, volume, sn
 }
 
 func toVolumeSnapshot(s *api.StorageVolumeSnapshot) backend.StorageVolumeSnapshot {
-	return backend.StorageVolumeSnapshot{Name: s.Name, CreatedAt: s.CreatedAt}
+	// Incus reports volume snapshot names as "<volume>/<snapshot>"; the UI and
+	// restore/delete ops use the bare snapshot name (matches ListSnapshots).
+	return backend.StorageVolumeSnapshot{Name: snapshotShortName(s.Name), CreatedAt: s.CreatedAt}
 }

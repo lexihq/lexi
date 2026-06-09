@@ -329,6 +329,38 @@ test("create and delete a custom volume in the Storage section", async ({ page }
   }).toPass({ timeout: 10000 });
 });
 
+test("snapshot a custom volume: create, restore, and delete", async ({ page }) => {
+  await page.goto("/storage/default");
+  // Distinct volume name so this doesn't collide with the volume-CRUD test on
+  // the shared fake server.
+  await page.locator("#volumes").locator('input[name="name"]').fill("e2e-snapvol");
+  await page.getByRole("button", { name: "Create volume" }).click();
+  await page.locator("#volumes").getByRole("link", { name: "e2e-snapvol" }).click();
+  await expect(page).toHaveURL(/\/storage\/default\/volumes\/e2e-snapvol$/);
+
+  const snaps = page.locator("#volume-snapshots");
+  await expect(snaps).toBeVisible();
+  await snaps.locator('input[name="snapshot"]').fill("snap0");
+  await page.getByRole("button", { name: "Create snapshot" }).click();
+  await expect(snaps).toContainText("snap0");
+
+  await snaps.getByRole("button", { name: "Restore" }).click();
+  await expect(snaps).toContainText("snap0");
+
+  // htmx swap-then-click race: retry the delete until it takes effect.
+  await expect(async () => {
+    await page.locator("#volume-snapshots").getByRole("button", { name: "Delete" }).click();
+    await expect(page.locator("#volume-snapshots").getByText("snap0")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
+  // Clean up the volume from the pool page (shared server state).
+  await page.goto("/storage/default");
+  await expect(async () => {
+    await page.locator("#volumes").getByRole("row", { name: /e2e-snapvol/ }).getByRole("button", { name: "Delete" }).click();
+    await expect(page.locator("#volumes").getByText("e2e-snapvol")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});
+
 test("backend errors surface as a toast", async ({ page }) => {
   await page.goto("/networks/new");
   // incusbr0 is seeded → creating it again conflicts (409).

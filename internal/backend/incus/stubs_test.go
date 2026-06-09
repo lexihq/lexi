@@ -82,6 +82,7 @@ type instanceServerStub struct {
 	deletedImage  string                      // captured by DeleteImage
 	createdAlias  *api.ImageAliasesPost       // captured by CreateImageAlias
 	deletedAlias  string                      // captured by DeleteImageAlias
+	aliasErr      error                       // error for image alias calls
 }
 
 func (s *instanceServerStub) CreateInstanceSnapshot(_ string, p api.InstanceSnapshotsPost) (incusclient.Operation, error) {
@@ -328,12 +329,12 @@ func (s *instanceServerStub) DeleteImage(fingerprint string) (incusclient.Operat
 
 func (s *instanceServerStub) CreateImageAlias(alias api.ImageAliasesPost) error {
 	s.createdAlias = &alias
-	return s.imagesErr
+	return s.aliasErr
 }
 
 func (s *instanceServerStub) DeleteImageAlias(name string) error {
 	s.deletedAlias = name
-	return s.imagesErr
+	return s.aliasErr
 }
 
 // imageServerStub fakes the simplestreams remote for copyImageFrom tests.

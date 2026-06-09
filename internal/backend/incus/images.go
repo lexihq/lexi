@@ -2,6 +2,7 @@ package incus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -127,7 +128,15 @@ func (b *incusBackend) PublishImage(ctx context.Context, instance, alias string)
 	if !ok || fp == "" {
 		return fmt.Errorf("publish image from %q: operation returned no fingerprint", instance)
 	}
-	return b.AddImageAlias(ctx, fp, alias)
+	if err := b.AddImageAlias(ctx, fp, alias); err != nil {
+		// Roll the publish back so a failed alias (e.g. a duplicate) doesn't
+		// leave an orphaned, unaliased image in the store.
+		if derr := b.DeleteImage(ctx, fp); derr != nil {
+			return errors.Join(err, fmt.Errorf("rollback published image %q: %w", fp, derr))
+		}
+		return err
+	}
+	return nil
 }
 
 // CopyImage pulls the image behind alias from the images remote into the local

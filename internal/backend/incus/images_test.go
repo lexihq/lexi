@@ -2,6 +2,7 @@ package incus
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -107,6 +108,20 @@ func TestPublishImageMissingFingerprintFails(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Nil(t, srv.createdAlias)
+}
+
+func TestPublishImageRollsBackOnAliasFailure(t *testing.T) {
+	srv := &instanceServerStub{
+		createImageOp: &operationStub{get: api.Operation{Metadata: map[string]any{"fingerprint": "pubfp"}}},
+		aliasErr:      errors.New("already exists"),
+	}
+	b := &incusBackend{srv: srv}
+
+	err := b.PublishImage(context.Background(), "demo", "dup")
+
+	require.Error(t, err)
+	// The just-published image must not be left orphaned when aliasing fails.
+	assert.Equal(t, "pubfp", srv.deletedImage)
 }
 
 func TestCopyImageFromResolvesAliasAndCopies(t *testing.T) {

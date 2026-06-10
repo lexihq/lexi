@@ -443,6 +443,43 @@ test("create and delete a network in the Networks section", async ({ page }) => 
   await expect(page.locator("#networks-table").getByText("e2e-net")).toHaveCount(0);
 });
 
+test("create, edit, and delete a profile", async ({ page }) => {
+  await page.goto("/profiles");
+
+  // Create.
+  await page.locator('input[name="name"]').fill("e2e-prof");
+  await page.locator('input[name="description"]').fill("made by e2e");
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page).toHaveURL(/\/profiles\/e2e-prof$/);
+
+  // Edit config via the trailing blank row.
+  await page.locator('input[name="key"]').last().fill("limits.cpu");
+  await page.locator('textarea[name="value"]').last().fill("2");
+  await page.getByRole("button", { name: "Apply config" }).click();
+  await expect(page).toHaveURL(/\/profiles\/e2e-prof$/);
+  await expect(page.locator('input[name="key"][value="limits.cpu"]')).toBeVisible();
+
+  // Delete.
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page).toHaveURL(/\/profiles$/);
+  await expect(page.locator("table").getByText("e2e-prof")).toHaveCount(0);
+});
+
+test("default profile keeps devices after a config edit and has no delete", async ({ page }) => {
+  await page.goto("/profiles/default");
+  await expect(page.getByRole("button", { name: "Delete" })).toHaveCount(0);
+  await expect(page.getByText("eth0", { exact: true })).toBeVisible();
+
+  await page.locator('input[name="key"]').last().fill("user.e2e-prof");
+  await page.locator('textarea[name="value"]').last().fill("1");
+  await page.getByRole("button", { name: "Apply config" }).click();
+
+  await expect(page).toHaveURL(/\/profiles\/default$/);
+  // Devices survived the config-only edit.
+  await expect(page.getByText("eth0", { exact: true })).toBeVisible();
+  await expect(page.getByText("root", { exact: true })).toBeVisible();
+});
+
 test("edit a managed network's description and config", async ({ page }) => {
   await page.goto("/networks/incusbr0");
   await page.locator('input[name="description"]').fill("edited by e2e");

@@ -1,8 +1,12 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
+	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/ui"
 )
 
@@ -22,6 +26,53 @@ func (h handlers) profileDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.ProfileDetailPage(h.backend.Capabilities(), p))
+}
+
+// createProfile makes an empty profile (name + description) and redirects to
+// its detail page, where config can be edited.
+func (h handlers) createProfile(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(r.Form.Get("name"))
+	if name == "" {
+		h.fail(w, fmt.Errorf("profile name is required: %w", backend.ErrInvalid))
+		return
+	}
+	if err := h.backend.CreateProfile(r.Context(), name, r.Form.Get("description")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/profiles/"+url.PathEscape(name), http.StatusSeeOther)
+}
+
+// updateProfile applies the profile editor: description plus key/value rows
+// that replace the profile's config (devices are preserved by the backend).
+// The hidden version field carries the token the form was rendered from, so a
+// concurrent change conflicts (409) instead of being silently overwritten.
+func (h handlers) updateProfile(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := r.PathValue("name")
+	config := zipConfigPairs(r.Form["key"], r.Form["value"])
+	if err := h.backend.UpdateProfile(r.Context(), name, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/profiles/"+url.PathEscape(name), http.StatusSeeOther)
+}
+
+// deleteProfile removes a profile and redirects to the list ("default" and
+// in-use profiles are refused by the backend).
+func (h handlers) deleteProfile(w http.ResponseWriter, r *http.Request) {
+	if err := h.backend.DeleteProfile(r.Context(), r.PathValue("name")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/profiles", http.StatusSeeOther)
 }
 
 // setInstanceProfiles replaces the instance's profile set from the checked

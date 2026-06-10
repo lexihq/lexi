@@ -84,6 +84,74 @@ func (b *incusBackend) DeleteProfile(_ context.Context, name string) error {
 	return nil
 }
 
+// RenameProfile renames a profile. "default" is refused up front; the target
+// name collision surfaces from the daemon as ErrConflict.
+func (b *incusBackend) RenameProfile(_ context.Context, name, newName string) error {
+	if name == "default" {
+		return fmt.Errorf("the default profile cannot be renamed: %w", backend.ErrInvalid)
+	}
+	if err := b.srv.RenameProfile(name, api.ProfilePost{Name: newName}); err != nil {
+		return fmt.Errorf("rename profile %q: %w", name, mapErr(err))
+	}
+	return nil
+}
+
+// AddProfileDevice attaches (or overwrites) a device via GET-preserve-PUT, so
+// the profile's config and other devices are untouched.
+func (b *incusBackend) AddProfileDevice(_ context.Context, profile, device string, config map[string]string) error {
+	return b.mutateProfile(profile, "", func(put *api.ProfilePut) error {
+		if put.Devices == nil {
+			put.Devices = map[string]map[string]string{}
+		}
+		put.Devices[device] = config
+		return nil
+	}, "add device %q to profile %q", device, profile)
+}
+
+// UpdateProfileDevice replaces an existing device's config map, conditionally on
+// the profile version (etag).
+func (b *incusBackend) UpdateProfileDevice(_ context.Context, profile, device string, config map[string]string, version string) error {
+	return b.mutateProfile(profile, version, func(put *api.ProfilePut) error {
+		if _, ok := put.Devices[device]; !ok {
+			return fmt.Errorf("device %q on profile %q: %w", device, profile, backend.ErrNotFound)
+		}
+		put.Devices[device] = config
+		return nil
+	}, "update device %q on profile %q", device, profile)
+}
+
+// RemoveProfileDevice detaches a device. Absent devices 404 before any PUT.
+func (b *incusBackend) RemoveProfileDevice(_ context.Context, profile, device string) error {
+	return b.mutateProfile(profile, "", func(put *api.ProfilePut) error {
+		if _, ok := put.Devices[device]; !ok {
+			return fmt.Errorf("device %q on profile %q: %w", device, profile, backend.ErrNotFound)
+		}
+		delete(put.Devices, device)
+		return nil
+	}, "remove device %q from profile %q", device, profile)
+}
+
+// mutateProfile GETs the profile, applies mutate to its writable copy, and PUTs
+// it back conditionally on version (empty version uses the fresh etag). mutate
+// may return a sentinel error (e.g. ErrNotFound) to abort before the PUT.
+func (b *incusBackend) mutateProfile(name, version string, mutate func(*api.ProfilePut) error, action string, args ...any) error {
+	p, etag, err := b.srv.GetProfile(name)
+	if err != nil {
+		return fmt.Errorf("get profile %q: %w", name, mapErr(err))
+	}
+	put := p.Writable()
+	if err := mutate(&put); err != nil {
+		return err
+	}
+	if version == "" {
+		version = etag
+	}
+	if err := b.srv.UpdateProfile(name, put, version); err != nil {
+		return fmt.Errorf(action+": %w", append(args, mapErr(err))...)
+	}
+	return nil
+}
+
 // SetInstanceProfiles replaces the instance's ordered profile list (GET-then-PUT,
 // matching UpdateLimits).
 func (b *incusBackend) SetInstanceProfiles(ctx context.Context, name string, profiles []string) error {

@@ -211,6 +211,7 @@ func inheritedDevices(cfg backend.InstanceConfig) map[string]map[string]string {
 // caps.Devices), inherited (read-only), and the typed add forms (caps.Devices).
 // Re-rendered standalone by addDevice/removeDevice (id="devices").
 templ DevicesSection(caps backend.Capabilities, name string, cfg backend.InstanceConfig) {
+	{{ base := "/instances/" + name + "/devices" }}
 	<div id="devices" class="rounded-lg border bg-card p-4">
 		<h2 class="mb-3 text-lg font-medium">Devices</h2>
 		<h3 class="mb-2 text-sm font-medium text-muted-foreground">Local</h3>
@@ -227,11 +228,11 @@ templ DevicesSection(caps backend.Capabilities, name string, cfg backend.Instanc
 							}
 						</dl>
 						if caps.Devices {
-							@editDeviceForm(name, dn, cfg.LocalDevices[dn], cfg.Version)
+							@editDeviceForm(base, dn, cfg.LocalDevices[dn], cfg.Version, "#devices")
 						}
 					</div>
 					if caps.Devices {
-						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + name + "/devices/" + url.PathEscape(dn) + "/delete", "hx-target": "#devices", "hx-swap": "outerHTML"}}) {
+						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": base + "/" + url.PathEscape(dn) + "/delete", "hx-target": "#devices", "hx-swap": "outerHTML"}}) {
 							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 							Remove
 						}
@@ -248,27 +249,73 @@ templ DevicesSection(caps backend.Capabilities, name string, cfg backend.Instanc
 			<h3 class="mb-2 mt-4 text-sm font-medium text-muted-foreground">Add device</h3>
 			<div class="space-y-2">
 				for _, dt := range DeviceTypes {
-					@addDeviceForm(name, dt.Type, dt.Fields)
+					@addDeviceForm(base, dt.Type, dt.Fields, "#devices")
 				}
 			</div>
 		}
 	</div>
 }
 
-// editDeviceForm is the collapsible in-place editor for one local device: the
-// type's fields pre-filled (blank = remove on save), every other key preserved
+// ProfileDevicesSection is the swappable per-profile device editor: local
+// devices with in-place edit/remove plus typed add forms. Mirrors the instance
+// DevicesSection but over a profile's devices (no inherited section). Gated on
+// caps.Devices — the same capability that allows instance device editing.
+templ ProfileDevicesSection(caps backend.Capabilities, p backend.Profile) {
+	{{ base := "/profiles/" + p.Name + "/devices" }}
+	<div id="profile-devices" class="rounded-lg border bg-card p-4">
+		<h2 class="mb-3 text-lg font-medium">Devices</h2>
+		if len(p.Devices) == 0 {
+			<p class="mb-3 text-sm text-muted-foreground">No devices.</p>
+		} else {
+			for _, dn := range sortedDeviceNames(p.Devices) {
+				<div class="mb-3 flex items-start justify-between gap-2">
+					<div class="grow">
+						<p class="text-sm font-medium">{ dn }</p>
+						<dl class="grid gap-1 pl-3 text-sm sm:grid-cols-2">
+							for _, k := range sortedKeys(p.Devices[dn]) {
+								<div><dt class="text-muted-foreground">{ k }</dt><dd>{ p.Devices[dn][k] }</dd></div>
+							}
+						</dl>
+						if caps.Devices {
+							@editDeviceForm(base, dn, p.Devices[dn], p.Version, "#profile-devices")
+						}
+					</div>
+					if caps.Devices {
+						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": base + "/" + url.PathEscape(dn) + "/delete", "hx-target": "#profile-devices", "hx-swap": "outerHTML"}}) {
+							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+							Remove
+						}
+					}
+				</div>
+			}
+		}
+		if caps.Devices {
+			<h3 class="mb-2 mt-4 text-sm font-medium text-muted-foreground">Add device</h3>
+			<div class="space-y-2">
+				for _, dt := range DeviceTypes {
+					@addDeviceForm(base, dt.Type, dt.Fields, "#profile-devices")
+				}
+			</div>
+		}
+	</div>
+}
+
+// editDeviceForm is the collapsible in-place editor for one device: the type's
+// fields pre-filled (blank = remove on save), every other key preserved
 // server-side. Rendered only for types the typed forms know. The hidden version
-// makes the save conditional on the instance state the panel was rendered from.
-templ editDeviceForm(name, device string, dev map[string]string, version string) {
+// makes the save conditional on the state the panel was rendered from. base is
+// the devices endpoint (e.g. "/instances/x/devices" or "/profiles/y/devices")
+// and target is the htmx swap container (e.g. "#devices").
+templ editDeviceForm(base, device string, dev map[string]string, version, target string) {
 	for _, dt := range DeviceTypes {
 		if dt.Type == dev["type"] {
 			<details class="ml-3 mt-1 max-w-md rounded-md border p-2">
 				<summary class="cursor-pointer text-xs font-medium text-muted-foreground">Edit</summary>
 				<form
 					method="post"
-					action={ templ.URL("/instances/" + name + "/devices/" + url.PathEscape(device)) }
-					hx-post={ "/instances/" + name + "/devices/" + url.PathEscape(device) }
-					hx-target="#devices"
+					action={ templ.URL(base + "/" + url.PathEscape(device)) }
+					hx-post={ base + "/" + url.PathEscape(device) }
+					hx-target={ target }
 					hx-swap="outerHTML"
 					class="mt-2 space-y-2"
 				>
@@ -287,15 +334,15 @@ templ editDeviceForm(name, device string, dev map[string]string, version string)
 }
 
 // addDeviceForm is one collapsible typed add-form: a device name plus the type's
-// named fields, posting to the add endpoint (blanks dropped server-side).
-templ addDeviceForm(name, devType string, fields []string) {
+// named fields, posting to base (blanks dropped server-side).
+templ addDeviceForm(base, devType string, fields []string, target string) {
 	<details class="rounded-md border p-3">
 		<summary class="cursor-pointer text-sm font-medium">{ "Add " + devType }</summary>
 		<form
 			method="post"
-			action={ templ.URL("/instances/" + name + "/devices") }
-			hx-post={ "/instances/" + name + "/devices" }
-			hx-target="#devices"
+			action={ templ.URL(base) }
+			hx-post={ base }
+			hx-target={ target }
 			hx-swap="outerHTML"
 			class="mt-2 space-y-2"
 		>

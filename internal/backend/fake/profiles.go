@@ -97,6 +97,85 @@ func (f *Fake) DeleteProfile(_ context.Context, name string) error {
 	return nil
 }
 
+func (f *Fake) RenameProfile(_ context.Context, name, newName string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	p, ok := f.profiles[name]
+	if !ok {
+		return notFoundf("profile %q", name)
+	}
+	if name == "default" {
+		return invalid("the default profile cannot be renamed")
+	}
+	if strings.ContainsAny(newName, " \t\n/") {
+		return invalid("invalid profile name %q", newName)
+	}
+	if _, exists := f.profiles[newName]; exists {
+		return conflict("profile %q already exists", newName)
+	}
+	p.Name = newName
+	f.profiles[newName] = p
+	f.profileVersions[newName] = f.profileVersions[name] + 1
+	delete(f.profiles, name)
+	delete(f.profileVersions, name)
+	return nil
+}
+
+func (f *Fake) AddProfileDevice(_ context.Context, profile, device string, config map[string]string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	p, ok := f.profiles[profile]
+	if !ok {
+		return notFoundf("profile %q", profile)
+	}
+	if p.Devices == nil {
+		p.Devices = map[string]map[string]string{}
+	}
+	p.Devices[device] = maps.Clone(config)
+	f.profiles[profile] = p
+	f.profileVersions[profile]++
+	return nil
+}
+
+func (f *Fake) UpdateProfileDevice(_ context.Context, profile, device string, config map[string]string, version string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	p, ok := f.profiles[profile]
+	if !ok {
+		return notFoundf("profile %q", profile)
+	}
+	if _, ok := p.Devices[device]; !ok {
+		return notFoundf("device %q on profile %q", device, profile)
+	}
+	if version != "" && version != strconv.Itoa(f.profileVersions[profile]) {
+		return conflict("profile %q version %s", profile, version)
+	}
+	p.Devices[device] = maps.Clone(config)
+	f.profiles[profile] = p
+	f.profileVersions[profile]++
+	return nil
+}
+
+func (f *Fake) RemoveProfileDevice(_ context.Context, profile, device string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	p, ok := f.profiles[profile]
+	if !ok {
+		return notFoundf("profile %q", profile)
+	}
+	if _, ok := p.Devices[device]; !ok {
+		return notFoundf("device %q on profile %q", device, profile)
+	}
+	delete(p.Devices, device)
+	f.profiles[profile] = p
+	f.profileVersions[profile]++
+	return nil
+}
+
 func (f *Fake) SetInstanceProfiles(_ context.Context, name string, profiles []string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

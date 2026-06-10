@@ -65,6 +65,43 @@ func TestProfileCRUDRoundTrip(t *testing.T) {
 	require.ErrorIs(t, b.DeleteProfile(ctx, "default"), backend.ErrInvalid)
 }
 
+// TestProfileDeviceAndRenameRoundTrip exercises device add/update/remove (each
+// GET-preserve-PUT, so config and other devices survive) and a rename.
+func TestProfileDeviceAndRenameRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("lxprof")
+	renamed := uniqueName("lxprof")
+	t.Cleanup(func() { _ = b.DeleteProfile(ctx, name); _ = b.DeleteProfile(ctx, renamed) })
+
+	require.NoError(t, b.CreateProfile(ctx, name, "made by test"))
+	require.NoError(t, b.UpdateProfile(ctx, name, "keep", map[string]string{"limits.cpu": "1"}, ""))
+
+	require.NoError(t, b.AddProfileDevice(ctx, name, "eth0", map[string]string{"type": "nic", "network": "incusbr0"}))
+	p, err := b.GetProfile(ctx, name)
+	require.NoError(t, err)
+	require.Equal(t, "incusbr0", p.Devices["eth0"]["network"])
+	require.Equal(t, "1", p.Config["limits.cpu"], "config survives device add")
+
+	// Update conditional on the profile etag; a missing device is not-found.
+	require.NoError(t, b.UpdateProfileDevice(ctx, name, "eth0", map[string]string{"type": "nic", "network": "incusbr0", "name": "eth0"}, p.Version))
+	require.ErrorIs(t, b.UpdateProfileDevice(ctx, name, "ghost", nil, ""), backend.ErrNotFound)
+
+	require.NoError(t, b.RemoveProfileDevice(ctx, name, "eth0"))
+	p, err = b.GetProfile(ctx, name)
+	require.NoError(t, err)
+	require.NotContains(t, p.Devices, "eth0")
+
+	// Rename carries config across; default cannot be renamed.
+	require.NoError(t, b.RenameProfile(ctx, name, renamed))
+	_, err = b.GetProfile(ctx, name)
+	require.ErrorIs(t, err, backend.ErrNotFound)
+	got, err := b.GetProfile(ctx, renamed)
+	require.NoError(t, err)
+	require.Equal(t, "1", got.Config["limits.cpu"])
+	require.ErrorIs(t, b.RenameProfile(ctx, "default", uniqueName("x")), backend.ErrInvalid)
+}
+
 // The default profile always carries devices (root disk, eth0 nic), so a no-op
 // description/config update against it proves UpdateProfile's GET-preserve-PUT
 // does not drop the devices map.

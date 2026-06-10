@@ -96,6 +96,53 @@ func TestUpdateProfileNotFound(t *testing.T) {
 	require.ErrorIs(t, f.UpdateProfile(ctx(), "ghost", "", nil, ""), backend.ErrNotFound)
 }
 
+func TestProfileDeviceAddUpdateRemove(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateProfile(ctx(), "web", ""))
+
+	// Add bumps the version and surfaces on GetProfile.
+	require.NoError(t, f.AddProfileDevice(ctx(), "web", "eth0", map[string]string{"type": "nic", "network": "lxdbr0"}))
+	p, err := f.GetProfile(ctx(), "web")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"type": "nic", "network": "lxdbr0"}, p.Devices["eth0"])
+
+	// Update replaces the device's config; stale version conflicts.
+	require.NoError(t, f.UpdateProfileDevice(ctx(), "web", "eth0", map[string]string{"type": "nic", "network": "br1"}, p.Version))
+	require.ErrorIs(t, f.UpdateProfileDevice(ctx(), "web", "eth0", map[string]string{"type": "nic"}, p.Version), backend.ErrConflict)
+	p, err = f.GetProfile(ctx(), "web")
+	require.NoError(t, err)
+	assert.Equal(t, "br1", p.Devices["eth0"]["network"])
+
+	// Update/remove of a missing device is not-found.
+	require.ErrorIs(t, f.UpdateProfileDevice(ctx(), "web", "ghost", nil, ""), backend.ErrNotFound)
+	require.ErrorIs(t, f.RemoveProfileDevice(ctx(), "web", "ghost"), backend.ErrNotFound)
+
+	require.NoError(t, f.RemoveProfileDevice(ctx(), "web", "eth0"))
+	p, err = f.GetProfile(ctx(), "web")
+	require.NoError(t, err)
+	assert.NotContains(t, p.Devices, "eth0")
+}
+
+func TestRenameProfile(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateProfile(ctx(), "web", "desc"))
+	require.NoError(t, f.AddProfileDevice(ctx(), "web", "eth0", map[string]string{"type": "nic"}))
+
+	require.NoError(t, f.RenameProfile(ctx(), "web", "frontend"))
+	_, err := f.GetProfile(ctx(), "web")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+	got, err := f.GetProfile(ctx(), "frontend")
+	require.NoError(t, err)
+	assert.Equal(t, "desc", got.Description)
+	assert.Contains(t, got.Devices, "eth0", "devices carry across rename")
+
+	// default cannot be renamed; target name must be free.
+	require.ErrorIs(t, f.RenameProfile(ctx(), "default", "x"), backend.ErrInvalid)
+	require.NoError(t, f.CreateProfile(ctx(), "other", ""))
+	require.ErrorIs(t, f.RenameProfile(ctx(), "other", "frontend"), backend.ErrConflict)
+	require.ErrorIs(t, f.RenameProfile(ctx(), "frontend", "bad name"), backend.ErrInvalid)
+}
+
 func TestDeleteProfile(t *testing.T) {
 	f := New()
 	require.NoError(t, f.DeleteProfile(ctx(), "gpu"))

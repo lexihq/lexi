@@ -107,6 +107,73 @@ func TestDeleteProfileRemovesAndRedirects(t *testing.T) {
 	require.ErrorIs(t, err, backend.ErrNotFound)
 }
 
+func TestRenameProfileRedirectsToNewName(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateProfile(t.Context(), "web", "d"))
+	res := formRequest(t, New(b), "/profiles/web/rename", url.Values{"new_name": {"frontend"}}, false)
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/profiles/frontend", res.Header().Get("Location"))
+	_, err := b.GetProfile(t.Context(), "frontend")
+	require.NoError(t, err)
+}
+
+func TestRenameDefaultProfileIs400(t *testing.T) {
+	res := formRequest(t, New(fake.New()), "/profiles/default/rename", url.Values{"new_name": {"x"}}, true)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestAddProfileDeviceReturnsSection(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateProfile(t.Context(), "web", ""))
+	res := formRequest(t, New(b), "/profiles/web/devices",
+		url.Values{"type": {"nic"}, "device": {"eth0"}, "network": {"lxdbr0"}}, true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), `id="profile-devices"`)
+	assert.Contains(t, res.Body.String(), "eth0")
+
+	p, err := b.GetProfile(t.Context(), "web")
+	require.NoError(t, err)
+	assert.Equal(t, "lxdbr0", p.Devices["eth0"]["network"])
+}
+
+func TestUpdateProfileDeviceMergesAndPreservesUnknownKeys(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateProfile(t.Context(), "web", ""))
+	require.NoError(t, b.AddProfileDevice(t.Context(), "web", "eth0", map[string]string{"type": "nic", "network": "lxdbr0", "x.custom": "keep"}))
+	p, err := b.GetProfile(t.Context(), "web")
+	require.NoError(t, err)
+
+	res := formRequest(t, New(b), "/profiles/web/devices/eth0",
+		url.Values{"version": {p.Version}, "network": {"br1"}}, true)
+	assertStatus(t, res, http.StatusOK)
+
+	got, err := b.GetProfile(t.Context(), "web")
+	require.NoError(t, err)
+	assert.Equal(t, "br1", got.Devices["eth0"]["network"])
+	assert.Equal(t, "keep", got.Devices["eth0"]["x.custom"], "unknown keys preserved")
+	assert.Equal(t, "nic", got.Devices["eth0"]["type"], "type preserved")
+}
+
+func TestUpdateProfileDeviceMissingVersionIs400(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateProfile(t.Context(), "web", ""))
+	require.NoError(t, b.AddProfileDevice(t.Context(), "web", "eth0", map[string]string{"type": "nic"}))
+	res := formRequest(t, New(b), "/profiles/web/devices/eth0", url.Values{"network": {"br1"}}, true)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestRemoveProfileDeviceReturnsSection(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateProfile(t.Context(), "web", ""))
+	require.NoError(t, b.AddProfileDevice(t.Context(), "web", "eth0", map[string]string{"type": "nic"}))
+	res := formRequest(t, New(b), "/profiles/web/devices/eth0/delete", url.Values{}, true)
+	assertStatus(t, res, http.StatusOK)
+
+	p, err := b.GetProfile(t.Context(), "web")
+	require.NoError(t, err)
+	assert.NotContains(t, p.Devices, "eth0")
+}
+
 func TestDeleteDefaultProfileIs400(t *testing.T) {
 	res := formRequest(t, New(fake.New()), "/profiles/default/delete", url.Values{}, true)
 	assertStatus(t, res, http.StatusBadRequest)

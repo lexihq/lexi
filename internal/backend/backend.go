@@ -352,6 +352,17 @@ type Backend interface {
 	// DeleteProfile removes an unused profile. "default" is undeletable
 	// (ErrInvalid); a profile still used by instances is ErrConflict.
 	DeleteProfile(ctx context.Context, name string) error
+	// RenameProfile renames a profile. "default" cannot be renamed (ErrInvalid);
+	// the target name must be free (ErrConflict).
+	RenameProfile(ctx context.Context, name, newName string) error
+	// AddProfileDevice attaches (or overwrites) a device on the profile.
+	AddProfileDevice(ctx context.Context, profile, device string, config map[string]string) error
+	// UpdateProfileDevice replaces the named device's config map. The device
+	// must exist (ErrNotFound). A non-empty version (from GetProfile) makes the
+	// update conditional: ErrConflict if the profile changed since that read.
+	UpdateProfileDevice(ctx context.Context, profile, device string, config map[string]string, version string) error
+	// RemoveProfileDevice detaches a device. The device must exist (ErrNotFound).
+	RemoveProfileDevice(ctx context.Context, profile, device string) error
 	// SetInstanceProfiles replaces the instance's profile list (ordered; later
 	// profiles override earlier ones).
 	SetInstanceProfiles(ctx context.Context, name string, profiles []string) error

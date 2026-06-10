@@ -75,6 +75,99 @@ func (h handlers) deleteProfile(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/profiles", http.StatusSeeOther)
 }
 
+// renameProfile renames a profile and redirects to its new detail page
+// ("default" and name collisions are refused by the backend).
+func (h handlers) renameProfile(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	newName := strings.TrimSpace(r.Form.Get("new_name"))
+	if newName == "" {
+		h.fail(w, fmt.Errorf("new profile name is required: %w", backend.ErrInvalid))
+		return
+	}
+	if err := h.backend.RenameProfile(r.Context(), r.PathValue("name"), newName); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/profiles/"+url.PathEscape(newName), http.StatusSeeOther)
+}
+
+// addProfileDevice attaches a device built from the typed form, then re-renders
+// the profile's devices section.
+func (h handlers) addProfileDevice(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := r.PathValue("name")
+	device := strings.TrimSpace(r.Form.Get("device"))
+	if device == "" {
+		h.fail(w, fmt.Errorf("device name required: %w", backend.ErrInvalid))
+		return
+	}
+	if err := h.backend.AddProfileDevice(r.Context(), name, device, deviceConfigFromForm(r.Form.Get("type"), r.Form)); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderProfileDevices(w, r, name)
+}
+
+// updateProfileDevice applies the per-device edit form (type's known fields,
+// blank = remove; other keys preserved). The hidden version makes the write
+// conditional on the profile state the panel was rendered from.
+func (h handlers) updateProfileDevice(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := r.PathValue("name")
+	device := r.PathValue("device")
+	if r.Form.Get("version") == "" {
+		h.fail(w, fmt.Errorf("missing profile version token: %w", backend.ErrInvalid))
+		return
+	}
+	p, err := h.backend.GetProfile(r.Context(), name)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	current, ok := p.Devices[device]
+	if !ok {
+		h.fail(w, fmt.Errorf("device %q on profile %q: %w", device, name, backend.ErrNotFound))
+		return
+	}
+	if err := h.backend.UpdateProfileDevice(r.Context(), name, device, mergeDeviceFields(current, r.Form), r.Form.Get("version")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderProfileDevices(w, r, name)
+}
+
+// removeProfileDevice detaches a device, then re-renders the devices section.
+func (h handlers) removeProfileDevice(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if err := h.backend.RemoveProfileDevice(r.Context(), name, r.PathValue("device")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderProfileDevices(w, r, name)
+}
+
+func (h handlers) renderProfileDevices(w http.ResponseWriter, r *http.Request, name string) {
+	p, err := h.backend.GetProfile(r.Context(), name)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if isHTMX(r) {
+		h.render(w, r, http.StatusOK, ui.ProfileDevicesSection(h.backend.Capabilities(), p))
+		return
+	}
+	http.Redirect(w, r, "/profiles/"+url.PathEscape(name), http.StatusSeeOther)
+}
+
 // setInstanceProfiles replaces the instance's profile set from the checked
 // boxes, preserving existing order and appending additions (mergeProfileOrder),
 // then returns the updated control on HTMX.

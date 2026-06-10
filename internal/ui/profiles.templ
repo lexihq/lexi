@@ -72,12 +72,20 @@ templ ProfileDetailPage(caps backend.Capabilities, p backend.Profile) {
 				}
 			</div>
 			if p.Name != "default" {
-				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/profiles/%s/delete", url.PathEscape(p.Name))) }>
-					@button.Button(button.Props{Variant: button.VariantDestructive, Type: button.TypeSubmit}) {
-						@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
-						Delete
-					}
-				</form>
+				<div class="flex items-center gap-2">
+					<form method="post" action={ templ.SafeURL(fmt.Sprintf("/profiles/%s/rename", url.PathEscape(p.Name))) } class="flex items-center gap-1">
+						<input name="new_name" placeholder="new name" class="h-9 w-32 rounded-md border bg-background px-3 text-sm"/>
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+							Rename
+						}
+					</form>
+					<form method="post" action={ templ.SafeURL(fmt.Sprintf("/profiles/%s/delete", url.PathEscape(p.Name))) }>
+						@button.Button(button.Props{Variant: button.VariantDestructive, Type: button.TypeSubmit}) {
+							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+							Delete
+						}
+					</form>
+				</div>
 			}
 		</div>
 		<section class="mb-8 rounded-lg border bg-card p-4">
@@ -105,10 +113,7 @@ templ ProfileDetailPage(caps backend.Capabilities, p backend.Profile) {
 				}
 			</form>
 		</section>
-		<section class="rounded-lg border bg-card p-4">
-			<h2 class="mb-3 text-lg font-medium">Devices</h2>
-			@deviceList(p.Devices)
-		</section>
+		@ProfileDevicesSection(caps, p)
 	}
 }
 

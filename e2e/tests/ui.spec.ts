@@ -511,10 +511,26 @@ test("create, edit, and delete a profile", async ({ page }) => {
   await expect(page).toHaveURL(/\/profiles\/e2e-prof$/);
   await expect(page.locator('input[name="key"][value="limits.cpu"]')).toBeVisible();
 
+  // Add a nic device via the typed form; the #profile-devices section swaps in.
+  const devices = page.locator("#profile-devices");
+  const addNic = devices.locator('details:has-text("Add nic")');
+  await addNic.locator("summary").click();
+  await addNic.locator('input[name="device"]').fill("eth0");
+  await addNic.locator('input[name="network"]').fill("incusbr0");
+  await addNic.getByRole("button", { name: "Add nic" }).click();
+  await expect(page.locator("#profile-devices").getByText("eth0", { exact: true })).toBeVisible();
+
+  // Rename the profile; the page redirects to the new detail URL.
+  await page.locator('input[name="new_name"]').fill("e2e-prof2");
+  await page.getByRole("button", { name: "Rename" }).click();
+  await expect(page).toHaveURL(/\/profiles\/e2e-prof2$/);
+  await expect(page.locator("#profile-devices").getByText("eth0", { exact: true })).toBeVisible();
+
   // Delete.
   await page.getByRole("button", { name: "Delete" }).click();
   await expect(page).toHaveURL(/\/profiles$/);
-  await expect(page.locator("table").getByText("e2e-prof")).toHaveCount(0);
+  await expect(page.locator("table").getByText("e2e-prof", { exact: true })).toHaveCount(0);
+  await expect(page.locator("table").getByText("e2e-prof2", { exact: true })).toHaveCount(0);
 });
 
 test("default profile keeps devices after a config edit and has no delete", async ({ page }) => {

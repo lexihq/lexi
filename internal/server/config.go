@@ -103,22 +103,7 @@ func (h handlers) updateDevice(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, fmt.Errorf("device %q on %q: %w", device, name, backend.ErrNotFound))
 		return
 	}
-	next := maps.Clone(current)
-	for _, dt := range ui.DeviceTypes {
-		if dt.Type != current["type"] {
-			continue
-		}
-		for _, f := range dt.Fields {
-			if !r.Form.Has(f) {
-				continue // only fields the form submitted
-			}
-			if v := strings.TrimSpace(r.Form.Get(f)); v != "" {
-				next[f] = v
-			} else {
-				delete(next, f)
-			}
-		}
-	}
+	next := mergeDeviceFields(current, r.Form)
 	if err := h.backend.UpdateDevice(r.Context(), name, device, next, r.Form.Get("version")); err != nil {
 		h.fail(w, err)
 		return
@@ -147,6 +132,30 @@ func (h handlers) renderDevices(w http.ResponseWriter, r *http.Request, name str
 		return
 	}
 	redirectToInstance(w, name)
+}
+
+// mergeDeviceFields applies a device-edit form onto the device's current config:
+// the device type's known fields update in place (blank submitted field =
+// remove that key); every other key — including "type" and keys the typed form
+// doesn't know — is preserved. Shared by instance and profile device editors.
+func mergeDeviceFields(current map[string]string, form url.Values) map[string]string {
+	next := maps.Clone(current)
+	for _, dt := range ui.DeviceTypes {
+		if dt.Type != current["type"] {
+			continue
+		}
+		for _, f := range dt.Fields {
+			if !form.Has(f) {
+				continue // only fields the form submitted
+			}
+			if v := strings.TrimSpace(form.Get(f)); v != "" {
+				next[f] = v
+			} else {
+				delete(next, f)
+			}
+		}
+	}
+	return next
 }
 
 // deviceConfigFromForm builds a device config from the form's non-blank fields

@@ -183,6 +183,44 @@ func (h handlers) deleteVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
 	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
 }
 
+func (h handlers) renameVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	pool := r.PathValue("pool")
+	volume := r.PathValue("volume")
+	newName := strings.TrimSpace(r.Form.Get("new_name"))
+	if newName == "" {
+		h.fail(w, fmt.Errorf("new snapshot name is required: %w", backend.ErrInvalid))
+		return
+	}
+	if err := h.backend.RenameVolumeSnapshot(r.Context(), pool, volume, r.PathValue("snap"), newName); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
+}
+
+func (h handlers) updateVolumeSnapshotExpiry(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	pool := r.PathValue("pool")
+	volume := r.PathValue("volume")
+	expiresAt, err := parseSnapshotExpiry(r.Form.Get("expires_at"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if err := h.backend.UpdateVolumeSnapshotExpiry(r.Context(), pool, volume, r.PathValue("snap"), expiresAt); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
+}
+
 // renderVolumeSnapshotsOrRedirect re-renders the swappable snapshots table on
 // HTMX (so the inline forms swap #volume-snapshots in place), else redirects to
 // the volume.

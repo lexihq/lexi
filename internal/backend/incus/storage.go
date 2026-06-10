@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
@@ -124,6 +125,31 @@ func (b *incusBackend) DeleteVolumeSnapshot(ctx context.Context, pool, volume, s
 	return waitOp(ctx, op, err, "delete snapshot %q/%q/%q", pool, volume, snapshot)
 }
 
+// RenameVolumeSnapshot renames a custom-volume snapshot (an async operation).
+func (b *incusBackend) RenameVolumeSnapshot(ctx context.Context, pool, volume, snapshot, newName string) error {
+	op, err := b.srv.RenameStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot, api.StorageVolumeSnapshotPost{Name: newName})
+	return waitOp(ctx, op, err, "rename snapshot %q/%q/%q", pool, volume, snapshot)
+}
+
+// UpdateVolumeSnapshotExpiry does a GET-preserve-PUT setting ExpiresAt; a zero
+// time clears it (nil pointer). UpdateStoragePoolVolumeSnapshot is synchronous.
+func (b *incusBackend) UpdateVolumeSnapshotExpiry(_ context.Context, pool, volume, snapshot string, expiresAt time.Time) error {
+	s, etag, err := b.srv.GetStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot)
+	if err != nil {
+		return fmt.Errorf("get snapshot %q/%q/%q: %w", pool, volume, snapshot, mapErr(err))
+	}
+	put := s.Writable()
+	if expiresAt.IsZero() {
+		put.ExpiresAt = nil
+	} else {
+		put.ExpiresAt = &expiresAt
+	}
+	if err := b.srv.UpdateStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot, put, etag); err != nil {
+		return fmt.Errorf("update snapshot expiry %q/%q/%q: %w", pool, volume, snapshot, mapErr(err))
+	}
+	return nil
+}
+
 // RestoreVolumeSnapshot does a GET-then-PUT setting put.Restore.
 // UpdateStoragePoolVolume is synchronous (no operation to wait on).
 func (b *incusBackend) RestoreVolumeSnapshot(_ context.Context, pool, volume, snapshot string) error {
@@ -142,5 +168,9 @@ func (b *incusBackend) RestoreVolumeSnapshot(_ context.Context, pool, volume, sn
 func toVolumeSnapshot(s *api.StorageVolumeSnapshot) backend.StorageVolumeSnapshot {
 	// Incus reports volume snapshot names as "<volume>/<snapshot>"; the UI and
 	// restore/delete ops use the bare snapshot name (matches ListSnapshots).
-	return backend.StorageVolumeSnapshot{Name: snapshotShortName(s.Name), CreatedAt: s.CreatedAt}
+	out := backend.StorageVolumeSnapshot{Name: snapshotShortName(s.Name), CreatedAt: s.CreatedAt}
+	if s.ExpiresAt != nil {
+		out.ExpiresAt = *s.ExpiresAt
+	}
+	return out
 }

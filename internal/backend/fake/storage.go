@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -239,6 +240,43 @@ func (f *Fake) RestoreVolumeSnapshot(_ context.Context, pool, volume, snapshot s
 		return notFoundf("snapshot %q", snapshot)
 	}
 	return nil
+}
+
+func (f *Fake) RenameVolumeSnapshot(_ context.Context, pool, volume, snapshot, newName string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	v, err := f.lookupVolume(pool, volume)
+	if err != nil {
+		return err
+	}
+	if hasSnapshot(v.snapshots, newName) {
+		return conflict("snapshot %q already exists", newName)
+	}
+	for i := range v.snapshots {
+		if v.snapshots[i].Name == snapshot {
+			v.snapshots[i].Name = newName
+			return nil
+		}
+	}
+	return notFoundf("snapshot %q", snapshot)
+}
+
+func (f *Fake) UpdateVolumeSnapshotExpiry(_ context.Context, pool, volume, snapshot string, expiresAt time.Time) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	v, err := f.lookupVolume(pool, volume)
+	if err != nil {
+		return err
+	}
+	for i := range v.snapshots {
+		if v.snapshots[i].Name == snapshot {
+			v.snapshots[i].ExpiresAt = expiresAt
+			return nil
+		}
+	}
+	return notFoundf("snapshot %q", snapshot)
 }
 
 func (f *Fake) DeleteVolumeSnapshot(_ context.Context, pool, volume, snapshot string) error {

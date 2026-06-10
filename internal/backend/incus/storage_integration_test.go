@@ -68,7 +68,29 @@ func TestVolumeSnapshotRoundTrip(t *testing.T) {
 
 	require.NoError(t, b.RestoreVolumeSnapshot(ctx, pool.Name, name, "snap0"))
 
-	require.NoError(t, b.DeleteVolumeSnapshot(ctx, pool.Name, name, "snap0"))
+	// Set expiry, then rename: both round-trip via the listing.
+	when := time.Now().Add(72 * time.Hour).UTC().Truncate(time.Second)
+	require.NoError(t, b.UpdateVolumeSnapshotExpiry(ctx, pool.Name, name, "snap0", when))
+	snaps, err = b.ListVolumeSnapshots(ctx, pool.Name, name)
+	require.NoError(t, err)
+	require.Len(t, snaps, 1)
+	assert.WithinDuration(t, when, snaps[0].ExpiresAt, time.Second)
+
+	require.NoError(t, b.RenameVolumeSnapshot(ctx, pool.Name, name, "snap0", "snap1"))
+	snaps, err = b.ListVolumeSnapshots(ctx, pool.Name, name)
+	require.NoError(t, err)
+	require.Len(t, snaps, 1)
+	assert.Equal(t, "snap1", snaps[0].Name)
+	assert.WithinDuration(t, when, snaps[0].ExpiresAt, time.Second)
+
+	// Clearing expiry with a zero time.
+	require.NoError(t, b.UpdateVolumeSnapshotExpiry(ctx, pool.Name, name, "snap1", time.Time{}))
+	snaps, err = b.ListVolumeSnapshots(ctx, pool.Name, name)
+	require.NoError(t, err)
+	require.Len(t, snaps, 1)
+	assert.True(t, snaps[0].ExpiresAt.IsZero())
+
+	require.NoError(t, b.DeleteVolumeSnapshot(ctx, pool.Name, name, "snap1"))
 	snaps, err = b.ListVolumeSnapshots(ctx, pool.Name, name)
 	require.NoError(t, err)
 	assert.Empty(t, snaps)

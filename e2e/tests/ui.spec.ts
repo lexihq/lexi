@@ -586,10 +586,24 @@ test("snapshot a custom volume: create, restore, and delete", async ({ page }) =
   await snaps.getByRole("button", { name: "Restore" }).click();
   await expect(snaps).toContainText("snap0");
 
+  // Set an expiry; the Expires cell shows it in UTC.
+  await expect(async () => {
+    await page.locator("#volume-snapshots").locator('input[name="expires_at"]').fill("2031-05-06T07:08");
+    await page.locator("#volume-snapshots").getByRole("button", { name: "Set expiry (UTC)" }).click();
+    await expect(page.locator("#volume-snapshots")).toContainText("2031-05-06 07:08 UTC", { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
+  // Rename snap0 → snap1.
+  await expect(async () => {
+    await page.locator("#volume-snapshots").locator('input[name="new_name"]').fill("snap1");
+    await page.locator("#volume-snapshots").getByRole("button", { name: "Rename" }).click();
+    await expect(page.locator("#volume-snapshots").getByText("snap1")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
   // htmx swap-then-click race: retry the delete until it takes effect.
   await expect(async () => {
     await page.locator("#volume-snapshots").getByRole("button", { name: "Delete" }).click();
-    await expect(page.locator("#volume-snapshots").getByText("snap0")).toHaveCount(0, { timeout: 1000 });
+    await expect(page.locator("#volume-snapshots").getByText("snap1")).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 
   // Clean up the volume from the pool page (shared server state).

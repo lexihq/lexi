@@ -138,6 +138,7 @@ type StorageVolume struct {
 type StorageVolumeSnapshot struct {
 	Name      string
 	CreatedAt time.Time
+	ExpiresAt time.Time // zero = never expires
 }
 
 // InstanceConfig is an instance's editable local config plus its devices. Config
@@ -391,6 +392,12 @@ type Backend interface {
 	ListVolumeSnapshots(ctx context.Context, pool, volume string) ([]StorageVolumeSnapshot, error)
 	CreateVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error
 	RestoreVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error
+	// RenameVolumeSnapshot renames a custom-volume snapshot. The target name
+	// must be free (ErrConflict) and the snapshot must exist (ErrNotFound).
+	RenameVolumeSnapshot(ctx context.Context, pool, volume, snapshot, newName string) error
+	// UpdateVolumeSnapshotExpiry sets a custom-volume snapshot's expiry; a zero
+	// time clears it.
+	UpdateVolumeSnapshotExpiry(ctx context.Context, pool, volume, snapshot string, expiresAt time.Time) error
 	DeleteVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error
 
 	// ExportInstance streams a portable backup tarball of the instance to w.

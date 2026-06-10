@@ -166,3 +166,39 @@ func TestDeleteVolumeSnapshotReturnsTable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, snaps)
 }
+
+func TestRenameVolumeSnapshotReturnsTable(t *testing.T) {
+	b := newVolume(t)
+	require.NoError(t, b.CreateVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))
+	res := formRequest(t, New(b), "/storage/default/volumes/vol1/snapshots/snap0/rename",
+		url.Values{"new_name": {"renamed"}}, true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "renamed")
+
+	snaps, err := b.ListVolumeSnapshots(t.Context(), "default", "vol1")
+	require.NoError(t, err)
+	require.Len(t, snaps, 1)
+	assert.Equal(t, "renamed", snaps[0].Name)
+}
+
+func TestRenameVolumeSnapshotBlankNameIs400(t *testing.T) {
+	b := newVolume(t)
+	require.NoError(t, b.CreateVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))
+	res := formRequest(t, New(b), "/storage/default/volumes/vol1/snapshots/snap0/rename",
+		url.Values{"new_name": {"  "}}, true)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestUpdateVolumeSnapshotExpiryReturnsTable(t *testing.T) {
+	b := newVolume(t)
+	require.NoError(t, b.CreateVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))
+	res := formRequest(t, New(b), "/storage/default/volumes/vol1/snapshots/snap0/expiry",
+		url.Values{"expires_at": {"2031-01-02T03:04"}}, true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "2031-01-02 03:04 UTC")
+
+	snaps, err := b.ListVolumeSnapshots(t.Context(), "default", "vol1")
+	require.NoError(t, err)
+	require.Len(t, snaps, 1)
+	assert.Equal(t, "2031-01-02 03:04", snaps[0].ExpiresAt.UTC().Format("2006-01-02 15:04"))
+}

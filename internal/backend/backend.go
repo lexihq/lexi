@@ -465,6 +465,9 @@ type Backend interface {
 	// store. Data that isn't a PEM CERTIFICATE block is ErrInvalid; the daemon
 	// is authoritative for X.509 validity and the certificate type.
 	AddCertificate(ctx context.Context, name, certType, pemData string) error
+	// DeleteCertificate removes a certificate from the trust store by its
+	// fingerprint. An unknown fingerprint is ErrNotFound.
+	DeleteCertificate(ctx context.Context, fingerprint string) error
 	// ListWarnings returns daemon warnings, newest last-seen first.
 	ListWarnings(ctx context.Context) ([]Warning, error)
 	DeleteWarning(ctx context.Context, uuid string) error

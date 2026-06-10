@@ -110,6 +110,14 @@ func (b *incusBackend) AddCertificate(_ context.Context, name, certType, pemData
 	return nil
 }
 
+// DeleteCertificate removes a certificate from the trust store by fingerprint.
+func (b *incusBackend) DeleteCertificate(_ context.Context, fingerprint string) error {
+	if err := b.srv.DeleteCertificate(fingerprint); err != nil {
+		return fmt.Errorf("delete certificate %q: %w", fingerprint, mapErr(err))
+	}
+	return nil
+}
+
 // ListWarnings returns daemon warnings, newest last-seen first.
 func (b *incusBackend) ListWarnings(_ context.Context) ([]backend.Warning, error) {
 	warnings, err := b.srv.GetWarnings()

@@ -89,6 +89,29 @@ func (h handlers) addCertificate(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/server", http.StatusSeeOther)
 }
 
+// deleteCertificate removes a certificate from the trust store by fingerprint,
+// then re-renders the certificates table on HTMX.
+func (h handlers) deleteCertificate(w http.ResponseWriter, r *http.Request) {
+	if err := h.backend.DeleteCertificate(r.Context(), r.PathValue("fingerprint")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderCertificates(w, r)
+}
+
+func (h handlers) renderCertificates(w http.ResponseWriter, r *http.Request) {
+	if !isHTMX(r) {
+		http.Redirect(w, r, "/server", http.StatusSeeOther)
+		return
+	}
+	certs, err := h.backend.ListCertificates(r.Context())
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.render(w, r, http.StatusOK, ui.CertificatesTable(certs))
+}
+
 // deleteWarning removes a warning, then re-renders the warnings table on HTMX.
 func (h handlers) deleteWarning(w http.ResponseWriter, r *http.Request) {
 	if err := h.backend.DeleteWarning(r.Context(), r.PathValue("uuid")); err != nil {

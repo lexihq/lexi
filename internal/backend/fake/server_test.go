@@ -193,6 +193,33 @@ func TestAddCertificateDuplicateIsConflict(t *testing.T) {
 	}
 }
 
+func TestDeleteCertificateRemovesByFingerprint(t *testing.T) {
+	f := New()
+	pemData, fingerprint := testCertPEM(t)
+	if err := f.AddCertificate(ctx(), "ci-runner", "client", pemData); err != nil {
+		t.Fatalf("add certificate: %v", err)
+	}
+	if err := f.DeleteCertificate(ctx(), fingerprint); err != nil {
+		t.Fatalf("delete certificate: %v", err)
+	}
+	certs, err := f.ListCertificates(ctx())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, c := range certs {
+		if c.Fingerprint == fingerprint {
+			t.Fatalf("certificate %s still present after delete", fingerprint)
+		}
+	}
+}
+
+func TestDeleteCertificateGhostIs404(t *testing.T) {
+	err := New().DeleteCertificate(ctx(), "no-such-fingerprint")
+	if !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
 func TestAcknowledgeWarningFlipsStatus(t *testing.T) {
 	f := New()
 	if err := f.AcknowledgeWarning(ctx(), "fake-warning-1"); err != nil {

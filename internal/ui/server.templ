@@ -56,42 +56,7 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, con
 		</section>
 		<section class="mb-8 rounded-lg border bg-card p-4">
 			<h2 class="mb-3 text-lg font-medium">Trusted certificates</h2>
-			if len(certs) == 0 {
-				<p class="text-sm text-muted-foreground">No trusted certificates.</p>
-			} else {
-				@table.Table() {
-					@table.Header() {
-						@table.Row() {
-							@table.Head() { Name }
-							@table.Head() { Type }
-							@table.Head() { Fingerprint }
-							@table.Head() { Access }
-						}
-					}
-					@table.Body() {
-						for _, c := range certs {
-							@table.Row() {
-								@table.Cell() {
-									{ c.Name }
-								}
-								@table.Cell() {
-									{ c.Type }
-								}
-								@table.Cell() {
-									<span class="font-mono text-xs" title={ c.Fingerprint }>{ shortFingerprint(c.Fingerprint) }</span>
-								}
-								@table.Cell() {
-									if c.Restricted {
-										<span class="rounded bg-accent px-1.5 py-0.5 text-xs">restricted</span>
-									} else {
-										<span class="text-xs text-muted-foreground">full</span>
-									}
-								}
-							}
-						}
-					}
-				}
-			}
+			@CertificatesTable(certs)
 			<form method="post" action="/server/certificates" class="mt-4 max-w-xl space-y-2">
 				<h3 class="text-sm font-medium">Add certificate</h3>
 				<div class="flex gap-2">
@@ -113,6 +78,56 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, con
 			@WarningsTable(warnings)
 		</section>
 	}
+}
+
+// CertificatesTable is the swappable trust-store list (re-rendered in place by
+// delete).
+templ CertificatesTable(certs []backend.Certificate) {
+	<div id="certificates">
+		if len(certs) == 0 {
+			<p class="text-sm text-muted-foreground">No trusted certificates.</p>
+		} else {
+			@table.Table() {
+				@table.Header() {
+					@table.Row() {
+						@table.Head() { Name }
+						@table.Head() { Type }
+						@table.Head() { Fingerprint }
+						@table.Head() { Access }
+						@table.Head() { }
+					}
+				}
+				@table.Body() {
+					for _, c := range certs {
+						@table.Row() {
+							@table.Cell() {
+								{ c.Name }
+							}
+							@table.Cell() {
+								{ c.Type }
+							}
+							@table.Cell() {
+								<span class="font-mono text-xs" title={ c.Fingerprint }>{ shortFingerprint(c.Fingerprint) }</span>
+							}
+							@table.Cell() {
+								if c.Restricted {
+									<span class="rounded bg-accent px-1.5 py-0.5 text-xs">restricted</span>
+								} else {
+									<span class="text-xs text-muted-foreground">full</span>
+								}
+							}
+							@table.Cell() {
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/server/certificates/" + url.PathEscape(c.Fingerprint) + "/delete", "hx-target": "#certificates", "hx-swap": "outerHTML", "hx-confirm": "Remove trusted certificate " + c.Name + "?"}}) {
+									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+									Delete
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	</div>
 }
 
 // WarningsTable is the swappable warnings list (re-rendered in place by

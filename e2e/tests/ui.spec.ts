@@ -600,7 +600,9 @@ test("snapshot a custom volume: create, restore, and delete", async ({ page }) =
   }).toPass({ timeout: 10000 });
 });
 
-test("server section: add a trusted certificate", async ({ page }) => {
+test("server section: add then remove a trusted certificate", async ({ page }) => {
+  // The certificate delete button asks via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
   const pem = readFileSync(join(__dirname, "..", "fixtures", "client.pem"), "utf8");
   await page.goto("/server");
 
@@ -612,6 +614,12 @@ test("server section: add a trusted certificate", async ({ page }) => {
   // Redirects back to /server with the new cert listed. On a reused dev
   // server the duplicate add 409-toasts instead, but the row still exists.
   await expect(page.getByRole("cell", { name: "e2e-cert" })).toBeVisible();
+
+  // Remove it: the row's Delete button swaps the #certificates table in place.
+  await expect(async () => {
+    await page.locator("#certificates").getByRole("row", { name: /e2e-cert/ }).getByRole("button", { name: "Delete" }).click();
+    await expect(page.locator("#certificates").getByText("e2e-cert")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
 });
 
 test("storage: create and delete a pool; in-use pool can't be deleted", async ({ page }) => {

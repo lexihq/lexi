@@ -77,6 +77,19 @@ func (f *Fake) AddCertificate(_ context.Context, name, certType, pemData string)
 	return nil
 }
 
+func (f *Fake) DeleteCertificate(_ context.Context, fingerprint string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for i, c := range f.certificates {
+		if c.Fingerprint == fingerprint {
+			f.certificates = append(f.certificates[:i], f.certificates[i+1:]...)
+			return nil
+		}
+	}
+	return notFoundf("certificate %q", fingerprint)
+}
+
 func (f *Fake) ListWarnings(_ context.Context) ([]backend.Warning, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

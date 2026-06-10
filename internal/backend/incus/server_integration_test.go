@@ -14,6 +14,7 @@ import (
 	"encoding/pem"
 	"maps"
 	"math/big"
+	"strings"
 	"testing"
 	"time"
 
@@ -145,6 +146,15 @@ func TestAddCertificateRoundTrip(t *testing.T) {
 	// Garbage is rejected locally; duplicates conflict at the daemon.
 	require.ErrorIs(t, b.AddCertificate(ctx, "junk", "client", "garbage"), backend.ErrInvalid)
 	require.ErrorIs(t, b.AddCertificate(ctx, name, "metrics", pemData), backend.ErrConflict)
+
+	// DeleteCertificate removes it from the trust store; a ghost is ErrNotFound.
+	require.NoError(t, b.DeleteCertificate(ctx, fingerprint))
+	certs, err = b.ListCertificates(ctx)
+	require.NoError(t, err)
+	for _, c := range certs {
+		require.NotEqual(t, fingerprint, c.Fingerprint, "certificate still present after delete")
+	}
+	require.ErrorIs(t, b.DeleteCertificate(ctx, strings.Repeat("0", 64)), backend.ErrNotFound)
 }
 
 // TestAcknowledgeWarningRoundTrip acknowledges the newest daemon warning and

@@ -127,6 +127,29 @@ func TestAddCertificateBadPEMIs400(t *testing.T) {
 	assertStatus(t, res, http.StatusBadRequest)
 }
 
+func TestDeleteCertificateRemovesAndReturnsTable(t *testing.T) {
+	b := fake.New()
+	certs, err := b.ListCertificates(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, certs)
+	fingerprint := certs[0].Fingerprint
+
+	res := formRequest(t, New(b), "/server/certificates/"+fingerprint+"/delete", url.Values{}, true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), `id="certificates"`)
+
+	after, err := b.ListCertificates(t.Context())
+	require.NoError(t, err)
+	for _, c := range after {
+		assert.NotEqual(t, fingerprint, c.Fingerprint, "certificate must be gone after delete")
+	}
+}
+
+func TestDeleteCertificateGhostIs404(t *testing.T) {
+	res := formRequest(t, New(fake.New()), "/server/certificates/ghost/delete", url.Values{}, true)
+	assertStatus(t, res, http.StatusNotFound)
+}
+
 func TestAckWarningFlipsStatusAndReturnsTable(t *testing.T) {
 	b := fake.New()
 	res := formRequest(t, New(b), "/server/warnings/fake-warning-1/ack", url.Values{}, true)

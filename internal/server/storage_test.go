@@ -167,6 +167,39 @@ func TestDeleteVolumeSnapshotReturnsTable(t *testing.T) {
 	assert.Empty(t, snaps)
 }
 
+func TestUpdatePoolAppliesAndRedirects(t *testing.T) {
+	b := fake.New()
+	p, err := b.GetStoragePool(t.Context(), "default")
+	require.NoError(t, err)
+
+	res := formRequest(t, New(b), "/storage/default/config",
+		url.Values{"description": {"edited"}, "version": {p.Version},
+			"key": {"rsync.bwlimit", ""}, "value": {"10MiB", ""}}, false)
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/storage/default", res.Header().Get("Location"))
+
+	got, err := b.GetStoragePool(t.Context(), "default")
+	require.NoError(t, err)
+	assert.Equal(t, "edited", got.Description)
+	assert.Equal(t, map[string]string{"rsync.bwlimit": "10MiB"}, got.Config)
+}
+
+func TestUpdatePoolStaleVersionIs409(t *testing.T) {
+	b := fake.New()
+	p, err := b.GetStoragePool(t.Context(), "default")
+	require.NoError(t, err)
+	require.NoError(t, b.UpdateStoragePool(t.Context(), "default", "racer", nil, p.Version))
+
+	res := formRequest(t, New(b), "/storage/default/config",
+		url.Values{"description": {"stale"}, "version": {p.Version}}, true)
+	assertStatus(t, res, http.StatusConflict)
+}
+
+func TestUpdatePoolGhostIs404(t *testing.T) {
+	res := formRequest(t, New(fake.New()), "/storage/ghost/config", url.Values{}, true)
+	assertStatus(t, res, http.StatusNotFound)
+}
+
 func TestRenameVolumeSnapshotReturnsTable(t *testing.T) {
 	b := newVolume(t)
 	require.NoError(t, b.CreateVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))

@@ -59,6 +59,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("GET /storage/new", h.poolCreateForm)
 	mux.HandleFunc("POST /storage", h.createPool)
 	mux.HandleFunc("GET /storage/{pool}", h.storagePool)
+	mux.HandleFunc("POST /storage/{pool}/config", h.updatePool)
 	mux.HandleFunc("POST /storage/{pool}/delete", h.deletePool)
 	mux.HandleFunc("POST /storage/{pool}/volumes", h.createVolume)
 	mux.HandleFunc("GET /storage/{pool}/volumes/{volume}", h.storageVolume)

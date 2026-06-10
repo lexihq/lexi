@@ -120,6 +120,9 @@ type StoragePool struct {
 	Description string
 	Config      map[string]string
 	UsedBy      []string
+	// Version is an opaque concurrency token for UpdateStoragePool, populated
+	// by GetStoragePool (empty on list entries).
+	Version string
 }
 
 // StorageVolume is a custom storage volume within a pool. lxcon manages only the
@@ -394,6 +397,12 @@ type Backend interface {
 	// CreateStoragePool creates a pool from Name, Driver, Description, and
 	// Config (UsedBy is a read-only output).
 	CreateStoragePool(ctx context.Context, p StoragePool) error
+	// UpdateStoragePool updates the pool's description and replaces its config
+	// map. A non-empty version (from GetStoragePool) makes the update
+	// conditional: ErrConflict if the pool changed since that read. Some pool
+	// config keys are immutable post-create; the daemon rejects those with
+	// ErrInvalid.
+	UpdateStoragePool(ctx context.Context, name, description string, config map[string]string, version string) error
 	// DeleteStoragePool refuses pools with UsedBy references (ErrConflict).
 	DeleteStoragePool(ctx context.Context, name string) error
 	ListVolumes(ctx context.Context, pool string) ([]StorageVolume, error)

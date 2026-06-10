@@ -5,6 +5,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,7 +32,31 @@ func (f *Fake) GetStoragePool(_ context.Context, pool string) (backend.StoragePo
 	if !ok {
 		return backend.StoragePool{}, notFoundf("storage pool %q", pool)
 	}
-	return f.poolView(p), nil
+	out := f.poolView(p)
+	out.Version = strconv.Itoa(p.version)
+	return out, nil
+}
+
+func (f *Fake) UpdateStoragePool(_ context.Context, name, description string, config map[string]string, version string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	p, ok := f.pools[name]
+	if !ok {
+		return notFoundf("storage pool %q", name)
+	}
+	// Empty version = unconditional, mirroring the Incus client's If-Match
+	// semantics; a stale version means a concurrent writer landed first.
+	if version != "" && version != strconv.Itoa(p.version) {
+		return conflict("storage pool %q version %s", name, version)
+	}
+	p.Description = description
+	p.Config = maps.Clone(config)
+	if p.Config == nil {
+		p.Config = map[string]string{}
+	}
+	p.version++
+	return nil
 }
 
 func (f *Fake) CreateStoragePool(_ context.Context, p backend.StoragePool) error {

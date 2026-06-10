@@ -23,11 +23,32 @@ func (b *incusBackend) ListStoragePools(_ context.Context) ([]backend.StoragePoo
 }
 
 func (b *incusBackend) GetStoragePool(_ context.Context, pool string) (backend.StoragePool, error) {
-	p, _, err := b.srv.GetStoragePool(pool)
+	p, etag, err := b.srv.GetStoragePool(pool)
 	if err != nil {
 		return backend.StoragePool{}, fmt.Errorf("get storage pool %q: %w", pool, mapErr(err))
 	}
-	return toPool(p), nil
+	out := toPool(p)
+	out.Version = etag
+	return out, nil
+}
+
+// UpdateStoragePool updates the pool's description and replaces its config via
+// GET-preserve-PUT. The version is the etag from GetStoragePool; the daemon
+// rejects the PUT with 412 (mapped to ErrConflict) when the pool changed since
+// that read. An empty version updates unconditionally. Immutable config keys
+// (driver-specific, e.g. zfs.pool_name) are rejected by the daemon with a 400.
+func (b *incusBackend) UpdateStoragePool(_ context.Context, name, description string, config map[string]string, version string) error {
+	p, _, err := b.srv.GetStoragePool(name)
+	if err != nil {
+		return fmt.Errorf("get storage pool %q: %w", name, mapErr(err))
+	}
+	put := p.Writable()
+	put.Description = description
+	put.Config = config
+	if err := b.srv.UpdateStoragePool(name, put, version); err != nil {
+		return fmt.Errorf("update storage pool %q: %w", name, mapErr(err))
+	}
+	return nil
 }
 
 func (b *incusBackend) CreateStoragePool(_ context.Context, p backend.StoragePool) error {

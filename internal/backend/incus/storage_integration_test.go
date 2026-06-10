@@ -118,6 +118,16 @@ func TestStoragePoolCreateDeleteRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "dir", p.Driver)
 	assert.Equal(t, "lxcon integration", p.Description)
+	require.NotEmpty(t, p.Version)
+
+	// Versioned update round-trips description + a config key; a stale etag
+	// conflicts.
+	require.NoError(t, b.UpdateStoragePool(ctx, name, "edited", map[string]string{"rsync.bwlimit": "10MiB"}, p.Version))
+	got, err := b.GetStoragePool(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "edited", got.Description)
+	assert.Equal(t, "10MiB", got.Config["rsync.bwlimit"])
+	require.ErrorIs(t, b.UpdateStoragePool(ctx, name, "stale", nil, p.Version), backend.ErrConflict)
 
 	// Duplicate create conflicts.
 	require.ErrorIs(t, b.CreateStoragePool(ctx, backend.StoragePool{Name: name, Driver: "dir"}), backend.ErrConflict)

@@ -138,6 +138,35 @@ func TestVolumeSnapshots(t *testing.T) {
 	require.ErrorIs(t, f.DeleteVolumeSnapshot(ctx(), "default", "vol1", "ghost"), backend.ErrNotFound)
 }
 
+func TestUpdateStoragePoolReplacesConfigAndDescription(t *testing.T) {
+	f := New()
+	p, err := f.GetStoragePool(ctx(), "default")
+	require.NoError(t, err)
+	require.NotEmpty(t, p.Version)
+
+	require.NoError(t, f.UpdateStoragePool(ctx(), "default", "edited", map[string]string{"rsync.bwlimit": "10MiB"}, p.Version))
+
+	got, err := f.GetStoragePool(ctx(), "default")
+	require.NoError(t, err)
+	assert.Equal(t, "edited", got.Description)
+	assert.Equal(t, map[string]string{"rsync.bwlimit": "10MiB"}, got.Config)
+	assert.NotEqual(t, p.Version, got.Version, "version bumps on update")
+}
+
+func TestUpdateStoragePoolStaleVersionConflicts(t *testing.T) {
+	f := New()
+	p, err := f.GetStoragePool(ctx(), "default")
+	require.NoError(t, err)
+	require.NoError(t, f.UpdateStoragePool(ctx(), "default", "first", nil, p.Version))
+	require.ErrorIs(t, f.UpdateStoragePool(ctx(), "default", "second", nil, p.Version), backend.ErrConflict)
+	// Empty version updates unconditionally.
+	require.NoError(t, f.UpdateStoragePool(ctx(), "default", "second", nil, ""))
+}
+
+func TestUpdateStoragePoolNotFound(t *testing.T) {
+	require.ErrorIs(t, New().UpdateStoragePool(ctx(), "ghost", "", nil, ""), backend.ErrNotFound)
+}
+
 func TestVolumeSnapshotRenameAndExpiry(t *testing.T) {
 	f := New()
 	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "vol1", ContentType: "filesystem"}))

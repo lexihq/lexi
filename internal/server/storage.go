@@ -66,6 +66,24 @@ func (h handlers) createPool(w http.ResponseWriter, r *http.Request) {
 
 // deletePool removes an unused pool from its detail page, then redirects to
 // the list (the detail page no longer exists). In-use pools 409 in the backend.
+// updatePool applies the pool editor: description plus key/value rows that
+// replace the pool's config. The hidden version field carries the token the
+// form was rendered from, so a concurrent change conflicts (409) instead of
+// being silently overwritten.
+func (h handlers) updatePool(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	pool := r.PathValue("pool")
+	config := zipConfigPairs(r.Form["key"], r.Form["value"])
+	if err := h.backend.UpdateStoragePool(r.Context(), pool, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/storage/"+url.PathEscape(pool), http.StatusSeeOther)
+}
+
 func (h handlers) deletePool(w http.ResponseWriter, r *http.Request) {
 	if err := h.backend.DeleteStoragePool(r.Context(), r.PathValue("pool")); err != nil {
 		h.fail(w, err)

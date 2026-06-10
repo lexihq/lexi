@@ -31,6 +31,9 @@ type storagePool struct {
 	backend.StoragePool
 
 	volumes map[string]*storageVolume
+	// version is the counter behind the Get/Update concurrency token, bumped
+	// on every pool config update.
+	version int
 }
 
 type storageVolume struct {

@@ -50,7 +50,7 @@ templ StoragePoolsPage(caps backend.Capabilities, pools []backend.StoragePool) {
 	}
 }
 
-// StoragePoolPage shows a pool's config (read-only) and its custom volumes.
+// StoragePoolPage shows a pool's editable config and its custom volumes.
 // The delete button is disabled while anything references the pool.
 templ StoragePoolPage(caps backend.Capabilities, pool backend.StoragePool, volumes []backend.StorageVolume) {
 	@Layout(pool.Name, caps, Nav{Section: NavStorage}) {
@@ -75,16 +75,29 @@ templ StoragePoolPage(caps backend.Capabilities, pool backend.StoragePool, volum
 			}
 		</div>
 		<section class="mb-8 rounded-lg border bg-card p-4">
-			<h2 class="mb-3 text-lg font-medium">Config</h2>
-			if len(pool.Config) == 0 {
-				<p class="text-sm text-muted-foreground">No config keys.</p>
-			} else {
-				<dl class="grid gap-2 text-sm sm:grid-cols-2">
-					for _, k := range sortedKeys(pool.Config) {
-						<div><dt class="text-muted-foreground">{ k }</dt><dd>{ pool.Config[k] }</dd></div>
-					}
-				</dl>
-			}
+			<h2 class="mb-1 text-lg font-medium">Config</h2>
+			<p class="mb-3 text-sm text-muted-foreground">Clearing a key's name removes it on apply. Some keys are fixed after creation and are rejected by the daemon.</p>
+			<form method="post" action={ templ.URL("/storage/" + url.PathEscape(pool.Name) + "/config") } class="max-w-xl space-y-2">
+				<input type="hidden" name="version" value={ pool.Version }/>
+				<div>
+					<label class="mb-1 block text-sm font-medium">Description</label>
+					<input name="description" value={ pool.Description } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+				</div>
+				for _, k := range sortedKeys(pool.Config) {
+					<div class="flex gap-2">
+						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+						<textarea name="value" rows="1" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm">{ pool.Config[k] }</textarea>
+					</div>
+				}
+				<div class="flex gap-2">
+					<input name="key" placeholder="rsync.bwlimit" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+					<textarea name="value" rows="1" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm"></textarea>
+				</div>
+				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					@icon.Icon("check")(icon.Props{Class: "size-4"})
+					Apply config
+				}
+			</form>
 		</section>
 		@StorageVolumesTable(pool.Name, volumes)
 	}

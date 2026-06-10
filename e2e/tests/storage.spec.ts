@@ -84,8 +84,20 @@ test("storage: create and delete a pool; in-use pool can't be deleted", async ({
   await expect(page).toHaveURL(/\/storage$/);
   await expect(page.getByRole("link", { name: "e2e-pool" })).toBeVisible();
 
-  // Delete the (unused) pool from its detail page.
+  // Edit the pool: set a description and a config key via the versioned
+  // editor. Scope to the editor form — the volume-create form on the same page
+  // also has key/value config rows.
   await page.getByRole("link", { name: "e2e-pool" }).click();
+  const editor = page.locator('form[action="/storage/e2e-pool/config"]');
+  await editor.locator('input[name="description"]').fill("edited by e2e");
+  await editor.locator('input[name="key"]').last().fill("rsync.bwlimit");
+  await editor.locator('textarea[name="value"]').last().fill("10MiB");
+  await editor.getByRole("button", { name: "Apply config" }).click();
+  await expect(page).toHaveURL(/\/storage\/e2e-pool$/);
+  await expect(page.locator('input[name="key"][value="rsync.bwlimit"]')).toBeVisible();
+  await expect(page.locator('input[name="description"]')).toHaveValue("edited by e2e");
+
+  // Delete the (unused) pool from its detail page.
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page).toHaveURL(/\/storage$/);
   await expect(page.getByRole("link", { name: "e2e-pool" })).toHaveCount(0);

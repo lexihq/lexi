@@ -93,11 +93,51 @@ func (b *incusBackend) ListVolumes(_ context.Context, pool string) ([]backend.St
 }
 
 func (b *incusBackend) GetVolume(_ context.Context, pool, name string) (backend.StorageVolume, error) {
-	v, _, err := b.srv.GetStoragePoolVolume(pool, "custom", name)
+	v, etag, err := b.srv.GetStoragePoolVolume(pool, "custom", name)
 	if err != nil {
 		return backend.StorageVolume{}, fmt.Errorf("get volume %q/%q: %w", pool, name, mapErr(err))
 	}
-	return toVolume(pool, v), nil
+	out := toVolume(pool, v)
+	out.Version = etag
+	return out, nil
+}
+
+// UpdateVolume updates the volume's description and replaces its config via
+// GET-preserve-PUT (UpdateStoragePoolVolume is synchronous). The version is the
+// etag from GetVolume; 412 → ErrConflict. An empty version updates
+// unconditionally.
+func (b *incusBackend) UpdateVolume(_ context.Context, pool, name, description string, config map[string]string, version string) error {
+	v, _, err := b.srv.GetStoragePoolVolume(pool, "custom", name)
+	if err != nil {
+		return fmt.Errorf("get volume %q/%q: %w", pool, name, mapErr(err))
+	}
+	put := v.Writable()
+	put.Description = description
+	put.Config = config
+	if err := b.srv.UpdateStoragePoolVolume(pool, "custom", name, put, version); err != nil {
+		return fmt.Errorf("update volume %q/%q: %w", pool, name, mapErr(err))
+	}
+	return nil
+}
+
+// RenameVolume renames a custom volume (synchronous). The target name is
+// pre-checked so a collision is a deterministic ErrConflict regardless of the
+// daemon's backend-specific error wording; a volume attached to an instance is
+// refused by the daemon itself.
+func (b *incusBackend) RenameVolume(ctx context.Context, pool, name, newName string) error {
+	vols, err := b.ListVolumes(ctx, pool)
+	if err != nil {
+		return err
+	}
+	for _, v := range vols {
+		if v.Name == newName {
+			return fmt.Errorf("volume %q already exists: %w", newName, backend.ErrConflict)
+		}
+	}
+	if err := b.srv.RenameStoragePoolVolume(pool, "custom", name, api.StorageVolumePost{Name: newName}); err != nil {
+		return fmt.Errorf("rename volume %q/%q: %w", pool, name, mapErr(err))
+	}
+	return nil
 }
 
 func (b *incusBackend) CreateVolume(_ context.Context, pool string, v backend.StorageVolume) error {
@@ -121,7 +161,7 @@ func toPool(p *api.StoragePool) backend.StoragePool {
 }
 
 func toVolume(pool string, v *api.StorageVolume) backend.StorageVolume {
-	return backend.StorageVolume{Name: v.Name, Type: v.Type, ContentType: v.ContentType, Pool: pool, Config: v.Config, UsedBy: v.UsedBy}
+	return backend.StorageVolume{Name: v.Name, Type: v.Type, ContentType: v.ContentType, Pool: pool, Description: v.Description, Config: v.Config, UsedBy: v.UsedBy}
 }
 
 func (b *incusBackend) ListVolumeSnapshots(_ context.Context, pool, volume string) ([]backend.StorageVolumeSnapshot, error) {

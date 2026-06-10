@@ -133,8 +133,12 @@ type StorageVolume struct {
 	Type        string // always "custom" in this slice
 	ContentType string // filesystem | block
 	Pool        string
+	Description string
 	Config      map[string]string
 	UsedBy      []string
+	// Version is an opaque concurrency token for UpdateVolume, populated by
+	// GetVolume (empty on list entries).
+	Version string
 }
 
 // StorageVolumeSnapshot is a point-in-time snapshot of a custom volume.
@@ -408,6 +412,13 @@ type Backend interface {
 	ListVolumes(ctx context.Context, pool string) ([]StorageVolume, error)
 	GetVolume(ctx context.Context, pool, name string) (StorageVolume, error)
 	CreateVolume(ctx context.Context, pool string, v StorageVolume) error
+	// UpdateVolume updates the volume's description and replaces its config map
+	// (resizing = the "size" key). A non-empty version (from GetVolume) makes
+	// the update conditional: ErrConflict if the volume changed since that read.
+	UpdateVolume(ctx context.Context, pool, name, description string, config map[string]string, version string) error
+	// RenameVolume renames a custom volume. The target name must be free
+	// (ErrConflict); a volume in use by an instance is refused by the daemon.
+	RenameVolume(ctx context.Context, pool, name, newName string) error
 	DeleteVolume(ctx context.Context, pool, name string) error
 	ListVolumeSnapshots(ctx context.Context, pool, volume string) ([]StorageVolumeSnapshot, error)
 	CreateVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error

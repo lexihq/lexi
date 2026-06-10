@@ -200,6 +200,50 @@ func TestUpdatePoolGhostIs404(t *testing.T) {
 	assertStatus(t, res, http.StatusNotFound)
 }
 
+func TestUpdateVolumeAppliesAndRedirects(t *testing.T) {
+	b := newVolume(t)
+	v, err := b.GetVolume(t.Context(), "default", "vol1")
+	require.NoError(t, err)
+
+	res := formRequest(t, New(b), "/storage/default/volumes/vol1/config",
+		url.Values{"description": {"edited"}, "version": {v.Version},
+			"key": {"size", ""}, "value": {"2GiB", ""}}, false)
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/storage/default/volumes/vol1", res.Header().Get("Location"))
+
+	got, err := b.GetVolume(t.Context(), "default", "vol1")
+	require.NoError(t, err)
+	assert.Equal(t, "edited", got.Description)
+	assert.Equal(t, "2GiB", got.Config["size"])
+}
+
+func TestUpdateVolumeStaleVersionIs409(t *testing.T) {
+	b := newVolume(t)
+	v, err := b.GetVolume(t.Context(), "default", "vol1")
+	require.NoError(t, err)
+	require.NoError(t, b.UpdateVolume(t.Context(), "default", "vol1", "racer", nil, v.Version))
+
+	res := formRequest(t, New(b), "/storage/default/volumes/vol1/config",
+		url.Values{"description": {"stale"}, "version": {v.Version}}, true)
+	assertStatus(t, res, http.StatusConflict)
+}
+
+func TestRenameVolumeRedirectsToNewName(t *testing.T) {
+	b := newVolume(t)
+	res := formRequest(t, New(b), "/storage/default/volumes/vol1/rename",
+		url.Values{"new_name": {"vol2"}}, false)
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/storage/default/volumes/vol2", res.Header().Get("Location"))
+	_, err := b.GetVolume(t.Context(), "default", "vol2")
+	require.NoError(t, err)
+}
+
+func TestRenameVolumeBlankNameIs400(t *testing.T) {
+	res := formRequest(t, New(newVolume(t)), "/storage/default/volumes/vol1/rename",
+		url.Values{"new_name": {" "}}, true)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
 func TestRenameVolumeSnapshotReturnsTable(t *testing.T) {
 	b := newVolume(t)
 	require.NoError(t, b.CreateVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))

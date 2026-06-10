@@ -43,9 +43,29 @@ func TestVolumeCRUDRoundTrip(t *testing.T) {
 	v, err := b.GetVolume(ctx, pool.Name, name)
 	require.NoError(t, err)
 	assert.Equal(t, "custom", v.Type)
+	require.NotEmpty(t, v.Version)
+
+	// Versioned update: description + resize via the size key; stale etag
+	// conflicts.
+	require.NoError(t, b.UpdateVolume(ctx, pool.Name, name, "edited", map[string]string{"size": "64MiB"}, v.Version))
+	got, err := b.GetVolume(ctx, pool.Name, name)
+	require.NoError(t, err)
+	assert.Equal(t, "edited", got.Description)
+	assert.Equal(t, "64MiB", got.Config["size"])
+	require.ErrorIs(t, b.UpdateVolume(ctx, pool.Name, name, "stale", nil, v.Version), backend.ErrConflict)
+
+	// Rename moves the volume; the old name is gone and a collision conflicts.
+	renamed := name + "r"
+	t.Cleanup(func() { _ = b.DeleteVolume(ctx, pool.Name, renamed) })
+	require.NoError(t, b.RenameVolume(ctx, pool.Name, name, renamed))
+	_, err = b.GetVolume(ctx, pool.Name, name)
+	require.ErrorIs(t, err, backend.ErrNotFound)
+	require.NoError(t, b.CreateVolume(ctx, pool.Name, backend.StorageVolume{Name: name, ContentType: "filesystem"}))
+	require.ErrorIs(t, b.RenameVolume(ctx, pool.Name, name, renamed), backend.ErrConflict)
 
 	require.NoError(t, b.DeleteVolume(ctx, pool.Name, name))
-	_, err = b.GetVolume(ctx, pool.Name, name)
+	require.NoError(t, b.DeleteVolume(ctx, pool.Name, renamed))
+	_, err = b.GetVolume(ctx, pool.Name, renamed)
 	require.ErrorIs(t, err, backend.ErrNotFound)
 }
 

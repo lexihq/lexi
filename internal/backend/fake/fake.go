@@ -40,6 +40,9 @@ type storageVolume struct {
 	backend.StorageVolume
 
 	snapshots []backend.StorageVolumeSnapshot
+	// version is the counter behind the Get/Update concurrency token, bumped
+	// on every volume config update.
+	version int
 }
 
 // Fake is a mutex-guarded, in-memory Backend with a deterministic clock.

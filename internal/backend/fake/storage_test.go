@@ -167,6 +167,49 @@ func TestUpdateStoragePoolNotFound(t *testing.T) {
 	require.ErrorIs(t, New().UpdateStoragePool(ctx(), "ghost", "", nil, ""), backend.ErrNotFound)
 }
 
+func TestUpdateVolumeReplacesConfigAndDescription(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "vol1", ContentType: "filesystem", Config: map[string]string{"size": "1GiB"}}))
+	v, err := f.GetVolume(ctx(), "default", "vol1")
+	require.NoError(t, err)
+	require.NotEmpty(t, v.Version)
+
+	require.NoError(t, f.UpdateVolume(ctx(), "default", "vol1", "edited", map[string]string{"size": "2GiB"}, v.Version))
+
+	got, err := f.GetVolume(ctx(), "default", "vol1")
+	require.NoError(t, err)
+	assert.Equal(t, "edited", got.Description)
+	assert.Equal(t, "2GiB", got.Config["size"], "resize via the size key")
+	assert.NotEqual(t, v.Version, got.Version)
+
+	// Stale version conflicts; empty version is unconditional; ghost is 404.
+	require.ErrorIs(t, f.UpdateVolume(ctx(), "default", "vol1", "stale", nil, v.Version), backend.ErrConflict)
+	require.NoError(t, f.UpdateVolume(ctx(), "default", "vol1", "uncond", nil, ""))
+	require.ErrorIs(t, f.UpdateVolume(ctx(), "default", "ghost", "", nil, ""), backend.ErrNotFound)
+}
+
+func TestRenameVolume(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "vol1", ContentType: "filesystem"}))
+	require.NoError(t, f.CreateVolumeSnapshot(ctx(), "default", "vol1", "snap0"))
+
+	require.NoError(t, f.RenameVolume(ctx(), "default", "vol1", "vol2"))
+	_, err := f.GetVolume(ctx(), "default", "vol1")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+	got, err := f.GetVolume(ctx(), "default", "vol2")
+	require.NoError(t, err)
+	assert.Equal(t, "vol2", got.Name)
+	snaps, err := f.ListVolumeSnapshots(ctx(), "default", "vol2")
+	require.NoError(t, err)
+	assert.Len(t, snaps, 1, "snapshots carry across rename")
+
+	// Target name must be free and well-formed; ghost is 404.
+	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "other"}))
+	require.ErrorIs(t, f.RenameVolume(ctx(), "default", "vol2", "other"), backend.ErrConflict)
+	require.ErrorIs(t, f.RenameVolume(ctx(), "default", "vol2", "bad name"), backend.ErrInvalid)
+	require.ErrorIs(t, f.RenameVolume(ctx(), "default", "ghost", "x"), backend.ErrNotFound)
+}
+
 func TestVolumeSnapshotRenameAndExpiry(t *testing.T) {
 	f := New()
 	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "vol1", ContentType: "filesystem"}))

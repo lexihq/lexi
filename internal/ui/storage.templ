@@ -210,23 +210,45 @@ templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
 
 // StorageVolumePage shows a custom volume's config and its snapshots.
 templ StorageVolumePage(caps backend.Capabilities, v backend.StorageVolume, snapshots []backend.StorageVolumeSnapshot) {
+	{{ volBase := "/storage/" + url.PathEscape(v.Pool) + "/volumes/" + url.PathEscape(v.Name) }}
 	@Layout(v.Name, caps, Nav{Section: NavStorage}) {
-		<div class="mb-6">
-			<a href={ templ.URL("/storage/" + url.PathEscape(v.Pool)) } class="text-sm text-muted-foreground underline-offset-4 hover:underline">← { v.Pool }</a>
-			<h1 class="mt-2 text-2xl font-semibold">{ v.Name }</h1>
-			<p class="text-muted-foreground">{ v.ContentType }</p>
+		<div class="mb-6 flex items-start justify-between gap-4">
+			<div>
+				<a href={ templ.URL("/storage/" + url.PathEscape(v.Pool)) } class="text-sm text-muted-foreground underline-offset-4 hover:underline">← { v.Pool }</a>
+				<h1 class="mt-2 text-2xl font-semibold">{ v.Name }</h1>
+				<p class="text-muted-foreground">{ v.ContentType }</p>
+			</div>
+			<form method="post" action={ templ.URL(volBase + "/rename") } class="flex items-center gap-1">
+				<input name="new_name" placeholder="new name" class="h-9 w-32 rounded-md border bg-background px-3 text-sm"/>
+				@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+					Rename
+				}
+			</form>
 		</div>
 		<section class="mb-8 rounded-lg border bg-card p-4">
-			<h2 class="mb-3 text-lg font-medium">Config</h2>
-			if len(v.Config) == 0 {
-				<p class="text-sm text-muted-foreground">No config keys.</p>
-			} else {
-				<dl class="grid gap-2 text-sm sm:grid-cols-2">
-					for _, k := range sortedKeys(v.Config) {
-						<div><dt class="text-muted-foreground">{ k }</dt><dd>{ v.Config[k] }</dd></div>
-					}
-				</dl>
-			}
+			<h2 class="mb-1 text-lg font-medium">Config</h2>
+			<p class="mb-3 text-sm text-muted-foreground">Clearing a key's name removes it on apply. Resize with the size key.</p>
+			<form method="post" action={ templ.URL(volBase + "/config") } class="max-w-xl space-y-2">
+				<input type="hidden" name="version" value={ v.Version }/>
+				<div>
+					<label class="mb-1 block text-sm font-medium">Description</label>
+					<input name="description" value={ v.Description } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+				</div>
+				for _, k := range sortedKeys(v.Config) {
+					<div class="flex gap-2">
+						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+						<textarea name="value" rows="1" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm">{ v.Config[k] }</textarea>
+					</div>
+				}
+				<div class="flex gap-2">
+					<input name="key" placeholder="size" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+					<textarea name="value" rows="1" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm"></textarea>
+				</div>
+				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					@icon.Icon("check")(icon.Props{Class: "size-4"})
+					Apply config
+				}
+			</form>
 		</section>
 		@StorageVolumeSnapshotsTable(v.Pool, v.Name, snapshots)
 	}

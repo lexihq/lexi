@@ -201,6 +201,43 @@ func (h handlers) deleteVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
 	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
 }
 
+// updateVolume applies the volume editor: description plus key/value rows that
+// replace the volume's config (resize = the "size" key). The hidden version
+// field makes the write conditional (409 on a concurrent change).
+func (h handlers) updateVolume(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	pool := r.PathValue("pool")
+	volume := r.PathValue("volume")
+	config := zipConfigPairs(r.Form["key"], r.Form["value"])
+	if err := h.backend.UpdateVolume(r.Context(), pool, volume, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/storage/"+url.PathEscape(pool)+"/volumes/"+url.PathEscape(volume), http.StatusSeeOther)
+}
+
+// renameVolume renames a custom volume and redirects to its new detail page.
+func (h handlers) renameVolume(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	pool := r.PathValue("pool")
+	newName := strings.TrimSpace(r.Form.Get("new_name"))
+	if newName == "" {
+		h.fail(w, fmt.Errorf("new volume name is required: %w", backend.ErrInvalid))
+		return
+	}
+	if err := h.backend.RenameVolume(r.Context(), pool, r.PathValue("volume"), newName); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/storage/"+url.PathEscape(pool)+"/volumes/"+url.PathEscape(newName), http.StatusSeeOther)
+}
+
 func (h handlers) renameVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

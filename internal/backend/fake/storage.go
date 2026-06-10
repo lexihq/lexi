@@ -151,7 +151,56 @@ func (f *Fake) GetVolume(_ context.Context, pool, name string) (backend.StorageV
 	if err != nil {
 		return backend.StorageVolume{}, err
 	}
-	return volumeView(v), nil
+	out := volumeView(v)
+	out.Version = strconv.Itoa(v.version)
+	return out, nil
+}
+
+func (f *Fake) UpdateVolume(_ context.Context, pool, name, description string, config map[string]string, version string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	v, err := f.lookupVolume(pool, name)
+	if err != nil {
+		return err
+	}
+	// Empty version = unconditional, mirroring the Incus client's If-Match
+	// semantics; a stale version means a concurrent writer landed first.
+	if version != "" && version != strconv.Itoa(v.version) {
+		return conflict("volume %q version %s", name, version)
+	}
+	v.Description = description
+	v.Config = maps.Clone(config)
+	if v.Config == nil {
+		v.Config = map[string]string{}
+	}
+	v.version++
+	return nil
+}
+
+func (f *Fake) RenameVolume(_ context.Context, pool, name, newName string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	p, ok := f.pools[pool]
+	if !ok {
+		return notFoundf("storage pool %q", pool)
+	}
+	v, ok := p.volumes[name]
+	if !ok {
+		return notFoundf("volume %q", name)
+	}
+	// Incus parity: volume names are API names (no whitespace or separators).
+	if strings.ContainsAny(newName, " \t\n/") {
+		return invalid("invalid volume name %q", newName)
+	}
+	if _, exists := p.volumes[newName]; exists {
+		return conflict("volume %q already exists", newName)
+	}
+	v.Name = newName
+	p.volumes[newName] = v
+	delete(p.volumes, name)
+	return nil
 }
 
 func (f *Fake) CreateVolume(_ context.Context, pool string, v backend.StorageVolume) error {
@@ -172,7 +221,7 @@ func (f *Fake) CreateVolume(_ context.Context, pool string, v backend.StorageVol
 	p.volumes[v.Name] = &storageVolume{
 		StorageVolume: backend.StorageVolume{
 			Name: v.Name, Type: "custom", ContentType: contentType,
-			Pool: pool, Config: maps.Clone(v.Config),
+			Pool: pool, Description: v.Description, Config: maps.Clone(v.Config),
 		},
 	}
 	return nil

@@ -64,6 +64,8 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /storage/{pool}/volumes", h.createVolume)
 	mux.HandleFunc("GET /storage/{pool}/volumes/{volume}", h.storageVolume)
 	mux.HandleFunc("POST /storage/{pool}/volumes/{volume}/delete", h.deleteVolume)
+	mux.HandleFunc("POST /storage/{pool}/volumes/{volume}/config", h.updateVolume)
+	mux.HandleFunc("POST /storage/{pool}/volumes/{volume}/rename", h.renameVolume)
 	mux.HandleFunc("POST /storage/{pool}/volumes/{volume}/snapshots", h.createVolumeSnapshot)
 	mux.HandleFunc("POST /storage/{pool}/volumes/{volume}/snapshots/{snap}/restore", h.restoreVolumeSnapshot)
 	mux.HandleFunc("POST /storage/{pool}/volumes/{volume}/snapshots/{snap}/rename", h.renameVolumeSnapshot)

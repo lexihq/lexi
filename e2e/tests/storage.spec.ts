@@ -18,11 +18,29 @@ test("create and delete a custom volume in the Storage section", async ({ page }
   await expect(page).toHaveURL(/\/storage\/default$/);
   await expect(page.locator("#volumes").getByText("e2e-vol")).toBeVisible();
 
-  // Same htmx swap-then-click race as the snapshot/device Delete: retry until
-  // the delete takes effect (a single lost click would otherwise fail).
+  // Edit the volume: description + resize via the size key (versioned editor).
+  await page.locator("#volumes").getByRole("link", { name: "e2e-vol" }).click();
+  await expect(page).toHaveURL(/\/storage\/default\/volumes\/e2e-vol$/);
+  const editor = page.locator('form[action="/storage/default/volumes/e2e-vol/config"]');
+  await editor.locator('input[name="description"]').fill("resized by e2e");
+  await editor.locator('input[name="key"]').last().fill("size");
+  await editor.locator('textarea[name="value"]').last().fill("2GiB");
+  await editor.getByRole("button", { name: "Apply config" }).click();
+  await expect(page).toHaveURL(/\/storage\/default\/volumes\/e2e-vol$/);
+  await expect(page.locator('input[name="key"][value="size"]')).toBeVisible();
+
+  // Rename it; the page redirects to the new volume URL.
+  await page.locator('input[name="new_name"]').fill("e2e-vol2");
+  await page.getByRole("button", { name: "Rename" }).click();
+  await expect(page).toHaveURL(/\/storage\/default\/volumes\/e2e-vol2$/);
+
+  // Back on the pool page, delete the renamed volume. Same htmx
+  // swap-then-click race as the snapshot/device Delete: retry until the delete
+  // takes effect (a single lost click would otherwise fail).
+  await page.goto("/storage/default");
   await expect(async () => {
-    await page.locator("#volumes").getByRole("button", { name: "Delete" }).click();
-    await expect(page.locator("#volumes").getByText("e2e-vol")).toHaveCount(0, { timeout: 1000 });
+    await page.locator("#volumes").getByRole("row", { name: /e2e-vol2/ }).getByRole("button", { name: "Delete" }).click();
+    await expect(page.locator("#volumes").getByText("e2e-vol2")).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 });
 

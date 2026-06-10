@@ -75,3 +75,37 @@ func TestVolumeSnapshotRoundTrip(t *testing.T) {
 
 	require.NoError(t, b.DeleteVolume(ctx, pool.Name, name))
 }
+
+// TestStoragePoolCreateDeleteRoundTrip creates a throwaway dir pool, verifies
+// a pool holding a volume refuses deletion, then deletes it once empty.
+func TestStoragePoolCreateDeleteRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("lxcon-pool")
+
+	require.NoError(t, b.CreateStoragePool(ctx, backend.StoragePool{
+		Name: name, Driver: "dir", Description: "lxcon integration",
+	}))
+	t.Cleanup(func() {
+		if err := b.DeleteStoragePool(context.Background(), name); err != nil {
+			t.Logf("cleanup pool %q: %v", name, err)
+		}
+	})
+
+	p, err := b.GetStoragePool(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "dir", p.Driver)
+	assert.Equal(t, "lxcon integration", p.Description)
+
+	// Duplicate create conflicts.
+	require.ErrorIs(t, b.CreateStoragePool(ctx, backend.StoragePool{Name: name, Driver: "dir"}), backend.ErrConflict)
+
+	// A pool holding a custom volume refuses deletion.
+	require.NoError(t, b.CreateVolume(ctx, name, backend.StorageVolume{Name: "blocker", ContentType: "filesystem"}))
+	require.ErrorIs(t, b.DeleteStoragePool(ctx, name), backend.ErrConflict)
+	require.NoError(t, b.DeleteVolume(ctx, name, "blocker"))
+
+	require.NoError(t, b.DeleteStoragePool(ctx, name))
+	_, err = b.GetStoragePool(ctx, name)
+	require.ErrorIs(t, err, backend.ErrNotFound)
+}

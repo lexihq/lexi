@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"sort"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -29,6 +30,66 @@ func (f *Fake) GetStoragePool(_ context.Context, pool string) (backend.StoragePo
 		return backend.StoragePool{}, notFoundf("storage pool %q", pool)
 	}
 	return f.poolView(p), nil
+}
+
+func (f *Fake) CreateStoragePool(_ context.Context, p backend.StoragePool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if strings.TrimSpace(p.Name) == "" || strings.TrimSpace(p.Driver) == "" {
+		return invalid("storage pool name and driver are required")
+	}
+	if _, ok := f.pools[p.Name]; ok {
+		return conflict("storage pool %q already exists", p.Name)
+	}
+	f.pools[p.Name] = &storagePool{
+		StoragePool: backend.StoragePool{Name: p.Name, Driver: p.Driver, Description: p.Description, Config: maps.Clone(p.Config)},
+		volumes:     map[string]*storageVolume{},
+	}
+	return nil
+}
+
+func (f *Fake) DeleteStoragePool(_ context.Context, name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	p, ok := f.pools[name]
+	if !ok {
+		return notFoundf("storage pool %q", name)
+	}
+	if used := f.poolUsedBy(p); len(used) > 0 {
+		return conflict("storage pool %q is in use by %s", name, strings.Join(used, ", "))
+	}
+	delete(f.pools, name)
+	return nil
+}
+
+// poolUsedBy lists the API paths of profiles, instances, and custom volumes
+// referencing the pool, mirroring the daemon's UsedBy. Callers must hold the
+// mutex.
+func (f *Fake) poolUsedBy(p *storagePool) []string {
+	var used []string
+	for name, prof := range f.profiles {
+		for _, dev := range prof.Devices {
+			if dev["pool"] == p.Name {
+				used = append(used, "/1.0/profiles/"+name)
+				break
+			}
+		}
+	}
+	for name, in := range f.instances {
+		for _, dev := range in.devices {
+			if dev["pool"] == p.Name {
+				used = append(used, "/1.0/instances/"+name)
+				break
+			}
+		}
+	}
+	for name := range p.volumes {
+		used = append(used, "/1.0/storage-pools/"+p.Name+"/volumes/custom/"+name)
+	}
+	sort.Strings(used)
+	return used
 }
 
 func (f *Fake) ListVolumes(_ context.Context, pool string) ([]backend.StorageVolume, error) {
@@ -97,10 +158,12 @@ func (f *Fake) DeleteVolume(_ context.Context, pool, name string) error {
 	return nil
 }
 
-// poolView returns a copy with a cloned config. Callers must hold the mutex.
+// poolView returns a copy with a cloned config and a freshly computed UsedBy.
+// Callers must hold the mutex.
 func (f *Fake) poolView(p *storagePool) backend.StoragePool {
 	out := p.StoragePool
 	out.Config = maps.Clone(p.Config)
+	out.UsedBy = f.poolUsedBy(p)
 	return out
 }
 

@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
@@ -26,6 +27,33 @@ func (b *incusBackend) GetStoragePool(_ context.Context, pool string) (backend.S
 		return backend.StoragePool{}, fmt.Errorf("get storage pool %q: %w", pool, mapErr(err))
 	}
 	return toPool(p), nil
+}
+
+func (b *incusBackend) CreateStoragePool(_ context.Context, p backend.StoragePool) error {
+	post := api.StoragePoolsPost{Name: p.Name, Driver: p.Driver}
+	post.Description = p.Description
+	post.Config = p.Config
+	if err := b.srv.CreateStoragePool(post); err != nil {
+		return fmt.Errorf("create storage pool %q: %w", p.Name, mapErr(err))
+	}
+	return nil
+}
+
+// DeleteStoragePool pre-checks UsedBy (profiles count too) so a referenced
+// pool conflicts cleanly; a reference appearing in the stat-then-delete window
+// surfaces as the daemon's own 400, which is acceptable.
+func (b *incusBackend) DeleteStoragePool(_ context.Context, name string) error {
+	p, _, err := b.srv.GetStoragePool(name)
+	if err != nil {
+		return fmt.Errorf("delete storage pool %q: %w", name, mapErr(err))
+	}
+	if len(p.UsedBy) > 0 {
+		return fmt.Errorf("delete storage pool %q: in use by %s: %w", name, strings.Join(p.UsedBy, ", "), backend.ErrConflict)
+	}
+	if err := b.srv.DeleteStoragePool(name); err != nil {
+		return fmt.Errorf("delete storage pool %q: %w", name, mapErr(err))
+	}
+	return nil
 }
 
 func (b *incusBackend) ListVolumes(_ context.Context, pool string) ([]backend.StorageVolume, error) {

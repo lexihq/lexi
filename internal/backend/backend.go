@@ -378,6 +378,11 @@ type Backend interface {
 
 	ListStoragePools(ctx context.Context) ([]StoragePool, error)
 	GetStoragePool(ctx context.Context, pool string) (StoragePool, error)
+	// CreateStoragePool creates a pool from Name, Driver, Description, and
+	// Config (UsedBy is a read-only output).
+	CreateStoragePool(ctx context.Context, p StoragePool) error
+	// DeleteStoragePool refuses pools with UsedBy references (ErrConflict).
+	DeleteStoragePool(ctx context.Context, name string) error
 	ListVolumes(ctx context.Context, pool string) ([]StorageVolume, error)
 	GetVolume(ctx context.Context, pool, name string) (StorageVolume, error)
 	CreateVolume(ctx context.Context, pool string, v StorageVolume) error

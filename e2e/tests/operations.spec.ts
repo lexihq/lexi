@@ -1,0 +1,49 @@
+import { test, expect } from "@playwright/test";
+
+// The bottom Tasks panel: operation listing, polling, and cancel.
+// All tests run against the shared fake-backed server (instance "demo" seeded).
+
+test("tasks panel lists operations and picks up new ones", async ({ page }) => {
+  const name = "e2e-task";
+
+  // Creating an instance records an operation in the fake's task log.
+  await page.goto("/instances/new");
+  await page.locator("#image-search").pressSequentially("debian");
+  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
+  await expect(firstImage).toBeVisible();
+  await firstImage.check();
+  await page.locator("#name").fill(name);
+  await page.getByRole("button", { name: "Create instance" }).click();
+  const row = page.locator(`#instance-${name}`);
+  await expect(row).toBeVisible();
+
+  // Expand the bottom Tasks panel; its content hx-loads on page load.
+  const footer = page.locator("footer");
+  await footer.locator('label[for="ops-toggle"]').click();
+  await expect(footer.getByText(`Creating instance "${name}"`)).toBeVisible();
+
+  // Delete the instance; the 5s poll picks the new operation up.
+  await expect(async () => {
+    await row.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(row).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+  await expect(footer.getByText(`Deleting instance "${name}"`)).toBeVisible({ timeout: 10000 });
+});
+
+test("tasks panel: cancel a running operation", async ({ page }) => {
+  await page.goto("/instances/demo");
+  const footer = page.locator("footer");
+  await footer.locator('label[for="ops-toggle"]').click();
+
+  // The fakeserver seeds a cancelable "Migrating instance" task. Cancel it (if a
+  // prior run on a reused server already did, it stays Cancelled with no button).
+  const ops = page.locator("#operations");
+  await expect(ops.getByText('Migrating instance "demo"')).toBeVisible({ timeout: 10000 });
+  await expect(async () => {
+    const cancel = ops.getByRole("button", { name: "Cancel" });
+    if (await cancel.count()) {
+      await cancel.first().click();
+    }
+    await expect(ops.getByText("Cancelled")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});

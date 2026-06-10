@@ -200,7 +200,8 @@ func (h handlers) editFileForm(w http.ResponseWriter, r *http.Request) {
 }
 
 // saveFile writes the edited content back with the ownership and mode the
-// editor captured at read time, then redirects to the Files tab.
+// editor captured at read time, then redirects to the Files tab. It enforces
+// the same bounds as the read path: size-capped, text-only content.
 func (h handlers) saveFile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	p, err := requestPath(r)
@@ -208,22 +209,42 @@ func (h handlers) saveFile(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
+	// 4x leaves room for the URL-encoding of the form body (worst case 3x)
+	// plus the metadata fields; the decoded content is checked exactly below.
+	r.Body = http.MaxBytesReader(w, r.Body, 4*maxEditableFileBytes)
 	if err := r.ParseForm(); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			h.renderError(w, http.StatusRequestEntityTooLarge, "file is too large to edit")
+			return
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	uid, err := strconv.ParseInt(r.Form.Get("uid"), 10, 64)
-	if err != nil {
+	if err != nil || uid < 0 {
 		h.fail(w, fmt.Errorf("bad uid %q: %w", r.Form.Get("uid"), backend.ErrInvalid))
 		return
 	}
 	gid, err := strconv.ParseInt(r.Form.Get("gid"), 10, 64)
-	if err != nil {
+	if err != nil || gid < 0 {
 		h.fail(w, fmt.Errorf("bad gid %q: %w", r.Form.Get("gid"), backend.ErrInvalid))
+		return
+	}
+	if mode, err := strconv.ParseUint(r.Form.Get("mode"), 8, 32); err != nil || mode > 0o777 {
+		h.fail(w, fmt.Errorf("bad mode %q: %w", r.Form.Get("mode"), backend.ErrInvalid))
 		return
 	}
 	// Textareas submit CRLF line endings; instance files are LF.
 	content := strings.ReplaceAll(r.Form.Get("content"), "\r\n", "\n")
+	if int64(len(content)) > maxEditableFileBytes {
+		h.renderError(w, http.StatusRequestEntityTooLarge, "file is too large to edit")
+		return
+	}
+	if strings.ContainsRune(content, 0) || !utf8.ValidString(content) {
+		h.renderError(w, http.StatusBadRequest, "content must be text")
+		return
+	}
 	opts := backend.FileWriteOptions{Mode: r.Form.Get("mode"), UID: uid, GID: gid}
 	if err := h.backend.PushFile(r.Context(), name, p, strings.NewReader(content), opts); err != nil {
 		h.fail(w, err)

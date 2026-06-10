@@ -204,6 +204,46 @@ func TestPushFileZeroOptionsKeepDefaults(t *testing.T) {
 	}
 }
 
+func TestPushFileOverwritePreservesMetadata(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	require := func(err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("push: %v", err)
+		}
+	}
+	require(b.PushFile(ctx(), "demo", "/root/keep", strings.NewReader("v1"),
+		backend.FileWriteOptions{Mode: "0600", UID: 1000, GID: 1000}))
+	// Incus parity: the daemon ignores ownership/mode headers when
+	// overwriting; only the content changes.
+	require(b.PushFile(ctx(), "demo", "/root/keep", strings.NewReader("v2"),
+		backend.FileWriteOptions{Mode: "0640"}))
+
+	var buf bytes.Buffer
+	info, err := b.PullFileInfo(ctx(), "demo", "/root/keep", &buf, 0)
+	if err != nil {
+		t.Fatalf("pull info: %v", err)
+	}
+	want := backend.FileInfo{Type: "file", Mode: "0600", UID: 1000, GID: 1000}
+	if info != want || buf.String() != "v2" {
+		t.Fatalf("got %+v / %q, want %+v / \"v2\"", info, buf.String(), want)
+	}
+}
+
+func TestPushFileCleansPath(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	if err := b.PushFile(ctx(), "demo", "/root//./notes.txt", strings.NewReader("x"), backend.FileWriteOptions{}); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if e := entryNamed(mustList(t, b, "demo", "/root"), "notes.txt"); e == nil {
+		t.Fatalf("pushed file with uncleaned path missing from /root listing")
+	}
+}
+
 func TestPullFileInfoLimitExceededIsInvalid(t *testing.T) {
 	b := New()
 	mustCreate(t, b, "demo")

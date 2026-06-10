@@ -149,6 +149,12 @@ func (f *Fake) PushFile(_ context.Context, instance, p string, r io.Reader, opts
 	if err != nil {
 		return err
 	}
+	// Incus parity: the daemon ignores ownership/mode headers when
+	// overwriting an existing file; options only apply on create.
+	if existing, ok := in.files[p]; ok {
+		existing.content = content
+		return nil
+	}
 	mode := opts.Mode
 	if mode == "" {
 		mode = "0644"
@@ -254,14 +260,11 @@ func (f *Fake) MakeDirectory(_ context.Context, instance, p string) error {
 	return nil
 }
 
-// normalizePath requires an absolute path and strips a trailing slash (except
-// for the root itself).
+// normalizePath requires an absolute path and canonicalizes it (dot segments,
+// doubled and trailing slashes) so node keys stay in one form.
 func normalizePath(p string) (string, error) {
 	if !strings.HasPrefix(p, "/") {
 		return "", invalid("path %q must be absolute", p)
 	}
-	if p != "/" {
-		p = strings.TrimSuffix(p, "/")
-	}
-	return p, nil
+	return path.Clean(p), nil
 }

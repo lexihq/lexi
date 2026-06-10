@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 	incusclient "github.com/lxc/incus/v6/client"
@@ -130,13 +131,25 @@ func (b *incusBackend) DeleteFile(_ context.Context, instance, path string) erro
 		return fmt.Errorf("delete file: cannot delete %q: %w", path, backend.ErrInvalid)
 	}
 	if err := b.srv.DeleteInstanceFile(instance, path); err != nil {
+		// The daemon reports a non-empty directory as a generic sftp failure;
+		// surface it as a user error, not a 500.
+		if strings.Contains(err.Error(), "directory not empty") {
+			return fmt.Errorf("delete file %q: %w: %w", path, backend.ErrInvalid, err)
+		}
 		return fmt.Errorf("delete file %q: %w", path, mapErr(err))
 	}
 	return nil
 }
 
-// MakeDirectory creates a root-owned 0755 directory at path (parents must exist).
+// MakeDirectory creates a root-owned 0755 directory at path (parents must
+// exist). The daemon silently succeeds when anything — even a regular file —
+// already exists at path, so existence is pre-checked to surface a conflict
+// like the fake does; the stat-then-create race window is accepted.
 func (b *incusBackend) MakeDirectory(_ context.Context, instance, path string) error {
+	if content, _, err := b.srv.GetInstanceFile(instance, path); err == nil {
+		closeAndLogFile(path, content)
+		return fmt.Errorf("make directory: %q already exists: %w", path, backend.ErrConflict)
+	}
 	err := b.srv.CreateInstanceFile(instance, path, incusclient.InstanceFileArgs{
 		Type: "directory",
 		Mode: 0o755,

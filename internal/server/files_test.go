@@ -231,9 +231,28 @@ func TestSaveFilePreservesMetadataAndRedirects(t *testing.T) {
 }
 
 func TestSaveFileBadOwnershipIs400(t *testing.T) {
-	form := url.Values{"content": {"x"}, "mode": {"0644"}, "uid": {"abc"}, "gid": {"0"}}
+	for _, form := range []url.Values{
+		{"content": {"x"}, "mode": {"0644"}, "uid": {"abc"}, "gid": {"0"}},
+		{"content": {"x"}, "mode": {"0644"}, "uid": {"-1"}, "gid": {"0"}},
+		{"content": {"x"}, "mode": {"0644"}, "uid": {"0"}, "gid": {"-5"}},
+		{"content": {"x"}, "mode": {"rwxr"}, "uid": {"0"}, "gid": {"0"}},
+		{"content": {"x"}, "mode": {"7777"}, "uid": {"0"}, "gid": {"0"}},
+	} {
+		res := formRequest(t, New(demoFake(t)), "/instances/demo/files/edit?path=%2Fetc%2Fhostname", form, false)
+		assertStatus(t, res, http.StatusBadRequest)
+	}
+}
+
+func TestSaveFileBinaryContentIs400(t *testing.T) {
+	form := url.Values{"content": {"ab\x00cd"}, "mode": {"0644"}, "uid": {"0"}, "gid": {"0"}}
 	res := formRequest(t, New(demoFake(t)), "/instances/demo/files/edit?path=%2Fetc%2Fhostname", form, false)
 	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestSaveFileTooLargeIs413(t *testing.T) {
+	form := url.Values{"content": {strings.Repeat("x", (1<<20)+1)}, "mode": {"0644"}, "uid": {"0"}, "gid": {"0"}}
+	res := formRequest(t, New(demoFake(t)), "/instances/demo/files/edit?path=%2Fetc%2Fhostname", form, false)
+	assertStatus(t, res, http.StatusRequestEntityTooLarge)
 }
 
 func TestUploadTooLargeIs413(t *testing.T) {

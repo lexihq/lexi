@@ -73,6 +73,14 @@ func TestFileMetadataRoundTrip(t *testing.T) {
 	// A limit smaller than the file refuses instead of truncating.
 	_, err = b.PullFileInfo(ctx, name, target, &bytes.Buffer{}, 1)
 	require.ErrorIs(t, err, backend.ErrInvalid)
+
+	// Overwriting with different options keeps the existing metadata — the
+	// daemon ignores ownership/mode headers on overwrite (fake mirrors this).
+	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader("v3\n"),
+		backend.FileWriteOptions{Mode: "0640"}))
+	info, err = b.PullFileInfo(ctx, name, target, &bytes.Buffer{}, 1<<20)
+	require.NoError(t, err)
+	require.Equal(t, backend.FileInfo{Type: "file", Mode: "0600", UID: 1000, GID: 1000}, info)
 }
 
 // TestFileMkdirDeleteRoundTrip creates a directory, pushes a file into it,
@@ -91,11 +99,15 @@ func TestFileMkdirDeleteRoundTrip(t *testing.T) {
 	const dir = "/root/lxcon-dir"
 	require.NoError(t, b.MakeDirectory(ctx, name, dir))
 
+	// Re-creating must conflict (the daemon would silently succeed; the
+	// driver pre-checks).
+	require.ErrorIs(t, b.MakeDirectory(ctx, name, dir), backend.ErrConflict)
+
 	const target = dir + "/inner.txt"
 	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader("inner\n"), backend.FileWriteOptions{}))
 
-	// Non-empty directory delete must fail before the file is removed.
-	require.Error(t, b.DeleteFile(ctx, name, dir))
+	// Non-empty directory delete is a user error, not a 500.
+	require.ErrorIs(t, b.DeleteFile(ctx, name, dir), backend.ErrInvalid)
 
 	require.NoError(t, b.DeleteFile(ctx, name, target))
 	require.NoError(t, b.DeleteFile(ctx, name, dir))

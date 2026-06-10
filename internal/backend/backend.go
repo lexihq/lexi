@@ -423,8 +423,10 @@ type Backend interface {
 	// PullFile streams the instance file at path to w. Pulling a directory is
 	// ErrInvalid.
 	PullFile(ctx context.Context, instance, path string, w io.Writer) error
-	// PushFile creates (or overwrites) the instance file at path from r with
-	// the given ownership and mode (zero value: root:root 0644).
+	// PushFile creates (or overwrites) the instance file at path from r. The
+	// ownership and mode options apply only when the file is created (zero
+	// value: root:root 0644); overwriting keeps the existing file's metadata,
+	// matching the Incus file API.
 	PushFile(ctx context.Context, instance, path string, r io.Reader, opts FileWriteOptions) error
 	// PullFileInfo streams the file at path to w like PullFile but also
 	// returns its metadata. A limit > 0 caps the read: larger files fail with

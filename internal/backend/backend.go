@@ -142,6 +142,9 @@ type InstanceConfig struct {
 	Config       map[string]string
 	Devices      map[string]map[string]string
 	LocalDevices map[string]map[string]string
+	// Version is an opaque concurrency token for UpdateDevice, populated by
+	// GetInstanceConfig.
+	Version string
 }
 
 // Metrics is a point-in-time resource snapshot. CPUPercent is derived from the
@@ -333,6 +336,11 @@ type Backend interface {
 	UpdateInstanceConfig(ctx context.Context, name string, config map[string]string) error
 	// AddDevice attaches (or overwrites) a local device on the instance.
 	AddDevice(ctx context.Context, name, device string, config map[string]string) error
+	// UpdateDevice replaces the named local device's config map. The device
+	// must exist (ErrNotFound). A non-empty version (from GetInstanceConfig)
+	// makes the update conditional: ErrConflict if the instance changed since
+	// that read.
+	UpdateDevice(ctx context.Context, name, device string, config map[string]string, version string) error
 	// RemoveDevice detaches a local device. The device must exist (ErrNotFound).
 	RemoveDevice(ctx context.Context, name, device string) error
 

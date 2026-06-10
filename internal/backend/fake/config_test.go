@@ -102,3 +102,42 @@ func TestAddDeviceToClonedInstance(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "proxy", cfg.LocalDevices["web"]["type"])
 }
+
+func TestUpdateDeviceReplacesConfig(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, f.AddDevice(ctx(), "demo", "web", map[string]string{"type": "proxy", "listen": "tcp:0.0.0.0:80", "user.note": "keep"}))
+
+	cfg, err := f.GetInstanceConfig(ctx(), "demo")
+	require.NoError(t, err)
+	require.NotEmpty(t, cfg.Version)
+
+	require.NoError(t, f.UpdateDevice(ctx(), "demo", "web",
+		map[string]string{"type": "proxy", "listen": "tcp:0.0.0.0:8080", "user.note": "keep"}, cfg.Version))
+
+	got, err := f.GetInstanceConfig(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "tcp:0.0.0.0:8080", got.LocalDevices["web"]["listen"])
+	assert.Equal(t, "keep", got.LocalDevices["web"]["user.note"])
+	assert.NotEqual(t, cfg.Version, got.Version, "version must change on device update")
+}
+
+func TestUpdateDeviceStaleVersionConflicts(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, f.AddDevice(ctx(), "demo", "web", map[string]string{"type": "proxy"}))
+
+	cfg, err := f.GetInstanceConfig(ctx(), "demo")
+	require.NoError(t, err)
+	require.NoError(t, f.UpdateDevice(ctx(), "demo", "web", map[string]string{"type": "proxy", "a": "1"}, cfg.Version))
+	require.ErrorIs(t, f.UpdateDevice(ctx(), "demo", "web", map[string]string{"type": "proxy", "a": "2"}, cfg.Version), backend.ErrConflict)
+	// Empty version updates unconditionally.
+	require.NoError(t, f.UpdateDevice(ctx(), "demo", "web", map[string]string{"type": "proxy", "a": "2"}, ""))
+}
+
+func TestUpdateDeviceMissingIsNotFound(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo"}))
+	require.ErrorIs(t, f.UpdateDevice(ctx(), "demo", "ghost", map[string]string{"type": "disk"}, ""), backend.ErrNotFound)
+	require.ErrorIs(t, f.UpdateDevice(ctx(), "ghost", "web", map[string]string{"type": "disk"}, ""), backend.ErrNotFound)
+}

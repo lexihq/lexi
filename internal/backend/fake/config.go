@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"maps"
+	"strconv"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -33,6 +34,7 @@ func (f *Fake) GetInstanceConfig(_ context.Context, name string) (backend.Instan
 		Config:       maps.Clone(in.config),
 		Devices:      expanded,
 		LocalDevices: maps.Clone(in.devices),
+		Version:      strconv.Itoa(in.configVersion),
 	}, nil
 }
 
@@ -45,6 +47,7 @@ func (f *Fake) UpdateInstanceConfig(_ context.Context, name string, config map[s
 		return notFound(name)
 	}
 	in.config = maps.Clone(config)
+	in.configVersion++
 	return nil
 }
 
@@ -60,6 +63,28 @@ func (f *Fake) AddDevice(_ context.Context, name, device string, config map[stri
 		in.devices = map[string]map[string]string{}
 	}
 	in.devices[device] = maps.Clone(config)
+	in.configVersion++
+	return nil
+}
+
+func (f *Fake) UpdateDevice(_ context.Context, name, device string, config map[string]string, version string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[name]
+	if !ok {
+		return notFound(name)
+	}
+	if _, ok := in.devices[device]; !ok {
+		return notFoundf("device %q on %q", device, name)
+	}
+	// Empty version = unconditional, mirroring UpdateServerConfig; a stale
+	// version means a concurrent writer landed first.
+	if version != "" && version != strconv.Itoa(in.configVersion) {
+		return conflict("instance %q config version %s", name, version)
+	}
+	in.devices[device] = maps.Clone(config)
+	in.configVersion++
 	return nil
 }
 
@@ -75,6 +100,7 @@ func (f *Fake) RemoveDevice(_ context.Context, name, device string) error {
 		return notFoundf("device %q on %q", device, name)
 	}
 	delete(in.devices, device)
+	in.configVersion++
 	return nil
 }
 

@@ -22,6 +22,9 @@ type instance struct {
 	config    map[string]string
 	devices   map[string]map[string]string
 	files     map[string][]byte // path → content; dirs implied by prefixes
+	// configVersion bumps on every config/device mutation; the
+	// GetInstanceConfig/UpdateDevice version token.
+	configVersion int
 }
 
 type storagePool struct {

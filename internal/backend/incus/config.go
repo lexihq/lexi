@@ -45,7 +45,7 @@ func editableConfig(local map[string]string) map[string]string {
 }
 
 func (b *incusBackend) GetInstanceConfig(_ context.Context, name string) (backend.InstanceConfig, error) {
-	inst, _, err := b.srv.GetInstance(name)
+	inst, etag, err := b.srv.GetInstance(name)
 	if err != nil {
 		return backend.InstanceConfig{}, fmt.Errorf("get instance %q: %w", name, mapErr(err))
 	}
@@ -53,6 +53,7 @@ func (b *incusBackend) GetInstanceConfig(_ context.Context, name string) (backen
 		Config:       editableConfig(inst.Config),
 		Devices:      inst.ExpandedDevices,
 		LocalDevices: inst.Devices,
+		Version:      etag,
 	}, nil
 }
 
@@ -85,6 +86,27 @@ func (b *incusBackend) AddDevice(ctx context.Context, name, device string, confi
 		}
 		put.Devices[device] = config
 	}, "add device %q to %q", device, name)
+}
+
+// UpdateDevice replaces an existing local device's config map. The version is
+// the etag from GetInstanceConfig: the daemon rejects the PUT with 412 (mapped
+// to ErrConflict) when the instance changed since that read. An empty version
+// sends the fresh GET's etag, updating unconditionally in practice.
+func (b *incusBackend) UpdateDevice(ctx context.Context, name, device string, config map[string]string, version string) error {
+	inst, etag, err := b.srv.GetInstance(name)
+	if err != nil {
+		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
+	}
+	put := inst.Writable()
+	if _, ok := put.Devices[device]; !ok {
+		return fmt.Errorf("device %q on %q: %w", device, name, backend.ErrNotFound)
+	}
+	put.Devices[device] = config
+	if version == "" {
+		version = etag
+	}
+	op, err := b.srv.UpdateInstance(name, put, version)
+	return waitOp(ctx, op, err, "update device %q on %q", device, name)
 }
 
 // RemoveDevice detaches a local device. Absent devices 404 before any PUT.

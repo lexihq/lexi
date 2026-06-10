@@ -76,3 +76,32 @@ func TestDeviceAddRemoveRoundTrip(t *testing.T) {
 
 	require.ErrorIs(t, b.RemoveDevice(ctx, name, "web"), backend.ErrNotFound)
 }
+
+func TestUpdateDeviceRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("devedit")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
+
+	require.NoError(t, b.AddDevice(ctx, name, "web",
+		map[string]string{"type": "proxy", "listen": "tcp:127.0.0.1:8080", "connect": "tcp:127.0.0.1:80"}))
+
+	cfg, err := b.GetInstanceConfig(ctx, name)
+	require.NoError(t, err)
+	require.NotEmpty(t, cfg.Version)
+
+	require.NoError(t, b.UpdateDevice(ctx, name, "web",
+		map[string]string{"type": "proxy", "listen": "tcp:127.0.0.1:9090", "connect": "tcp:127.0.0.1:80"}, cfg.Version))
+
+	got, err := b.GetInstanceConfig(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "tcp:127.0.0.1:9090", got.LocalDevices["web"]["listen"])
+
+	// Replaying the pre-update version must conflict (412 → ErrConflict).
+	err = b.UpdateDevice(ctx, name, "web",
+		map[string]string{"type": "proxy", "listen": "tcp:127.0.0.1:7070", "connect": "tcp:127.0.0.1:80"}, cfg.Version)
+	require.ErrorIs(t, err, backend.ErrConflict)
+
+	require.ErrorIs(t, b.UpdateDevice(ctx, name, "ghost", map[string]string{"type": "none"}, ""), backend.ErrNotFound)
+}

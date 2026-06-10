@@ -5,6 +5,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"maps"
 	"testing"
 	"time"
 
@@ -141,8 +142,16 @@ func TestStoragePoolCreateDeleteRoundTrip(t *testing.T) {
 	require.NotEmpty(t, p.Version)
 
 	// Versioned update round-trips description + a config key; a stale etag
-	// conflicts.
-	require.NoError(t, b.UpdateStoragePool(ctx, name, "edited", map[string]string{"rsync.bwlimit": "10MiB"}, p.Version))
+	// conflicts. Like the UI editor, start from the fetched config — the daemon
+	// materializes immutable keys (source) at create time and rejects a PUT
+	// that drops them ("Pool source cannot be changed when not in pending
+	// state").
+	cfg := maps.Clone(p.Config)
+	if cfg == nil {
+		cfg = map[string]string{}
+	}
+	cfg["rsync.bwlimit"] = "10MiB"
+	require.NoError(t, b.UpdateStoragePool(ctx, name, "edited", cfg, p.Version))
 	got, err := b.GetStoragePool(ctx, name)
 	require.NoError(t, err)
 	assert.Equal(t, "edited", got.Description)

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"sort"
+	"strconv"
 
 	"github.com/adam/lxcon/internal/backend"
 	incusclient "github.com/lxc/incus/v6/client"
@@ -65,17 +66,27 @@ func (b *incusBackend) PullFile(_ context.Context, instance, path string, w io.W
 	return nil
 }
 
-// PushFile creates (or overwrites) the instance file at path from r, owned by
-// root with mode 0644. The file API needs a ReadSeeker, so the content is
-// buffered; the HTTP handler caps the upload size.
-func (b *incusBackend) PushFile(_ context.Context, instance, path string, r io.Reader) error {
+// PushFile creates (or overwrites) the instance file at path from r with the
+// given ownership and mode (zero opts: root:root 0644). The file API needs a
+// ReadSeeker, so the content is buffered; the HTTP handler caps the upload size.
+func (b *incusBackend) PushFile(_ context.Context, instance, path string, r io.Reader, opts backend.FileWriteOptions) error {
+	mode := 0o644
+	if opts.Mode != "" {
+		m, err := strconv.ParseInt(opts.Mode, 8, 32)
+		if err != nil {
+			return fmt.Errorf("push file %q: bad mode %q: %w", path, opts.Mode, backend.ErrInvalid)
+		}
+		mode = int(m)
+	}
 	content, err := io.ReadAll(r)
 	if err != nil {
 		return fmt.Errorf("push file %q: %w", path, err)
 	}
 	err = b.srv.CreateInstanceFile(instance, path, incusclient.InstanceFileArgs{
 		Content:   bytes.NewReader(content),
-		Mode:      0o644,
+		Mode:      mode,
+		UID:       opts.UID,
+		GID:       opts.GID,
 		Type:      "file",
 		WriteMode: "overwrite",
 	})
@@ -83,6 +94,33 @@ func (b *incusBackend) PushFile(_ context.Context, instance, path string, r io.R
 		return fmt.Errorf("push file %q: %w", path, mapErr(err))
 	}
 	return nil
+}
+
+// PullFileInfo streams the file at path to w and returns its metadata.
+// Directories and symlinks report their type without content; a limit > 0
+// rejects larger files with ErrInvalid instead of streaming them fully.
+func (b *incusBackend) PullFileInfo(_ context.Context, instance, path string, w io.Writer, limit int64) (backend.FileInfo, error) {
+	content, resp, err := b.srv.GetInstanceFile(instance, path)
+	if err != nil {
+		return backend.FileInfo{}, fmt.Errorf("pull file %q: %w", path, mapErr(err))
+	}
+	defer closeAndLogFile(path, content)
+	info := backend.FileInfo{Type: resp.Type, Mode: fmt.Sprintf("%04o", resp.Mode), UID: resp.UID, GID: resp.GID}
+	if resp.Type != "file" || content == nil {
+		return info, nil
+	}
+	src := io.Reader(content)
+	if limit > 0 {
+		src = io.LimitReader(content, limit+1)
+	}
+	written, err := io.Copy(w, src)
+	if err != nil {
+		return backend.FileInfo{}, fmt.Errorf("pull file %q: %w", path, err)
+	}
+	if limit > 0 && written > limit {
+		return backend.FileInfo{}, fmt.Errorf("file %q exceeds the %d byte limit: %w", path, limit, backend.ErrInvalid)
+	}
+	return info, nil
 }
 
 // DeleteFile removes the instance file at path. The daemon API is

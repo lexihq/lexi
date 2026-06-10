@@ -24,7 +24,7 @@ func TestFilePushPullRoundTrip(t *testing.T) {
 
 	const target = "/root/lxcon-roundtrip.txt"
 	content := "lxcon file transfer\n"
-	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader(content)))
+	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader(content), backend.FileWriteOptions{}))
 
 	entries, err := b.ListFiles(ctx, name, "/root")
 	require.NoError(t, err)
@@ -39,6 +39,40 @@ func TestFilePushPullRoundTrip(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, b.PullFile(ctx, name, target, &buf))
 	require.Equal(t, content, buf.String())
+}
+
+// TestFileMetadataRoundTrip pushes a file with non-default ownership and mode
+// and verifies PullFileInfo reports them, then re-pushes with the same options
+// (as the in-browser editor does) and checks the metadata survives.
+func TestFileMetadataRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("filemeta")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
+
+	const target = "/root/lxcon-meta.txt"
+	opts := backend.FileWriteOptions{Mode: "0600", UID: 1000, GID: 1000}
+	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader("v1\n"), opts))
+
+	var buf bytes.Buffer
+	info, err := b.PullFileInfo(ctx, name, target, &buf, 1<<20)
+	require.NoError(t, err)
+	require.Equal(t, "v1\n", buf.String())
+	require.Equal(t, backend.FileInfo{Type: "file", Mode: "0600", UID: 1000, GID: 1000}, info)
+
+	// Edit-save: push new content with the options captured at read time.
+	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader("v2\n"),
+		backend.FileWriteOptions{Mode: info.Mode, UID: info.UID, GID: info.GID}))
+	buf.Reset()
+	info, err = b.PullFileInfo(ctx, name, target, &buf, 1<<20)
+	require.NoError(t, err)
+	require.Equal(t, "v2\n", buf.String())
+	require.Equal(t, backend.FileInfo{Type: "file", Mode: "0600", UID: 1000, GID: 1000}, info)
+
+	// A limit smaller than the file refuses instead of truncating.
+	_, err = b.PullFileInfo(ctx, name, target, &bytes.Buffer{}, 1)
+	require.ErrorIs(t, err, backend.ErrInvalid)
 }
 
 // TestFileMkdirDeleteRoundTrip creates a directory, pushes a file into it,
@@ -58,7 +92,7 @@ func TestFileMkdirDeleteRoundTrip(t *testing.T) {
 	require.NoError(t, b.MakeDirectory(ctx, name, dir))
 
 	const target = dir + "/inner.txt"
-	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader("inner\n")))
+	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader("inner\n"), backend.FileWriteOptions{}))
 
 	// Non-empty directory delete must fail before the file is removed.
 	require.Error(t, b.DeleteFile(ctx, name, dir))

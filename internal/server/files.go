@@ -141,7 +141,7 @@ func (h handlers) uploadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := strings.TrimSuffix(dir, "/") + "/" + base
-	if err := h.backend.PushFile(r.Context(), name, target, file); err != nil {
+	if err := h.backend.PushFile(r.Context(), name, target, file, backend.FileWriteOptions{}); err != nil {
 		h.fail(w, err)
 		return
 	}

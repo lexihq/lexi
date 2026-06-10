@@ -70,7 +70,7 @@ func TestPullFileDirectoryIsInvalid(t *testing.T) {
 func TestPushFileSendsContentAndDefaults(t *testing.T) {
 	b, srv := filesBackend()
 
-	require.NoError(t, b.PushFile(context.Background(), "demo", "/root/notes.txt", strings.NewReader("hello")))
+	require.NoError(t, b.PushFile(context.Background(), "demo", "/root/notes.txt", strings.NewReader("hello"), backend.FileWriteOptions{}))
 
 	assert.Equal(t, "/root/notes.txt", srv.createdPath)
 	require.NotNil(t, srv.createdFile)

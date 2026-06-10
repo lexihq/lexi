@@ -261,6 +261,22 @@ type FileEntry struct {
 	Mode string // e.g. "0644"; "" when the entry could not be statted
 }
 
+// FileInfo is instance-file metadata as reported by the driver.
+type FileInfo struct {
+	Type string // "file" | "directory" | "symlink"
+	Mode string // e.g. "0644"
+	UID  int64
+	GID  int64
+}
+
+// FileWriteOptions sets ownership and mode for pushed files. The zero value
+// keeps PushFile's historical behavior: root:root, mode 0644.
+type FileWriteOptions struct {
+	Mode string // e.g. "0644"; empty = 0644
+	UID  int64
+	GID  int64
+}
+
 // Operation is a daemon task: an async operation that is running or recently
 // finished (Incus prunes completed operations after a few seconds).
 type Operation struct {
@@ -407,8 +423,14 @@ type Backend interface {
 	// PullFile streams the instance file at path to w. Pulling a directory is
 	// ErrInvalid.
 	PullFile(ctx context.Context, instance, path string, w io.Writer) error
-	// PushFile creates (or overwrites) the instance file at path from r.
-	PushFile(ctx context.Context, instance, path string, r io.Reader) error
+	// PushFile creates (or overwrites) the instance file at path from r with
+	// the given ownership and mode (zero value: root:root 0644).
+	PushFile(ctx context.Context, instance, path string, r io.Reader, opts FileWriteOptions) error
+	// PullFileInfo streams the file at path to w like PullFile but also
+	// returns its metadata. A limit > 0 caps the read: larger files fail with
+	// ErrInvalid without streaming the remainder. Directories and symlinks
+	// report their type without content.
+	PullFileInfo(ctx context.Context, instance, path string, w io.Writer, limit int64) (FileInfo, error)
 	// DeleteFile removes the instance file at path; directories must be empty
 	// (the daemon API is non-recursive). Deleting "/" is ErrInvalid.
 	DeleteFile(ctx context.Context, instance, path string) error

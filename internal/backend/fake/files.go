@@ -11,13 +11,27 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 )
 
-// fakeFile is one node in a fake instance's filesystem: either a directory or
-// a regular file with content. Keys in the instance map are clean absolute
+// fakeFile is one node in a fake instance's filesystem: a directory, symlink,
+// or regular file with content. Keys in the instance map are clean absolute
 // paths and every directory is an explicit entry.
 type fakeFile struct {
-	dir     bool
-	content []byte
-	mode    string // e.g. "0644"
+	dir      bool
+	symlink  bool
+	content  []byte
+	mode     string // e.g. "0644"
+	uid, gid int64
+}
+
+// fileType is the node's FileInfo type string.
+func (n *fakeFile) fileType() string {
+	switch {
+	case n.dir:
+		return "directory"
+	case n.symlink:
+		return "symlink"
+	default:
+		return "file"
+	}
 }
 
 // seedFiles is the starter filesystem every fake instance gets, so the Files
@@ -108,7 +122,7 @@ func (f *Fake) PullFile(_ context.Context, instance, p string, w io.Writer) erro
 	return err
 }
 
-func (f *Fake) PushFile(_ context.Context, instance, p string, r io.Reader) error {
+func (f *Fake) PushFile(_ context.Context, instance, p string, r io.Reader, opts backend.FileWriteOptions) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -135,8 +149,52 @@ func (f *Fake) PushFile(_ context.Context, instance, p string, r io.Reader) erro
 	if err != nil {
 		return err
 	}
-	in.files[p] = &fakeFile{content: content, mode: "0644"}
+	mode := opts.Mode
+	if mode == "" {
+		mode = "0644"
+	}
+	in.files[p] = &fakeFile{content: content, mode: mode, uid: opts.UID, gid: opts.GID}
 	return nil
+}
+
+func (f *Fake) PullFileInfo(_ context.Context, instance, p string, w io.Writer, limit int64) (backend.FileInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[instance]
+	if !ok {
+		return backend.FileInfo{}, notFound(instance)
+	}
+	p, err := normalizePath(p)
+	if err != nil {
+		return backend.FileInfo{}, err
+	}
+	node, ok := in.files[p]
+	if !ok {
+		return backend.FileInfo{}, notFoundf("file %q", p)
+	}
+	info := backend.FileInfo{Type: node.fileType(), Mode: node.mode, UID: node.uid, GID: node.gid}
+	if node.dir || node.symlink {
+		return info, nil
+	}
+	if limit > 0 && int64(len(node.content)) > limit {
+		return backend.FileInfo{}, invalid("file %q exceeds the %d byte limit", p, limit)
+	}
+	if _, err := io.Copy(w, bytes.NewReader(node.content)); err != nil {
+		return backend.FileInfo{}, err
+	}
+	return info, nil
+}
+
+// SeedSymlink plants a symlink node, which the file-transfer API cannot
+// create; tests use it to exercise non-regular-file handling.
+func (f *Fake) SeedSymlink(instance, p string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if in, ok := f.instances[instance]; ok {
+		in.files[p] = &fakeFile{symlink: true, mode: "0777"}
+	}
 }
 
 func (f *Fake) DeleteFile(_ context.Context, instance, p string) error {

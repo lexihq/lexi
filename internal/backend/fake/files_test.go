@@ -122,7 +122,7 @@ func TestPushFileRoundTrip(t *testing.T) {
 	b := New()
 	mustCreate(t, b, "demo")
 
-	if err := b.PushFile(ctx(), "demo", "/root/notes.txt", strings.NewReader("hello")); err != nil {
+	if err := b.PushFile(ctx(), "demo", "/root/notes.txt", strings.NewReader("hello"), backend.FileWriteOptions{}); err != nil {
 		t.Fatalf("push: %v", err)
 	}
 
@@ -142,14 +142,14 @@ func TestPushFileRoundTrip(t *testing.T) {
 func TestPushFileRelativePathIsInvalid(t *testing.T) {
 	b := New()
 	mustCreate(t, b, "demo")
-	err := b.PushFile(ctx(), "demo", "notes.txt", strings.NewReader("x"))
+	err := b.PushFile(ctx(), "demo", "notes.txt", strings.NewReader("x"), backend.FileWriteOptions{})
 	if !errors.Is(err, backend.ErrInvalid) {
 		t.Fatalf("want ErrInvalid, got %v", err)
 	}
 }
 
 func TestPushFileGhostInstanceIs404(t *testing.T) {
-	err := New().PushFile(ctx(), "ghost", "/x", strings.NewReader("x"))
+	err := New().PushFile(ctx(), "ghost", "/x", strings.NewReader("x"), backend.FileWriteOptions{})
 	if !errors.Is(err, backend.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
@@ -158,9 +158,87 @@ func TestPushFileGhostInstanceIs404(t *testing.T) {
 func TestPushFileMissingParentIs404(t *testing.T) {
 	b := New()
 	mustCreate(t, b, "demo")
-	err := b.PushFile(ctx(), "demo", "/no/such/file.txt", strings.NewReader("x"))
+	err := b.PushFile(ctx(), "demo", "/no/such/file.txt", strings.NewReader("x"), backend.FileWriteOptions{})
 	if !errors.Is(err, backend.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestPushFileOptionsMetadataRoundTrip(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	opts := backend.FileWriteOptions{Mode: "0600", UID: 1000, GID: 1000}
+	if err := b.PushFile(ctx(), "demo", "/root/secret", strings.NewReader("s3cret"), opts); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	var buf bytes.Buffer
+	info, err := b.PullFileInfo(ctx(), "demo", "/root/secret", &buf, 0)
+	if err != nil {
+		t.Fatalf("pull info: %v", err)
+	}
+	want := backend.FileInfo{Type: "file", Mode: "0600", UID: 1000, GID: 1000}
+	if info != want {
+		t.Fatalf("info mismatch: got %+v, want %+v", info, want)
+	}
+	if buf.String() != "s3cret" {
+		t.Fatalf("content mismatch: %q", buf.String())
+	}
+}
+
+func TestPushFileZeroOptionsKeepDefaults(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	if err := b.PushFile(ctx(), "demo", "/root/plain", strings.NewReader("x"), backend.FileWriteOptions{}); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	info, err := b.PullFileInfo(ctx(), "demo", "/root/plain", &bytes.Buffer{}, 0)
+	if err != nil {
+		t.Fatalf("pull info: %v", err)
+	}
+	want := backend.FileInfo{Type: "file", Mode: "0644"}
+	if info != want {
+		t.Fatalf("info mismatch: got %+v, want %+v", info, want)
+	}
+}
+
+func TestPullFileInfoLimitExceededIsInvalid(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	_, err := b.PullFileInfo(ctx(), "demo", "/etc/os-release", &bytes.Buffer{}, 4)
+	if !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
+	}
+}
+
+func TestPullFileInfoDirectoryReportsTypeWithoutContent(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	var buf bytes.Buffer
+	info, err := b.PullFileInfo(ctx(), "demo", "/etc", &buf, 0)
+	if err != nil {
+		t.Fatalf("pull info: %v", err)
+	}
+	if info.Type != "directory" || buf.Len() != 0 {
+		t.Fatalf("want directory with no content, got %+v (%d bytes)", info, buf.Len())
+	}
+}
+
+func TestPullFileInfoSymlinkType(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	b.SeedSymlink("demo", "/etc/localtime")
+
+	info, err := b.PullFileInfo(ctx(), "demo", "/etc/localtime", &bytes.Buffer{}, 0)
+	if err != nil {
+		t.Fatalf("pull info: %v", err)
+	}
+	if info.Type != "symlink" {
+		t.Fatalf("want symlink, got %+v", info)
 	}
 }
 

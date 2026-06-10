@@ -142,6 +142,8 @@ func statusFor(err error) int {
 		return http.StatusConflict
 	case errors.Is(err, backend.ErrInvalid):
 		return http.StatusBadRequest
+	case errors.Is(err, backend.ErrUnsupported):
+		return http.StatusUnprocessableEntity
 	default:
 		return http.StatusInternalServerError
 	}

@@ -115,6 +115,12 @@ func (h handlers) exportImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name+".tar"))
 	if err := h.backend.ExportImage(r.Context(), fingerprint, w); err != nil {
+		// The export spools the daemon download before writing the response, so
+		// failures (notably ErrUnsupported for split images) arrive before any
+		// body bytes — drop the attachment headers so the browser shows the
+		// error instead of saving it as a .tar file.
+		w.Header().Del("Content-Disposition")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		http.Error(w, err.Error(), statusFor(err))
 		return
 	}

@@ -14,7 +14,23 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 	incusclient "github.com/lxc/incus/v6/client"
 	"github.com/lxc/incus/v6/shared/api"
+	"github.com/lxc/incus/v6/shared/cancel"
 )
+
+// contextReadWriteSeeker is contextWriteSeeker's sibling for the image
+// download target, which the client requires to also be readable.
+type contextReadWriteSeeker struct {
+	io.ReadWriteSeeker
+
+	ctx context.Context
+}
+
+func (w contextReadWriteSeeker) Write(p []byte) (int, error) {
+	if err := w.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return w.ReadWriteSeeker.Write(p)
+}
 
 // ListImages returns the full simplestreams catalog (one entry per alias), served
 // from a lazy, mutex-guarded cache so the search UI can filter without refetching.
@@ -199,24 +215,31 @@ func (b *incusBackend) RemoveImageAlias(_ context.Context, alias string) error {
 
 // ExportImage streams the image tarball to w. The client demands an
 // io.ReadWriteSeeker target, so the download spools through a temp file before
-// being copied out. Split images (separate metadata + rootfs; the client
-// refuses them when no rootfs target is given) are ErrUnsupported — a browser
-// download is a single file.
-func (b *incusBackend) ExportImage(_ context.Context, fingerprint string, w io.Writer) error {
+// being copied out (cancelable via ctx, like ExportInstance). Split images
+// (separate metadata + rootfs; the client refuses them when no rootfs target
+// is given) are ErrUnsupported — a browser download is a single file.
+func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string, w io.Writer) error {
 	tmp, err := os.CreateTemp("", "lxcon-image-export-*")
 	if err != nil {
 		return fmt.Errorf("export image %q: %w", fingerprint, err)
 	}
-	defer func() {
-		if cerr := tmp.Close(); cerr != nil {
-			slog.Warn("close image export spool", "image", fingerprint, "err", cerr)
-		}
-		if rerr := os.Remove(tmp.Name()); rerr != nil {
-			slog.Warn("remove image export spool", "image", fingerprint, "err", rerr)
-		}
-	}()
+	defer cleanupExportTemp(tmp)
 
-	if _, err := b.srv.GetImageFile(fingerprint, incusclient.ImageFileRequest{MetaFile: tmp}); err != nil {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	canceler := cancel.NewHTTPRequestCanceller()
+	stopCancel := context.AfterFunc(ctx, func() {
+		if err := canceler.Cancel(); err != nil && canceler.Cancelable() {
+			slog.Warn("cancel image download", "image", fingerprint, "err", err)
+		}
+	})
+	defer stopCancel()
+
+	if _, err := b.srv.GetImageFile(fingerprint, incusclient.ImageFileRequest{
+		MetaFile: contextReadWriteSeeker{ctx: ctx, ReadWriteSeeker: tmp},
+		Canceler: canceler,
+	}); err != nil {
 		if strings.Contains(err.Error(), "Multi-part image") {
 			return fmt.Errorf("image %q is a split image (metadata + rootfs) and cannot be downloaded as one file: %w", fingerprint, backend.ErrUnsupported)
 		}
@@ -233,8 +256,9 @@ func (b *incusBackend) ExportImage(_ context.Context, fingerprint string, w io.W
 
 // ImportImage creates a local image from a unified tarball, tagging it with
 // alias when given (a failed alias rolls the import back, like PublishImage).
+// The upload reader is context-aware so an aborted request stops mid-stream.
 func (b *incusBackend) ImportImage(ctx context.Context, r io.Reader, alias string) error {
-	op, err := b.srv.CreateImage(api.ImagesPost{}, &incusclient.ImageCreateArgs{MetaFile: r})
+	op, err := b.srv.CreateImage(api.ImagesPost{}, &incusclient.ImageCreateArgs{MetaFile: contextReader{ctx: ctx, Reader: r}})
 	if err := waitOp(ctx, op, err, "import image"); err != nil {
 		return err
 	}

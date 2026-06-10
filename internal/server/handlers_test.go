@@ -31,6 +31,7 @@ func TestStatusForSentinels(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, dup.Code)
 
 	assert.Equal(t, http.StatusBadRequest, statusFor(fmt.Errorf("invalid limits: %w", backend.ErrInvalid)))
+	assert.Equal(t, http.StatusUnprocessableEntity, statusFor(fmt.Errorf("split image: %w", backend.ErrUnsupported)))
 }
 
 func TestCSRFGuardBlocksCrossOriginPost(t *testing.T) {

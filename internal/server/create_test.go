@@ -49,6 +49,43 @@ func TestCreateHXReturnsCreatedRow(t *testing.T) {
 	assert.Equal(t, "debian/12", inst.Image)
 }
 
+func TestCreateAppliesProfilesPoolNetworkConfig(t *testing.T) {
+	b := fake.New()
+	form := url.Values{
+		"name":    {"demo"},
+		"image":   {"fake-debian-12-aarch64"},
+		"profile": {"default", "gpu"},
+		"pool":    {"default"},
+		"network": {"incusbr0"},
+		"key":     {"user.user-data", ""},
+		"value":   {"#cloud-config\npackages: [htop]", ""},
+	}
+
+	res := formRequest(t, New(b), "/instances", form, true)
+	assertStatus(t, res, http.StatusOK)
+
+	inst, err := b.GetInstance(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"default", "gpu"}, inst.Profiles)
+
+	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "#cloud-config\npackages: [htop]", cfg.Config["user.user-data"])
+	assert.Equal(t, "default", cfg.LocalDevices["root"]["pool"])
+	assert.Equal(t, "incusbr0", cfg.LocalDevices["eth0"]["network"])
+}
+
+func TestCreateGhostProfileFailsWithoutPartialInstance(t *testing.T) {
+	b := fake.New()
+	form := url.Values{"name": {"demo"}, "image": {"fake-debian-12-aarch64"}, "profile": {"ghost"}}
+
+	res := formRequest(t, New(b), "/instances", form, true)
+	assertStatus(t, res, http.StatusBadRequest)
+
+	_, err := b.GetInstance(t.Context(), "demo")
+	require.Error(t, err, "failed create must not leave an instance")
+}
+
 func TestCreateRejectsUnknownImageFingerprint(t *testing.T) {
 	form := url.Values{"name": {"demo"}, "image": {"unknown-fingerprint"}}
 

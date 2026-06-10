@@ -6,7 +6,7 @@ import (
 	"github.com/adam/lxcon/internal/components/icon"
 )
 
-templ CreatePage(caps backend.Capabilities, images []backend.Image) {
+templ CreatePage(caps backend.Capabilities, images []backend.Image, profiles []backend.Profile, pools []backend.StoragePool, networks []backend.Network) {
 	@Layout("Create instance", caps, Nav{Section: NavInstances}) {
 		<div class="mb-6">
 			<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>
@@ -48,6 +48,57 @@ templ CreatePage(caps backend.Capabilities, images []backend.Image) {
 					@ImageResults(images)
 				</div>
 			</div>
+			if len(profiles) > 0 {
+				<div class="space-y-2">
+					<span class="text-sm font-medium">Profiles</span>
+					<p class="text-xs text-muted-foreground">Applied in order; none selected means the default profile.</p>
+					<div class="space-y-1">
+						for _, p := range profiles {
+							<label class="flex items-center gap-2 text-sm">
+								<input type="checkbox" name="profile" value={ p.Name }/>
+								<span class="font-medium">{ p.Name }</span>
+								if p.Description != "" {
+									<span class="truncate text-muted-foreground">{ p.Description }</span>
+								}
+							</label>
+						}
+					</div>
+				</div>
+			}
+			if len(pools) > 0 {
+				<div class="space-y-2">
+					<label class="text-sm font-medium" for="create-pool">Storage pool</label>
+					<select id="create-pool" name="pool" class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+						<option value="">Profile default</option>
+						for _, p := range pools {
+							<option value={ p.Name }>{ p.Name } ({ p.Driver })</option>
+						}
+					</select>
+				</div>
+			}
+			if len(networks) > 0 {
+				<div class="space-y-2">
+					<label class="text-sm font-medium" for="create-network">Network</label>
+					<select id="create-network" name="network" class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+						<option value="">Profile default</option>
+						for _, n := range networks {
+							<option value={ n.Name }>{ n.Name }</option>
+						}
+					</select>
+				</div>
+			}
+			<details class="rounded-md border p-3">
+				<summary class="cursor-pointer text-sm font-medium">Advanced: initial config</summary>
+				<p class="mb-2 mt-2 text-xs text-muted-foreground">Config keys applied at create, e.g. limits.cpu or user.user-data (cloud-init).</p>
+				<div class="space-y-2">
+					for i := 0; i < 3; i++ {
+						<div class="flex gap-2">
+							<input name="key" placeholder="limits.cpu" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+							<textarea name="value" rows="1" placeholder="2" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm"></textarea>
+						</div>
+					}
+				</div>
+			</details>
 			<label class="flex items-center gap-2 text-sm">
 				<input type="checkbox" name="start"/>
 				Start after create

@@ -64,6 +64,45 @@ test("create from the image browser, then start/stop/clone/delete in the list", 
   }
 });
 
+test("create with profile, pool, network, and initial config", async ({ page }) => {
+  const name = "e2e-wizard";
+  await page.goto("/instances/new");
+
+  await page.locator("#image-search").pressSequentially("debian");
+  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
+  await expect(firstImage).toBeVisible();
+  await firstImage.check();
+  await page.locator("#name").fill(name);
+
+  // Optional selectors: gpu profile, explicit pool + network, a config key.
+  await page.getByRole("checkbox", { name: "gpu" }).check();
+  await page.locator("#create-pool").selectOption("default");
+  await page.locator("#create-network").selectOption("incusbr0");
+  await page.getByText("Advanced: initial config").click();
+  await page.locator('form[action="/instances"] input[name="key"]').first().fill("user.e2e");
+  await page.locator('form[action="/instances"] textarea[name="value"]').first().fill("wizard");
+  await page.getByRole("button", { name: "Create instance" }).click();
+
+  // The profile shows on the detail summary; the config key in the editor.
+  await expect(page.locator(`#instance-${name}`)).toBeVisible();
+  await page.goto(`/instances/${name}`);
+  await expect(page.locator("#profiles").getByRole("checkbox", { name: "gpu" })).toBeChecked();
+  await page.getByRole("link", { name: "Configuration" }).click();
+  await expect(page.locator('input[name="key"][value="user.e2e"]')).toBeVisible();
+
+  // Devices tab shows the injected root/eth0 local devices.
+  await page.getByRole("link", { name: "Devices" }).click();
+  await expect(page.locator("#devices").getByText("root", { exact: true })).toBeVisible();
+  await expect(page.locator("#devices").getByText("eth0", { exact: true }).first()).toBeVisible();
+
+  // Clean up from the list (shared server state).
+  await page.goto("/");
+  await expect(async () => {
+    await page.locator(`#instance-${name}`).getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.locator(`#instance-${name}`)).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});
+
 test("create page arch and type filters narrow the image list", async ({ page }) => {
   await page.goto("/instances/new");
   const results = page.locator("#image-results");

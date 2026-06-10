@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -15,7 +16,40 @@ func (h handlers) createForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.renderShell(w, r, http.StatusOK, ui.CreatePage(h.backend.Capabilities(), images))
+	// Profiles/pools/networks feed the optional create-form selectors, each
+	// gated on its capability. A listing failure shouldn't take down the
+	// create page — the affected selector just doesn't render.
+	caps := h.backend.Capabilities()
+	var profiles []backend.Profile
+	if caps.Profiles {
+		if got, err := h.backend.ListProfiles(r.Context()); err == nil {
+			profiles = got
+		} else {
+			slog.Warn("list profiles for create form", "err", err)
+		}
+	}
+	var pools []backend.StoragePool
+	if caps.Storage {
+		if got, err := h.backend.ListStoragePools(r.Context()); err == nil {
+			pools = got
+		} else {
+			slog.Warn("list storage pools for create form", "err", err)
+		}
+	}
+	var networks []backend.Network
+	if caps.Networks {
+		if got, err := h.backend.ListNetworks(r.Context()); err == nil {
+			for _, n := range got {
+				if n.Managed {
+					networks = append(networks, n)
+				}
+			}
+		} else {
+			slog.Warn("list networks for create form", "err", err)
+		}
+	}
+
+	h.renderShell(w, r, http.StatusOK, ui.CreatePage(h.backend.Capabilities(), images, profiles, pools, networks))
 }
 
 // imagePicker renders the HTMX-driven image search results for the create
@@ -94,6 +128,11 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 		Fingerprint: selected.Fingerprint,
 		Type:        selected.Type,
 		Start:       r.Form.Get("start") != "",
+		// Optional overrides; all empty for a plain create.
+		Profiles: r.Form["profile"],
+		Pool:     strings.TrimSpace(r.Form.Get("pool")),
+		Network:  strings.TrimSpace(r.Form.Get("network")),
+		Config:   nilIfEmpty(zipConfigPairs(r.Form["key"], r.Form["value"])),
 	}); err != nil {
 		h.fail(w, err)
 		return
@@ -108,6 +147,15 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// nilIfEmpty keeps CreateOptions.Config nil for a plain create so the zero
+// value round-trips exactly like the pre-wizard form.
+func nilIfEmpty(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }
 
 func imageByFingerprint(images []backend.Image, fingerprint string) (backend.Image, bool) {

@@ -114,13 +114,25 @@ func TestCreatePageRendersImageForm(t *testing.T) {
 		Description: "Debian 12",
 		Fingerprint: "debian-fingerprint",
 		Type:        "container",
-	}}))
+	}}, nil, nil, nil))
 
 	assertContains(t, html, `action="/instances"`)
 	assertContains(t, html, `name="name"`)
 	assertContains(t, html, `value="debian-fingerprint"`)
 	assertContains(t, html, "Debian 12")
 	assertContains(t, html, "container")
+}
+
+func TestCreatePageRendersOptionalSelectors(t *testing.T) {
+	html := render(t, CreatePage(testCaps(), nil,
+		[]backend.Profile{{Name: "gpu", Description: "GPU passthrough"}},
+		[]backend.StoragePool{{Name: "fast0", Driver: "zfs"}},
+		[]backend.Network{{Name: "incusbr0", Managed: true}}))
+
+	assertContains(t, html, `name="profile" value="gpu"`)
+	assertContains(t, html, `value="fast0"`)
+	assertContains(t, html, `value="incusbr0"`)
+	assertContains(t, html, "Advanced: initial config")
 }
 
 func TestInstanceRowCanHideUnsupportedActions(t *testing.T) {

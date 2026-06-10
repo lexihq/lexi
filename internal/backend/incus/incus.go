@@ -79,6 +79,7 @@ func New() (*incusBackend, error) {
 			FileDelete:      srv.HasExtension("file_delete"),
 			FileMkdir:       srv.HasExtension("directory_manipulation"),
 			ServerAdmin:     true,
+			NetworkACLs:     srv.HasExtension("network_acl"),
 		},
 		cpuSamples: make(map[string]cpuSample),
 	}, nil

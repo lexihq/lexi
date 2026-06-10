@@ -60,11 +60,15 @@ type Fake struct {
 	// networkVersions are per-network counters bumped on update; the
 	// Get/Update version token (missing key reads as 0).
 	networkVersions map[string]int
-	pools           map[string]*storagePool
-	images          map[string]*backend.LocalImage // keyed by fingerprint
-	ops             []backend.Operation            // newest first, capped at maxOps
-	opSeq           int
-	clock           time.Time
+	acls            map[string]backend.NetworkACL
+	// aclVersions are per-ACL counters bumped on update; the Get/Update
+	// version token (missing key reads as 0).
+	aclVersions map[string]int
+	pools       map[string]*storagePool
+	images      map[string]*backend.LocalImage // keyed by fingerprint
+	ops         []backend.Operation            // newest first, capped at maxOps
+	opSeq       int
+	clock       time.Time
 
 	serverConfig        map[string]string
 	serverConfigVersion int // bumped per update; the Get/Update version token
@@ -99,6 +103,8 @@ func New() *Fake {
 		},
 		profileVersions: map[string]int{},
 		networkVersions: map[string]int{},
+		acls:            map[string]backend.NetworkACL{},
+		aclVersions:     map[string]int{},
 		pools: map[string]*storagePool{
 			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
 			"zfs0":    {StoragePool: backend.StoragePool{Name: "zfs0", Driver: "zfs", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
@@ -168,11 +174,10 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		FileDelete:      true,
 		FileMkdir:       true,
 		ServerAdmin:     true,
+		NetworkACLs:     true,
 	}
 }
 
-// view materializes the public Instance with an up-to-date snapshot count.
-// Callers must hold the mutex.
 // view materializes an instance with derived fields. Limits mirror the real
 // driver, which reads them from the daemon's expanded config: an instance-local
 // limit wins, else the last assigned profile that sets the key (later profiles
@@ -216,6 +221,18 @@ func conflict(format string, args ...any) error {
 
 func invalid(format string, args ...any) error {
 	return fmt.Errorf("%s: %w", fmt.Sprintf(format, args...), backend.ErrInvalid)
+}
+
+// splitCommaList splits a comma-separated config value (e.g. security.acls)
+// into trimmed, non-empty entries.
+func splitCommaList(v string) []string {
+	var out []string
+	for s := range strings.SplitSeq(v, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // validAPIName reports whether name passes the daemon's validate.IsAPIName

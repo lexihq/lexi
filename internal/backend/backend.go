@@ -61,6 +61,8 @@ type Capabilities struct {
 	// ServerAdmin is the Server section: overview, config, certificates,
 	// warnings.
 	ServerAdmin bool
+	// NetworkACLs is network ACL management (Incus extension "network_acl").
+	NetworkACLs bool
 }
 
 // Instance is a system container or virtual machine.
@@ -108,6 +110,36 @@ type Network struct {
 	UsedBy      []string
 	// Version is an opaque concurrency token for UpdateNetwork, populated by
 	// GetNetwork (empty on list entries).
+	Version string
+}
+
+// NetworkACLRule is one rule of a network ACL. Direction is carried by
+// membership in NetworkACL.Ingress vs NetworkACL.Egress (the Incus API has no
+// direction field). Rules are order-independent.
+type NetworkACLRule struct {
+	Action          string // allow | reject | drop
+	Source          string
+	Destination     string
+	Protocol        string // tcp | udp | icmp4 | icmp6 | "" (any)
+	SourcePort      string
+	DestinationPort string
+	ICMPType        string
+	ICMPCode        string
+	State           string // enabled | disabled | logged
+	Description     string
+}
+
+// NetworkACL is an Incus network ACL (security group). ACLs only take effect
+// once attached via security.acls on a network or NIC device; attachment is
+// managed outside this seam (the network config editor can set it).
+type NetworkACL struct {
+	Name        string
+	Description string
+	Ingress     []NetworkACLRule
+	Egress      []NetworkACLRule
+	UsedBy      []string
+	// Version is an opaque concurrency token for UpdateNetworkACL, populated
+	// by GetNetworkACL (empty on list entries).
 	Version string
 }
 
@@ -409,6 +441,19 @@ type Backend interface {
 	// updates unconditionally.
 	UpdateNetwork(ctx context.Context, name, description string, config map[string]string, version string) error
 	DeleteNetwork(ctx context.Context, name string) error
+
+	ListNetworkACLs(ctx context.Context) ([]NetworkACL, error)
+	GetNetworkACL(ctx context.Context, name string) (NetworkACL, error)
+	CreateNetworkACL(ctx context.Context, name, description string) error
+	// UpdateNetworkACL replaces the ACL's description and both rule lists. A
+	// non-empty version (from GetNetworkACL) makes the update conditional:
+	// ErrConflict if the ACL changed since that read.
+	UpdateNetworkACL(ctx context.Context, name, description string, ingress, egress []NetworkACLRule, version string) error
+	// RenameNetworkACL renames an ACL; the target name must be free
+	// (ErrConflict).
+	RenameNetworkACL(ctx context.Context, name, newName string) error
+	// DeleteNetworkACL refuses ACLs that are in use (ErrConflict).
+	DeleteNetworkACL(ctx context.Context, name string) error
 
 	ListStoragePools(ctx context.Context) ([]StoragePool, error)
 	GetStoragePool(ctx context.Context, pool string) (StoragePool, error)

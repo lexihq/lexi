@@ -1,0 +1,153 @@
+package incus
+
+import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/lxc/incus/v6/shared/api"
+)
+
+func (b *incusBackend) ListNetworkACLs(_ context.Context) ([]backend.NetworkACL, error) {
+	acls, err := b.srv.GetNetworkACLs()
+	if err != nil {
+		return nil, fmt.Errorf("list network ACLs: %w", mapErr(err))
+	}
+	out := make([]backend.NetworkACL, 0, len(acls))
+	for i := range acls {
+		out = append(out, toNetworkACL(&acls[i]))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+func (b *incusBackend) GetNetworkACL(_ context.Context, name string) (backend.NetworkACL, error) {
+	acl, etag, err := b.srv.GetNetworkACL(name)
+	if err != nil {
+		return backend.NetworkACL{}, fmt.Errorf("get network ACL %q: %w", name, mapErr(err))
+	}
+	out := toNetworkACL(acl)
+	out.Version = etag
+	return out, nil
+}
+
+func (b *incusBackend) CreateNetworkACL(_ context.Context, name, description string) error {
+	post := api.NetworkACLsPost{}
+	post.Name = name
+	post.Description = description
+	if err := b.srv.CreateNetworkACL(post); err != nil {
+		// The daemon reports a duplicate as a plain 400 ("The network ACL
+		// already exists"), which mapErr's typed BadRequest branch would turn
+		// into ErrInvalid before the string fallback can see it.
+		if strings.Contains(err.Error(), "already exists") {
+			return fmt.Errorf("network ACL %q already exists: %w", name, backend.ErrConflict)
+		}
+		return fmt.Errorf("create network ACL %q: %w", name, mapErr(err))
+	}
+	return nil
+}
+
+// UpdateNetworkACL replaces the ACL's description and rule lists conditionally
+// on version (the GetNetworkACL etag; 412 → ErrConflict). An empty version
+// updates unconditionally. UpdateNetworkACL is synchronous.
+func (b *incusBackend) UpdateNetworkACL(_ context.Context, name, description string, ingress, egress []backend.NetworkACLRule, version string) error {
+	put := api.NetworkACLPut{
+		Description: description,
+		Ingress:     toAPIRules(ingress),
+		Egress:      toAPIRules(egress),
+	}
+	if err := b.srv.UpdateNetworkACL(name, put, version); err != nil {
+		return fmt.Errorf("update network ACL %q: %w", name, mapErr(err))
+	}
+	return nil
+}
+
+// RenameNetworkACL renames an ACL. The target name is pre-checked so a
+// collision is a deterministic ErrConflict.
+func (b *incusBackend) RenameNetworkACL(ctx context.Context, name, newName string) error {
+	acls, err := b.ListNetworkACLs(ctx)
+	if err != nil {
+		return err
+	}
+	var sourceExists, targetTaken bool
+	for _, a := range acls {
+		sourceExists = sourceExists || a.Name == name
+		targetTaken = targetTaken || a.Name == newName
+	}
+	if !sourceExists {
+		return fmt.Errorf("network ACL %q: %w", name, backend.ErrNotFound)
+	}
+	if targetTaken {
+		return fmt.Errorf("network ACL %q already exists: %w", newName, backend.ErrConflict)
+	}
+	if err := b.srv.RenameNetworkACL(name, api.NetworkACLPost{Name: newName}); err != nil {
+		return fmt.Errorf("rename network ACL %q: %w", name, mapErr(err))
+	}
+	return nil
+}
+
+// DeleteNetworkACL pre-checks UsedBy so a referenced ACL conflicts cleanly
+// (the daemon's in-use error is an untyped 400).
+func (b *incusBackend) DeleteNetworkACL(_ context.Context, name string) error {
+	acl, _, err := b.srv.GetNetworkACL(name)
+	if err != nil {
+		return fmt.Errorf("get network ACL %q: %w", name, mapErr(err))
+	}
+	if n := len(acl.UsedBy); n > 0 {
+		return fmt.Errorf("network ACL %q is in use by %d object(s): %w", name, n, backend.ErrConflict)
+	}
+	if err := b.srv.DeleteNetworkACL(name); err != nil {
+		return fmt.Errorf("delete network ACL %q: %w", name, mapErr(err))
+	}
+	return nil
+}
+
+func toNetworkACL(acl *api.NetworkACL) backend.NetworkACL {
+	return backend.NetworkACL{
+		Name:        acl.Name,
+		Description: acl.Description,
+		Ingress:     toRules(acl.Ingress),
+		Egress:      toRules(acl.Egress),
+		UsedBy:      acl.UsedBy,
+	}
+}
+
+func toRules(rules []api.NetworkACLRule) []backend.NetworkACLRule {
+	out := make([]backend.NetworkACLRule, 0, len(rules))
+	for _, r := range rules {
+		out = append(out, backend.NetworkACLRule{
+			Action:          r.Action,
+			Source:          r.Source,
+			Destination:     r.Destination,
+			Protocol:        r.Protocol,
+			SourcePort:      r.SourcePort,
+			DestinationPort: r.DestinationPort,
+			ICMPType:        r.ICMPType,
+			ICMPCode:        r.ICMPCode,
+			State:           r.State,
+			Description:     r.Description,
+		})
+	}
+	return out
+}
+
+func toAPIRules(rules []backend.NetworkACLRule) []api.NetworkACLRule {
+	out := make([]api.NetworkACLRule, 0, len(rules))
+	for _, r := range rules {
+		out = append(out, api.NetworkACLRule{
+			Action:          r.Action,
+			Source:          r.Source,
+			Destination:     r.Destination,
+			Protocol:        r.Protocol,
+			SourcePort:      r.SourcePort,
+			DestinationPort: r.DestinationPort,
+			ICMPType:        r.ICMPType,
+			ICMPCode:        r.ICMPCode,
+			State:           r.State,
+			Description:     r.Description,
+		})
+	}
+	return out
+}

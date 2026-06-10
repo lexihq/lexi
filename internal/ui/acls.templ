@@ -1,0 +1,205 @@
+package ui
+
+import (
+	"fmt"
+	"net/url"
+
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/icon"
+	"github.com/adam/lxcon/internal/components/table"
+)
+
+// NetworkACLsPage lists network ACLs with a create form. ACLs live under the
+// Networks section: they only take effect once referenced from a network's (or
+// NIC device's) security.acls config key.
+templ NetworkACLsPage(caps backend.Capabilities, acls []backend.NetworkACL) {
+	@Layout("Network ACLs", caps, Nav{Section: NavNetworks}) {
+		<div class="mb-6">
+			<a href="/networks" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Networks</a>
+			<h1 class="mt-2 text-2xl font-semibold">Network ACLs</h1>
+			<p class="text-muted-foreground">Reusable traffic rules. Attach one by adding its name to a network's security.acls config key.</p>
+		</div>
+		if len(acls) == 0 {
+			<p class="mb-4 text-sm text-muted-foreground">No ACLs yet.</p>
+		} else {
+			@table.Table() {
+				@table.Header() {
+					@table.Row() {
+						@table.Head() { Name }
+						@table.Head() { Description }
+						@table.Head() { Rules }
+						@table.Head() { Used by }
+					}
+				}
+				@table.Body() {
+					for _, acl := range acls {
+						@table.Row() {
+							@table.Cell() {
+								<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/network-acls/" + url.PathEscape(acl.Name)) }>{ acl.Name }</a>
+							}
+							@table.Cell() {
+								{ acl.Description }
+							}
+							@table.Cell() {
+								{ fmt.Sprint(len(acl.Ingress) + len(acl.Egress)) }
+							}
+							@table.Cell() {
+								{ fmt.Sprint(len(acl.UsedBy)) }
+							}
+						}
+					}
+				}
+			}
+		}
+		<form method="post" action="/network-acls" class="mt-6 flex max-w-xl gap-2">
+			<input name="name" required placeholder="name" class="h-9 w-1/3 rounded-md border bg-background px-3 text-sm"/>
+			<input name="description" placeholder="description" class="h-9 w-2/3 rounded-md border bg-background px-3 text-sm"/>
+			@button.Button(button.Props{Type: button.TypeSubmit}) {
+				@icon.Icon("plus")(icon.Props{Class: "size-4"})
+				Create
+			}
+		</form>
+	}
+}
+
+// NetworkACLDetailPage shows one ACL: description editor, rename/delete, and
+// the per-direction rule tables with add/remove.
+templ NetworkACLDetailPage(caps backend.Capabilities, acl backend.NetworkACL) {
+	{{ base := "/network-acls/" + url.PathEscape(acl.Name) }}
+	@Layout(acl.Name, caps, Nav{Section: NavNetworks}) {
+		<div class="mb-6 flex items-start justify-between gap-4">
+			<div>
+				<a href="/network-acls" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Network ACLs</a>
+				<h1 class="mt-2 text-2xl font-semibold">{ acl.Name }</h1>
+				if len(acl.UsedBy) > 0 {
+					<p class="text-sm text-muted-foreground">In use by { fmt.Sprint(len(acl.UsedBy)) } object(s).</p>
+				}
+			</div>
+			<div class="flex items-center gap-2">
+				<form method="post" action={ templ.URL(base + "/rename") } class="flex items-center gap-1">
+					<input name="new_name" placeholder="new name" class="h-9 w-32 rounded-md border bg-background px-3 text-sm"/>
+					@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+						Rename
+					}
+				</form>
+				if len(acl.UsedBy) > 0 {
+					@button.Button(button.Props{Variant: button.VariantDestructive, Disabled: true, Attributes: templ.Attributes{"title": "in use; detach it from security.acls first"}}) {
+						@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+						Delete
+					}
+				} else {
+					<form method="post" action={ templ.URL(base + "/delete") } hx-confirm={ "Delete ACL " + acl.Name + "?" }>
+						@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantDestructive}) {
+							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+							Delete
+						}
+					</form>
+				}
+			</div>
+		</div>
+		<section class="mb-8 rounded-lg border bg-card p-4">
+			<h2 class="mb-3 text-lg font-medium">Description</h2>
+			<form method="post" action={ templ.URL(base + "/config") } class="flex max-w-xl gap-2">
+				<input type="hidden" name="version" value={ acl.Version }/>
+				<input name="description" value={ acl.Description } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					@icon.Icon("check")(icon.Props{Class: "size-4"})
+					Apply
+				}
+			</form>
+		</section>
+		@aclRulesSection(base, "ingress", "Ingress rules", acl.Ingress, acl.Version)
+		@aclRulesSection(base, "egress", "Egress rules", acl.Egress, acl.Version)
+	}
+}
+
+// aclRulesSection is one direction's rule table plus its add form. Rules have
+// no identity, so removal is by index; the hidden version token keeps the
+// index stable between render and write.
+templ aclRulesSection(base, direction, title string, rules []backend.NetworkACLRule, version string) {
+	<section class="mb-8 rounded-lg border bg-card p-4">
+		<h2 class="mb-3 text-lg font-medium">{ title }</h2>
+		if len(rules) == 0 {
+			<p class="mb-3 text-sm text-muted-foreground">No rules.</p>
+		} else {
+			@table.Table() {
+				@table.Header() {
+					@table.Row() {
+						@table.Head() { Action }
+						@table.Head() { Source }
+						@table.Head() { Destination }
+						@table.Head() { Protocol }
+						@table.Head() { Ports (src → dst) }
+						@table.Head() { State }
+						@table.Head() { }
+					}
+				}
+				@table.Body() {
+					for i, rule := range rules {
+						@table.Row() {
+							@table.Cell() {
+								{ rule.Action }
+							}
+							@table.Cell() {
+								{ rule.Source }
+							}
+							@table.Cell() {
+								{ rule.Destination }
+							}
+							@table.Cell() {
+								{ rule.Protocol }
+							}
+							@table.Cell() {
+								{ rule.SourcePort } → { rule.DestinationPort }
+							}
+							@table.Cell() {
+								{ rule.State }
+							}
+							@table.Cell() {
+								<form method="post" action={ templ.URL(base + "/rules/delete") }>
+									<input type="hidden" name="direction" value={ direction }/>
+									<input type="hidden" name="index" value={ fmt.Sprint(i) }/>
+									<input type="hidden" name="version" value={ version }/>
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Type: button.TypeSubmit}) {
+										@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+										Remove
+									}
+								</form>
+							}
+						}
+					}
+				}
+			}
+		}
+		<form method="post" action={ templ.URL(base + "/rules") } class="mt-3 flex flex-wrap items-center gap-2">
+			<input type="hidden" name="direction" value={ direction }/>
+			<input type="hidden" name="version" value={ version }/>
+			<select name="action" class="h-9 rounded-md border bg-background px-2 text-sm">
+				<option value="allow">allow</option>
+				<option value="reject">reject</option>
+				<option value="drop">drop</option>
+			</select>
+			<input name="source" placeholder="source" class="h-9 w-28 rounded-md border bg-background px-2 text-sm"/>
+			<input name="destination" placeholder="destination" class="h-9 w-28 rounded-md border bg-background px-2 text-sm"/>
+			<select name="protocol" class="h-9 rounded-md border bg-background px-2 text-sm">
+				<option value="">any</option>
+				<option value="tcp">tcp</option>
+				<option value="udp">udp</option>
+				<option value="icmp4">icmp4</option>
+				<option value="icmp6">icmp6</option>
+			</select>
+			<input name="source_port" placeholder="src port" class="h-9 w-20 rounded-md border bg-background px-2 text-sm"/>
+			<input name="destination_port" placeholder="dst port" class="h-9 w-20 rounded-md border bg-background px-2 text-sm"/>
+			<select name="state" class="h-9 rounded-md border bg-background px-2 text-sm">
+				<option value="enabled">enabled</option>
+				<option value="disabled">disabled</option>
+				<option value="logged">logged</option>
+			</select>
+			@button.Button(button.Props{Size: button.SizeSm, Type: button.TypeSubmit}) {
+				@icon.Icon("plus")(icon.Props{Class: "size-4"})
+				Add rule
+			}
+		</form>
+	</section>
+}

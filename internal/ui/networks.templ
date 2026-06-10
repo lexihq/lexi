@@ -19,10 +19,18 @@ templ NetworksPage(caps backend.Capabilities, networks []backend.Network) {
 				<h1 class="text-2xl font-semibold">Networks</h1>
 				<p class="text-muted-foreground">Managed bridges and the host interfaces Incus knows about.</p>
 			</div>
-			@button.Button(button.Props{Href: "/networks/new"}) {
-				@icon.Icon("plus")(icon.Props{Class: "size-4"})
-				Create network
-			}
+			<div class="flex items-center gap-2">
+				if caps.NetworkACLs {
+					@button.Button(button.Props{Variant: button.VariantOutline, Href: "/network-acls"}) {
+						@icon.Icon("shield")(icon.Props{Class: "size-4"})
+						ACLs
+					}
+				}
+				@button.Button(button.Props{Href: "/networks/new"}) {
+					@icon.Icon("plus")(icon.Props{Class: "size-4"})
+					Create network
+				}
+			</div>
 		</div>
 		@NetworksTable(networks)
 	}

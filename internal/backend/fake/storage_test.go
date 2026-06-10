@@ -170,4 +170,7 @@ func TestVolumeSnapshotRenameAndExpiry(t *testing.T) {
 	require.ErrorIs(t, f.RenameVolumeSnapshot(ctx(), "default", "vol1", "snap1", "other"), backend.ErrConflict)
 	require.ErrorIs(t, f.RenameVolumeSnapshot(ctx(), "default", "vol1", "ghost", "x"), backend.ErrNotFound)
 	require.ErrorIs(t, f.UpdateVolumeSnapshotExpiry(ctx(), "default", "vol1", "ghost", when), backend.ErrNotFound)
+
+	// Incus parity: a malformed target name is rejected before the daemon op.
+	require.ErrorIs(t, f.RenameVolumeSnapshot(ctx(), "default", "vol1", "snap1", "bad name"), backend.ErrInvalid)
 }

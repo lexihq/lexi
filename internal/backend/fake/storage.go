@@ -250,6 +250,10 @@ func (f *Fake) RenameVolumeSnapshot(_ context.Context, pool, volume, snapshot, n
 	if err != nil {
 		return err
 	}
+	// Incus parity: snapshot names are API names (no whitespace or separators).
+	if strings.ContainsAny(newName, " \t\n/") {
+		return invalid("invalid snapshot name %q", newName)
+	}
 	if hasSnapshot(v.snapshots, newName) {
 		return conflict("snapshot %q already exists", newName)
 	}

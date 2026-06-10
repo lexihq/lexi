@@ -126,7 +126,20 @@ func (b *incusBackend) DeleteVolumeSnapshot(ctx context.Context, pool, volume, s
 }
 
 // RenameVolumeSnapshot renames a custom-volume snapshot (an async operation).
+// The target name is pre-checked so a collision is a deterministic ErrConflict:
+// a dir-backed daemon can reject the rename with a backend-specific string
+// ("file exists", a DB constraint error) that mapErr would not recognize as a
+// conflict, surfacing as a 500.
 func (b *incusBackend) RenameVolumeSnapshot(ctx context.Context, pool, volume, snapshot, newName string) error {
+	snaps, err := b.ListVolumeSnapshots(ctx, pool, volume)
+	if err != nil {
+		return err
+	}
+	for _, s := range snaps {
+		if s.Name == newName {
+			return fmt.Errorf("snapshot %q already exists: %w", newName, backend.ErrConflict)
+		}
+	}
 	op, err := b.srv.RenameStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot, api.StorageVolumeSnapshotPost{Name: newName})
 	return waitOp(ctx, op, err, "rename snapshot %q/%q/%q", pool, volume, snapshot)
 }

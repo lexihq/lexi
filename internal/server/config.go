@@ -87,6 +87,12 @@ func (h handlers) updateDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	device := r.PathValue("device")
+	// The edit form always carries the token; a request without one would
+	// write unconditionally, defeating the conflict protection.
+	if r.Form.Get("version") == "" {
+		h.fail(w, fmt.Errorf("missing config version token: %w", backend.ErrInvalid))
+		return
+	}
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
 	if err != nil {
 		h.fail(w, err)

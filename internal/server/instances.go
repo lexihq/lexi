@@ -1,6 +1,7 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -15,8 +16,21 @@ func (h handlers) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pools feed the shared move-to-pool datalist; only fetched when the move
+	// form renders. A pool listing failure shouldn't take down the instance
+	// list, so it degrades to a plain text input.
+	caps := h.backend.Capabilities()
+	var pools []backend.StoragePool
+	if caps.Move && caps.Storage {
+		if got, err := h.backend.ListStoragePools(r.Context()); err == nil {
+			pools = got
+		} else {
+			slog.Warn("list storage pools for move datalist", "err", err)
+		}
+	}
+
 	// The list already has the instances the sidebar needs; reuse them.
-	h.renderWithSidebar(w, r, http.StatusOK, instances, ui.InstancesPage(h.backend.Capabilities(), instances))
+	h.renderWithSidebar(w, r, http.StatusOK, instances, ui.InstancesPage(caps, instances, pools))
 }
 
 // sidebar renders the self-refreshing instance list for the shell sidebar. The

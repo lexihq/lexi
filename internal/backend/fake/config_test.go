@@ -141,3 +141,17 @@ func TestUpdateDeviceMissingIsNotFound(t *testing.T) {
 	require.ErrorIs(t, f.UpdateDevice(ctx(), "demo", "ghost", map[string]string{"type": "disk"}, ""), backend.ErrNotFound)
 	require.ErrorIs(t, f.UpdateDevice(ctx(), "ghost", "web", map[string]string{"type": "disk"}, ""), backend.ErrNotFound)
 }
+
+func TestLifecycleChangeInvalidatesConfigVersion(t *testing.T) {
+	// Incus parity: the instance etag covers the whole object, so a lifecycle
+	// change between form render and save must conflict the device edit.
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, f.AddDevice(ctx(), "demo", "web", map[string]string{"type": "proxy"}))
+
+	cfg, err := f.GetInstanceConfig(ctx(), "demo")
+	require.NoError(t, err)
+	require.NoError(t, f.StartInstance(ctx(), "demo"))
+
+	require.ErrorIs(t, f.UpdateDevice(ctx(), "demo", "web", map[string]string{"type": "proxy", "a": "1"}, cfg.Version), backend.ErrConflict)
+}

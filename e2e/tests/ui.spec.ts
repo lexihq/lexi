@@ -250,9 +250,9 @@ test("rename and move an instance from the list row", async ({ page }) => {
   await page.goto("/");
   const moved = page.locator("#instance-e2e-moved");
   await expect(moved).toBeVisible();
-  // The pool dropdown lazy-loads; wait for the enabled select with options.
-  await expect(moved.locator('select[name="pool"]')).toBeEnabled();
-  await moved.locator('select[name="pool"]').selectOption("default");
+  // The move input offers pool suggestions from the page-level datalist.
+  await expect(page.locator("#pool-options option[value='default']")).toBeAttached();
+  await moved.locator('input[name="pool"]').fill("default");
   await moved.getByRole("button", { name: "Move" }).click();
   await expect(page).toHaveURL(/\/instances\/e2e-moved$/);
 

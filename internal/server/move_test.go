@@ -48,19 +48,14 @@ func TestMoveInstanceUnknownPoolIs404(t *testing.T) {
 	assertStatus(t, res, http.StatusNotFound)
 }
 
-func TestPoolOptionsPartialListsPools(t *testing.T) {
-	res := request(t, New(fake.New()), "GET", "/partials/pool-options", "", true)
-	assertStatus(t, res, http.StatusOK)
-	body := res.Body.String()
-	assert.Contains(t, body, `<select name="pool"`)
-	assert.Contains(t, body, `value="default"`)
-	assert.Contains(t, body, `value="zfs0"`)
-}
-
-func TestInstanceRowMoveFormLazyLoadsPoolOptions(t *testing.T) {
+func TestInstancesPageRendersSharedPoolDatalist(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
 	res := request(t, New(b), "GET", "/", "", false)
 	assertStatus(t, res, http.StatusOK)
-	assert.Contains(t, res.Body.String(), `hx-get="/partials/pool-options"`)
+	body := res.Body.String()
+	assert.Contains(t, body, `<datalist id="pool-options">`)
+	assert.Contains(t, body, `value="default"`)
+	assert.Contains(t, body, `value="zfs0"`)
+	assert.Contains(t, body, `list="pool-options"`) // the row input references it
 }

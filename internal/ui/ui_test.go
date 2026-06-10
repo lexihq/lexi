@@ -12,7 +12,7 @@ import (
 )
 
 func TestInstancesPageRendersListAndActions(t *testing.T) {
-	html := render(t, InstancesPage(testCaps(), []backend.Instance{{Name: "demo", Status: "Stopped", IPv4: []string{"10.0.3.12"}, Snapshots: 2}}))
+	html := render(t, InstancesPage(testCaps(), []backend.Instance{{Name: "demo", Status: "Stopped", IPv4: []string{"10.0.3.12"}, Snapshots: 2}}, nil))
 
 	assertContains(t, html, "fake backend")
 	assertContains(t, html, "demo")
@@ -104,7 +104,7 @@ func TestConsolePageOptsOutOfBoost(t *testing.T) {
 		t.Fatalf("console page must opt out of hx-boost, got %q", console)
 	}
 
-	list := render(t, InstancesPage(testCaps(), nil))
+	list := render(t, InstancesPage(testCaps(), nil, nil))
 	assertContains(t, list, `hx-boost="true"`)
 }
 
@@ -280,11 +280,11 @@ func TestInstanceBodyGatesFilesTab(t *testing.T) {
 func TestLayoutGatesOperationsPanel(t *testing.T) {
 	caps := testCaps()
 	caps.Operations = true
-	with := render(t, InstancesPage(caps, nil))
+	with := render(t, InstancesPage(caps, nil, nil))
 	assertContains(t, with, `hx-get="/partials/operations"`)
 	assertContains(t, with, "Tasks")
 
-	without := render(t, InstancesPage(testCaps(), nil))
+	without := render(t, InstancesPage(testCaps(), nil, nil))
 	if strings.Contains(without, "/partials/operations") {
 		t.Fatalf("operations panel must be hidden without the capability, got %q", without)
 	}

@@ -181,7 +181,7 @@ func TestUpdateDeviceHandlerStaleVersionIs409(t *testing.T) {
 func TestUpdateDeviceUnknownDeviceIs404(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
-	res := formRequest(t, New(b), "/instances/demo/devices/ghost", url.Values{"listen": {"x"}}, true)
+	res := formRequest(t, New(b), "/instances/demo/devices/ghost", url.Values{"version": {"0"}, "listen": {"x"}}, true)
 	assertStatus(t, res, http.StatusNotFound)
 }
 
@@ -195,4 +195,12 @@ func TestDevicesPanelRendersEditForms(t *testing.T) {
 	assert.Contains(t, body, `hx-post="/instances/demo/devices/web"`)
 	assert.Contains(t, body, `name="version"`)
 	assert.Contains(t, body, `value="tcp:0.0.0.0:80"`) // pre-filled field
+}
+
+func TestUpdateDeviceMissingVersionIs400(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, b.AddDevice(t.Context(), "demo", "web", map[string]string{"type": "proxy"}))
+	res := formRequest(t, New(b), "/instances/demo/devices/web", url.Values{"listen": {"x"}}, true)
+	assertStatus(t, res, http.StatusBadRequest)
 }

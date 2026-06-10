@@ -88,6 +88,9 @@ func (f *Fake) setStatus(name, status, verb string) error {
 		return notFound(name)
 	}
 	in.Status = status
+	// Incus parity: the instance etag covers the whole object, so lifecycle
+	// changes invalidate config/device edit forms too.
+	in.configVersion++
 	f.logOp(fmt.Sprintf("%s instance %q", verb, name))
 	return nil
 }

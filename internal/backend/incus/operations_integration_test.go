@@ -60,3 +60,14 @@ func TestListOperationsObservesRunningOperation(t *testing.T) {
 	}
 	require.NoError(t, <-done)
 }
+
+// TestCancelOperationGhostErrors exercises the real DeleteOperation error
+// mapping: cancelling a non-existent operation surfaces as ErrNotFound rather
+// than a raw client error. A deterministic positive cancel would need a
+// guaranteed long-lived cancelable operation, which the daemon doesn't offer
+// cheaply, so the cancel path's happy case is covered by the fake + handler.
+func TestCancelOperationGhostErrors(t *testing.T) {
+	b := newBackend(t)
+	err := b.CancelOperation(context.Background(), "00000000-0000-0000-0000-000000000000")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+}

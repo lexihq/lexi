@@ -1,8 +1,11 @@
 package fake
 
 import (
+	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/adam/lxcon/internal/backend"
 )
 
 func TestListOperationsEmptyInitially(t *testing.T) {
@@ -70,5 +73,51 @@ func TestOperationsLogCapped(t *testing.T) {
 	}
 	if ops[0].Description != `Creating instance "i59"` {
 		t.Errorf("newest entry wrong: %q", ops[0].Description)
+	}
+}
+
+func TestCancelOperationMarksCancelled(t *testing.T) {
+	b := New()
+	id := b.SeedRunningOperation("Migrating instance \"demo\"")
+
+	if err := b.CancelOperation(ctx(), id); err != nil {
+		t.Fatalf("cancel operation: %v", err)
+	}
+
+	ops, err := b.ListOperations(ctx())
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+	var found *backend.Operation
+	for i := range ops {
+		if ops[i].ID == id {
+			found = &ops[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("cancelled operation missing from log")
+	}
+	if found.Status != "Cancelled" || found.Cancelable {
+		t.Fatalf("operation not cancelled: %+v", found)
+	}
+}
+
+func TestCancelOperationGhostIs404(t *testing.T) {
+	err := New().CancelOperation(ctx(), "op-ghost")
+	if !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestCancelOperationNotCancelableIsInvalid(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo") // records a Success (non-cancelable) op
+	ops, err := b.ListOperations(ctx())
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+	err = b.CancelOperation(ctx(), ops[0].ID)
+	if !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("want ErrInvalid for a finished operation, got %v", err)
 	}
 }

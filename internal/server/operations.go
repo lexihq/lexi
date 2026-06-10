@@ -15,3 +15,13 @@ func (h handlers) operationsPanel(w http.ResponseWriter, r *http.Request) {
 	}
 	h.render(w, r, http.StatusOK, ui.OperationRows(ops))
 }
+
+// cancelOperation cancels a running operation, then re-renders the Tasks panel
+// body so the status flips in place.
+func (h handlers) cancelOperation(w http.ResponseWriter, r *http.Request) {
+	if err := h.backend.CancelOperation(r.Context(), r.PathValue("id")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.operationsPanel(w, r)
+}

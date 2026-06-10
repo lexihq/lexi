@@ -38,6 +38,9 @@ func main() {
 		slog.Error("seed log file", "err", err)
 		os.Exit(1)
 	}
+	// A cancelable running task so the e2e suite can exercise the Tasks panel
+	// cancel control (the fake's normal log only holds finished operations).
+	b.SeedRunningOperation(`Migrating instance "demo"`)
 
 	srv := server.New(b)
 	srv.Addr = *addr

@@ -729,6 +729,24 @@ test("tasks panel lists operations and picks up new ones", async ({ page }) => {
   await expect(footer.getByText(`Deleting instance "${name}"`)).toBeVisible({ timeout: 10000 });
 });
 
+test("tasks panel: cancel a running operation", async ({ page }) => {
+  await page.goto("/instances/demo");
+  const footer = page.locator("footer");
+  await footer.locator('label[for="ops-toggle"]').click();
+
+  // The fakeserver seeds a cancelable "Migrating instance" task. Cancel it (if a
+  // prior run on a reused server already did, it stays Cancelled with no button).
+  const ops = page.locator("#operations");
+  await expect(ops.getByText('Migrating instance "demo"')).toBeVisible({ timeout: 10000 });
+  await expect(async () => {
+    const cancel = ops.getByRole("button", { name: "Cancel" });
+    if (await cancel.count()) {
+      await cancel.first().click();
+    }
+    await expect(ops.getByText("Cancelled")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});
+
 test("files tab: browse, download, and upload", async ({ page }) => {
   await page.goto("/instances/demo?tab=files");
   const files = page.locator("#files");

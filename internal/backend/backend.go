@@ -286,6 +286,7 @@ type Operation struct {
 	Status      string // Running | Success | Failure | ...
 	Err         string // failure detail, "" when none
 	CreatedAt   time.Time
+	Cancelable  bool // the daemon will accept a cancel request for this op
 }
 
 // LocalImage is an image in the host's local image store (as opposed to Image,
@@ -421,6 +422,9 @@ type Backend interface {
 	// ListOperations returns running and recently finished daemon tasks,
 	// newest first.
 	ListOperations(ctx context.Context) ([]Operation, error)
+	// CancelOperation cancels a running, cancelable operation. An unknown id is
+	// ErrNotFound; an operation the daemon won't cancel is ErrInvalid.
+	CancelOperation(ctx context.Context, id string) error
 
 	// ListFiles lists the instance directory at path (absolute), directories
 	// first. Listing a file is ErrInvalid.

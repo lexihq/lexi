@@ -41,7 +41,10 @@ type Fake struct {
 	mu        sync.Mutex
 	instances map[string]*instance
 	profiles  map[string]backend.Profile
-	networks  map[string]backend.Network
+	// profileVersions are per-profile counters bumped on update; the
+	// Get/Update version token (missing key reads as 0).
+	profileVersions map[string]int
+	networks        map[string]backend.Network
 	// networkVersions are per-network counters bumped on update; the
 	// Get/Update version token (missing key reads as 0).
 	networkVersions map[string]int
@@ -82,6 +85,7 @@ func New() *Fake {
 			},
 			"eth0": {Name: "eth0", Type: "physical", Managed: false},
 		},
+		profileVersions: map[string]int{},
 		networkVersions: map[string]int{},
 		pools: map[string]*storagePool{
 			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},

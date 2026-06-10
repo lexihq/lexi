@@ -85,6 +85,9 @@ type Profile struct {
 	Config      map[string]string
 	Devices     map[string]map[string]string // device name → {key: value}
 	UsedBy      []string                     // instance names using it
+	// Version is an opaque concurrency token for UpdateProfile, populated by
+	// GetProfile (empty on list entries).
+	Version string
 }
 
 // Network is an Incus network. Managed networks (bridges, OVN, ...) are
@@ -313,6 +316,15 @@ type Backend interface {
 
 	ListProfiles(ctx context.Context) ([]Profile, error)
 	GetProfile(ctx context.Context, name string) (Profile, error)
+	CreateProfile(ctx context.Context, name, description string) error
+	// UpdateProfile updates the profile's description and replaces its config
+	// map, preserving its devices untouched. A non-empty version (from
+	// GetProfile) makes the update conditional: ErrConflict if the profile
+	// changed since that read.
+	UpdateProfile(ctx context.Context, name, description string, config map[string]string, version string) error
+	// DeleteProfile removes an unused profile. "default" is undeletable
+	// (ErrInvalid); a profile still used by instances is ErrConflict.
+	DeleteProfile(ctx context.Context, name string) error
 	// SetInstanceProfiles replaces the instance's profile list (ordered; later
 	// profiles override earlier ones).
 	SetInstanceProfiles(ctx context.Context, name string, profiles []string) error

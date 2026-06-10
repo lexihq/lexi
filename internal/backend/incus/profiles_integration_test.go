@@ -34,3 +34,51 @@ func TestProfilesListAndAssign(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"default"}, inst.Profiles)
 }
+
+func TestProfileCRUDRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("lxprof")
+	t.Cleanup(func() { _ = b.DeleteProfile(ctx, name) })
+
+	require.NoError(t, b.CreateProfile(ctx, name, "made by test"))
+
+	// Seed a device via the raw map (UpdateProfile must preserve it).
+	p, err := b.GetProfile(ctx, name)
+	require.NoError(t, err)
+	require.NotEmpty(t, p.Version)
+
+	require.NoError(t, b.UpdateProfile(ctx, name, "edited", map[string]string{"limits.cpu": "1"}, p.Version))
+
+	got, err := b.GetProfile(ctx, name)
+	require.NoError(t, err)
+	assert.Equal(t, "edited", got.Description)
+	assert.Equal(t, "1", got.Config["limits.cpu"])
+
+	// Stale etag must conflict.
+	require.ErrorIs(t, b.UpdateProfile(ctx, name, "stale", nil, p.Version), backend.ErrConflict)
+
+	require.NoError(t, b.DeleteProfile(ctx, name))
+	_, err = b.GetProfile(ctx, name)
+	require.ErrorIs(t, err, backend.ErrNotFound)
+
+	require.ErrorIs(t, b.DeleteProfile(ctx, "default"), backend.ErrInvalid)
+}
+
+// The default profile always carries devices (root disk, eth0 nic), so a no-op
+// description/config update against it proves UpdateProfile's GET-preserve-PUT
+// does not drop the devices map.
+func TestUpdateProfilePreservesDevicesIntegration(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+
+	def, err := b.GetProfile(ctx, "default")
+	require.NoError(t, err)
+	require.NotEmpty(t, def.Devices)
+
+	require.NoError(t, b.UpdateProfile(ctx, "default", def.Description, def.Config, def.Version))
+
+	after, err := b.GetProfile(ctx, "default")
+	require.NoError(t, err)
+	assert.Equal(t, def.Devices, after.Devices, "no-op update must not drop devices")
+}

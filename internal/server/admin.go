@@ -84,14 +84,27 @@ func (h handlers) deleteWarning(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	if isHTMX(r) {
-		warnings, err := h.backend.ListWarnings(r.Context())
-		if err != nil {
-			h.fail(w, err)
-			return
-		}
-		h.render(w, r, http.StatusOK, ui.WarningsTable(warnings))
+	h.renderWarnings(w, r)
+}
+
+// ackWarning marks a warning acknowledged, then re-renders the table on HTMX.
+func (h handlers) ackWarning(w http.ResponseWriter, r *http.Request) {
+	if err := h.backend.AcknowledgeWarning(r.Context(), r.PathValue("uuid")); err != nil {
+		h.fail(w, err)
 		return
 	}
-	http.Redirect(w, r, "/server", http.StatusSeeOther)
+	h.renderWarnings(w, r)
+}
+
+func (h handlers) renderWarnings(w http.ResponseWriter, r *http.Request) {
+	if !isHTMX(r) {
+		http.Redirect(w, r, "/server", http.StatusSeeOther)
+		return
+	}
+	warnings, err := h.backend.ListWarnings(r.Context())
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.render(w, r, http.StatusOK, ui.WarningsTable(warnings))
 }

@@ -192,3 +192,30 @@ func TestAddCertificateDuplicateIsConflict(t *testing.T) {
 		t.Fatalf("want ErrConflict, got %v", err)
 	}
 }
+
+func TestAcknowledgeWarningFlipsStatus(t *testing.T) {
+	f := New()
+	if err := f.AcknowledgeWarning(ctx(), "fake-warning-1"); err != nil {
+		t.Fatalf("acknowledge: %v", err)
+	}
+	warnings, err := f.ListWarnings(ctx())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, w := range warnings {
+		if w.UUID == "fake-warning-1" {
+			if w.Status != "acknowledged" {
+				t.Fatalf("status = %q, want acknowledged", w.Status)
+			}
+			return
+		}
+	}
+	t.Fatalf("warning fake-warning-1 missing: %+v", warnings)
+}
+
+func TestAcknowledgeWarningGhostIs404(t *testing.T) {
+	f := New()
+	if err := f.AcknowledgeWarning(ctx(), "ghost"); !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}

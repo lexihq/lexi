@@ -462,4 +462,6 @@ type Backend interface {
 	// ListWarnings returns daemon warnings, newest last-seen first.
 	ListWarnings(ctx context.Context) ([]Warning, error)
 	DeleteWarning(ctx context.Context, uuid string) error
+	// AcknowledgeWarning marks a warning as acknowledged without removing it.
+	AcknowledgeWarning(ctx context.Context, uuid string) error
 }

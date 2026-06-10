@@ -98,3 +98,16 @@ func (f *Fake) DeleteWarning(_ context.Context, uuid string) error {
 	}
 	return notFoundf("warning %q", uuid)
 }
+
+func (f *Fake) AcknowledgeWarning(_ context.Context, uuid string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	for i := range f.warnings {
+		if f.warnings[i].UUID == uuid {
+			f.warnings[i].Status = "acknowledged"
+			return nil
+		}
+	}
+	return notFoundf("warning %q", uuid)
+}

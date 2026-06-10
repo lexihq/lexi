@@ -145,3 +145,29 @@ func TestAddCertificateRoundTrip(t *testing.T) {
 	require.ErrorIs(t, b.AddCertificate(ctx, "junk", "client", "garbage"), backend.ErrInvalid)
 	require.ErrorIs(t, b.AddCertificate(ctx, name, "metrics", pemData), backend.ErrConflict)
 }
+
+// TestAcknowledgeWarningRoundTrip acknowledges the newest daemon warning and
+// verifies the status flip; skips on hosts with a clean warning list.
+func TestAcknowledgeWarningRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+
+	warnings, err := b.ListWarnings(ctx)
+	require.NoError(t, err)
+	if len(warnings) == 0 {
+		t.Skip("no warnings on this host")
+	}
+	target := warnings[0]
+
+	require.NoError(t, b.AcknowledgeWarning(ctx, target.UUID))
+
+	after, err := b.ListWarnings(ctx)
+	require.NoError(t, err)
+	for _, w := range after {
+		if w.UUID == target.UUID {
+			require.Equal(t, "acknowledged", w.Status)
+			return
+		}
+	}
+	t.Fatalf("acknowledged warning %s vanished", target.UUID)
+}

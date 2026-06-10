@@ -132,6 +132,19 @@ func (b *incusBackend) ListWarnings(_ context.Context) ([]backend.Warning, error
 	return out, nil
 }
 
+// AcknowledgeWarning flips a warning's status via a conditional PUT (there is
+// no PATCH for warnings).
+func (b *incusBackend) AcknowledgeWarning(_ context.Context, uuid string) error {
+	_, etag, err := b.srv.GetWarning(uuid)
+	if err != nil {
+		return fmt.Errorf("get warning %q: %w", uuid, mapErr(err))
+	}
+	if err := b.srv.UpdateWarning(uuid, api.WarningPut{Status: "acknowledged"}, etag); err != nil {
+		return fmt.Errorf("acknowledge warning %q: %w", uuid, mapErr(err))
+	}
+	return nil
+}
+
 func (b *incusBackend) DeleteWarning(_ context.Context, uuid string) error {
 	if err := b.srv.DeleteWarning(uuid); err != nil {
 		return fmt.Errorf("delete warning %q: %w", uuid, mapErr(err))

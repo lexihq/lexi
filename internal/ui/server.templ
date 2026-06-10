@@ -152,10 +152,18 @@ templ WarningsTable(warnings []backend.Warning) {
 								{ w.Status }
 							}
 							@table.Cell() {
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/server/warnings/" + url.PathEscape(w.UUID) + "/delete", "hx-target": "#warnings", "hx-swap": "outerHTML"}}) {
-									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
-									Delete
-								}
+								<div class="flex gap-2">
+									if w.Status != "acknowledged" {
+										@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/server/warnings/" + url.PathEscape(w.UUID) + "/ack", "hx-target": "#warnings", "hx-swap": "outerHTML"}}) {
+											@icon.Icon("check")(icon.Props{Class: "size-4"})
+											Acknowledge
+										}
+									}
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/server/warnings/" + url.PathEscape(w.UUID) + "/delete", "hx-target": "#warnings", "hx-swap": "outerHTML"}}) {
+										@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+										Delete
+									}
+								</div>
 							}
 						}
 					}

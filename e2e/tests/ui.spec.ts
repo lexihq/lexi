@@ -840,6 +840,30 @@ test("files tab: edit a text file in the browser", async ({ page }) => {
   expect(await res.text()).toContain("binary file");
 });
 
+test("server section: acknowledge a warning", async ({ page }) => {
+  await page.goto("/server");
+  const warnings = page.locator("#warnings");
+  const row = warnings.getByRole("row", { name: /CGroup network priority/ });
+  await expect(row).toBeVisible();
+
+  // Fresh server: the seeded warning is "new" — acknowledge it. Reused dev
+  // server: it may already be acknowledged (button hidden); same final state.
+  if (await row.getByRole("button", { name: "Acknowledge" }).isVisible()) {
+    await expect(async () => {
+      await row.getByRole("button", { name: "Acknowledge" }).click();
+      await expect(
+        warnings.getByRole("row", { name: /CGroup network priority/ }).getByText("acknowledged"),
+      ).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 10000 });
+  }
+  await expect(
+    warnings.getByRole("row", { name: /CGroup network priority/ }).getByText("acknowledged"),
+  ).toBeVisible();
+  await expect(
+    warnings.getByRole("row", { name: /CGroup network priority/ }).getByRole("button", { name: "Acknowledge" }),
+  ).toHaveCount(0);
+});
+
 test("server section: overview, config apply, warning delete", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Server", exact: true }).click();

@@ -2,8 +2,10 @@ package fake
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -192,4 +194,19 @@ func conflict(format string, args ...any) error {
 
 func invalid(format string, args ...any) error {
 	return fmt.Errorf("%s: %w", fmt.Sprintf(format, args...), backend.ErrInvalid)
+}
+
+// validAPIName reports whether name passes the daemon's validate.IsAPIName
+// rules (≤64 chars, no whitespace, none of the reserved URL characters), so
+// fake-backed tests reject the same names production does.
+func validAPIName(name string) bool {
+	if name == "" || len(name) > 64 {
+		return false
+	}
+	for _, r := range name {
+		if unicode.IsSpace(r) {
+			return false
+		}
+	}
+	return !strings.ContainsAny(name, `$?&+"'`+"`*/")
 }

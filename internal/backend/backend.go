@@ -414,7 +414,9 @@ type Backend interface {
 	CreateVolume(ctx context.Context, pool string, v StorageVolume) error
 	// UpdateVolume updates the volume's description and replaces its config map
 	// (resizing = the "size" key). A non-empty version (from GetVolume) makes
-	// the update conditional: ErrConflict if the volume changed since that read.
+	// the update conditional: ErrConflict if the volume's config changed since
+	// that read. Caveat: the Incus volume etag covers name/type/config but not
+	// description, so concurrent description-only edits are last-write-wins.
 	UpdateVolume(ctx context.Context, pool, name, description string, config map[string]string, version string) error
 	// RenameVolume renames a custom volume. The target name must be free
 	// (ErrConflict); a volume in use by an instance is refused by the daemon.

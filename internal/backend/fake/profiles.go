@@ -108,7 +108,7 @@ func (f *Fake) RenameProfile(_ context.Context, name, newName string) error {
 	if name == "default" {
 		return invalid("the default profile cannot be renamed")
 	}
-	if strings.ContainsAny(newName, " \t\n/") {
+	if !validAPIName(newName) {
 		return invalid("invalid profile name %q", newName)
 	}
 	if _, exists := f.profiles[newName]; exists {
@@ -119,6 +119,15 @@ func (f *Fake) RenameProfile(_ context.Context, name, newName string) error {
 	f.profileVersions[newName] = f.profileVersions[name] + 1
 	delete(f.profiles, name)
 	delete(f.profileVersions, name)
+	// Assigned instances follow the rename, as the daemon's DB-level rename
+	// does (instances reference profiles by ID there).
+	for _, in := range f.instances {
+		for i, pn := range in.Profiles {
+			if pn == name {
+				in.Profiles[i] = newName
+			}
+		}
+	}
 	return nil
 }
 

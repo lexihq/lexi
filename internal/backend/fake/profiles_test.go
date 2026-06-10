@@ -136,11 +136,29 @@ func TestRenameProfile(t *testing.T) {
 	assert.Equal(t, "desc", got.Description)
 	assert.Contains(t, got.Devices, "eth0", "devices carry across rename")
 
-	// default cannot be renamed; target name must be free.
+	// default cannot be renamed; target name must be free and well-formed
+	// (reserved characters rejected like the daemon's IsAPIName).
 	require.ErrorIs(t, f.RenameProfile(ctx(), "default", "x"), backend.ErrInvalid)
 	require.NoError(t, f.CreateProfile(ctx(), "other", ""))
 	require.ErrorIs(t, f.RenameProfile(ctx(), "other", "frontend"), backend.ErrConflict)
 	require.ErrorIs(t, f.RenameProfile(ctx(), "frontend", "bad name"), backend.ErrInvalid)
+	require.ErrorIs(t, f.RenameProfile(ctx(), "frontend", "bad$name"), backend.ErrInvalid)
+}
+
+func TestRenameProfileFollowsAssignedInstances(t *testing.T) {
+	f := New()
+	mustCreate(t, f, "demo")
+	require.NoError(t, f.CreateProfile(ctx(), "web", ""))
+	require.NoError(t, f.SetInstanceProfiles(ctx(), "demo", []string{"default", "web"}))
+
+	require.NoError(t, f.RenameProfile(ctx(), "web", "frontend"))
+
+	inst, err := f.GetInstance(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"default", "frontend"}, inst.Profiles, "assigned instances follow the rename")
+	got, err := f.GetProfile(ctx(), "frontend")
+	require.NoError(t, err)
+	assert.Contains(t, got.UsedBy, "demo")
 }
 
 func TestDeleteProfile(t *testing.T) {

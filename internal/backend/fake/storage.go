@@ -191,11 +191,30 @@ func (f *Fake) RenameVolume(_ context.Context, pool, name, newName string) error
 		return notFoundf("volume %q", name)
 	}
 	// Incus parity: volume names are API names (no whitespace or separators).
-	if strings.ContainsAny(newName, " \t\n/") {
+	if !validAPIName(newName) {
 		return invalid("invalid volume name %q", newName)
 	}
 	if _, exists := p.volumes[newName]; exists {
 		return conflict("volume %q already exists", newName)
+	}
+	// Incus parity: the daemon refuses renaming a volume a running instance
+	// has attached; stopped instances' disk-device references follow the
+	// rename.
+	for instName, in := range f.instances {
+		for _, dev := range in.devices {
+			if dev["pool"] == pool && dev["source"] == name {
+				if in.Status == "Running" {
+					return invalid("volume %q is in use by running instance %q", name, instName)
+				}
+			}
+		}
+	}
+	for _, in := range f.instances {
+		for _, dev := range in.devices {
+			if dev["pool"] == pool && dev["source"] == name {
+				dev["source"] = newName
+			}
+		}
 	}
 	v.Name = newName
 	p.volumes[newName] = v
@@ -325,7 +344,7 @@ func (f *Fake) RenameVolumeSnapshot(_ context.Context, pool, volume, snapshot, n
 		return err
 	}
 	// Incus parity: snapshot names are API names (no whitespace or separators).
-	if strings.ContainsAny(newName, " \t\n/") {
+	if !validAPIName(newName) {
 		return invalid("invalid snapshot name %q", newName)
 	}
 	if hasSnapshot(v.snapshots, newName) {

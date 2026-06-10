@@ -261,7 +261,7 @@ templ DevicesSection(caps backend.Capabilities, name string, cfg backend.Instanc
 // DevicesSection but over a profile's devices (no inherited section). Gated on
 // caps.Devices — the same capability that allows instance device editing.
 templ ProfileDevicesSection(caps backend.Capabilities, p backend.Profile) {
-	{{ base := "/profiles/" + p.Name + "/devices" }}
+	{{ base := "/profiles/" + url.PathEscape(p.Name) + "/devices" }}
 	<div id="profile-devices" class="rounded-lg border bg-card p-4">
 		<h2 class="mb-3 text-lg font-medium">Devices</h2>
 		if len(p.Devices) == 0 {

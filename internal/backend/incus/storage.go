@@ -105,7 +105,9 @@ func (b *incusBackend) GetVolume(_ context.Context, pool, name string) (backend.
 // UpdateVolume updates the volume's description and replaces its config via
 // GET-preserve-PUT (UpdateStoragePoolVolume is synchronous). The version is the
 // etag from GetVolume; 412 → ErrConflict. An empty version updates
-// unconditionally.
+// unconditionally. The daemon computes the volume etag from name/type/config
+// only — description is excluded — so concurrent description-only edits cannot
+// conflict and are last-write-wins.
 func (b *incusBackend) UpdateVolume(_ context.Context, pool, name, description string, config map[string]string, version string) error {
 	v, _, err := b.srv.GetStoragePoolVolume(pool, "custom", name)
 	if err != nil {
@@ -129,10 +131,18 @@ func (b *incusBackend) RenameVolume(ctx context.Context, pool, name, newName str
 	if err != nil {
 		return err
 	}
+	var sourceExists, targetTaken bool
 	for _, v := range vols {
-		if v.Name == newName {
-			return fmt.Errorf("volume %q already exists: %w", newName, backend.ErrConflict)
-		}
+		sourceExists = sourceExists || v.Name == name
+		targetTaken = targetTaken || v.Name == newName
+	}
+	// Source first, so a missing volume is not-found even when the target name
+	// is taken (matching the fake's lookup order).
+	if !sourceExists {
+		return fmt.Errorf("volume %q/%q: %w", pool, name, backend.ErrNotFound)
+	}
+	if targetTaken {
+		return fmt.Errorf("volume %q already exists: %w", newName, backend.ErrConflict)
 	}
 	if err := b.srv.RenameStoragePoolVolume(pool, "custom", name, api.StorageVolumePost{Name: newName}); err != nil {
 		return fmt.Errorf("rename volume %q/%q: %w", pool, name, mapErr(err))

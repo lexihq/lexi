@@ -207,7 +207,27 @@ func TestRenameVolume(t *testing.T) {
 	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "other"}))
 	require.ErrorIs(t, f.RenameVolume(ctx(), "default", "vol2", "other"), backend.ErrConflict)
 	require.ErrorIs(t, f.RenameVolume(ctx(), "default", "vol2", "bad name"), backend.ErrInvalid)
+	require.ErrorIs(t, f.RenameVolume(ctx(), "default", "vol2", "bad?name"), backend.ErrInvalid)
 	require.ErrorIs(t, f.RenameVolume(ctx(), "default", "ghost", "x"), backend.ErrNotFound)
+}
+
+func TestRenameVolumeFollowsAndRefusesInstanceReferences(t *testing.T) {
+	f := New()
+	mustCreate(t, f, "demo")
+	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "data"}))
+	require.NoError(t, f.AddDevice(ctx(), "demo", "data", map[string]string{
+		"type": "disk", "pool": "default", "source": "data", "path": "/mnt",
+	}))
+
+	// Stopped instance: the disk-device reference follows the rename.
+	require.NoError(t, f.RenameVolume(ctx(), "default", "data", "data2"))
+	cfg, err := f.GetInstanceConfig(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "data2", cfg.LocalDevices["data"]["source"], "device reference follows the rename")
+
+	// Running instance: the rename is refused, like the daemon.
+	require.NoError(t, f.StartInstance(ctx(), "demo"))
+	require.ErrorIs(t, f.RenameVolume(ctx(), "default", "data2", "data3"), backend.ErrInvalid)
 }
 
 func TestVolumeSnapshotRenameAndExpiry(t *testing.T) {

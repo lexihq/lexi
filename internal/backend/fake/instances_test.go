@@ -1,6 +1,7 @@
 package fake
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -77,6 +78,65 @@ func TestCreateWithStartIsRunning(t *testing.T) {
 	}
 	if inst.Status != "Running" {
 		t.Fatalf("want Running, got %q", inst.Status)
+	}
+}
+
+func TestCreateWithProfilesPoolNetworkConfig(t *testing.T) {
+	b := New()
+	if err := b.CreateInstance(ctx(), backend.CreateOptions{
+		Name: "web", Image: "debian/12",
+		Profiles: []string{"default", "gpu"},
+		Pool:     "default",
+		Network:  "incusbr0",
+		Config:   map[string]string{"limits.cpu": "2", "user.user-data": "#cloud-config\n"},
+	}); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	inst, err := b.GetInstance(ctx(), "web")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(inst.Profiles) != 2 || inst.Profiles[0] != "default" || inst.Profiles[1] != "gpu" {
+		t.Fatalf("profiles not applied: %v", inst.Profiles)
+	}
+
+	cfg, err := b.GetInstanceConfig(ctx(), "web")
+	if err != nil {
+		t.Fatalf("get config: %v", err)
+	}
+	if cfg.Config["user.user-data"] != "#cloud-config\n" {
+		t.Fatalf("config not applied: %v", cfg.Config)
+	}
+	root := cfg.LocalDevices["root"]
+	if root["type"] != "disk" || root["pool"] != "default" || root["path"] != "/" {
+		t.Fatalf("root device not injected: %v", root)
+	}
+	eth0 := cfg.LocalDevices["eth0"]
+	if eth0["type"] != "nic" || eth0["network"] != "incusbr0" {
+		t.Fatalf("eth0 device not injected: %v", eth0)
+	}
+
+	// limits land in the Instance view like UpdateLimits would set them.
+	if inst.LimitsCPU != "2" {
+		t.Fatalf("limits.cpu not reflected: %q", inst.LimitsCPU)
+	}
+}
+
+func TestCreateRejectsGhostReferences(t *testing.T) {
+	b := New()
+	if err := b.CreateInstance(ctx(), backend.CreateOptions{Name: "a", Image: "x", Profiles: []string{"ghost"}}); !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("ghost profile: want ErrInvalid, got %v", err)
+	}
+	if err := b.CreateInstance(ctx(), backend.CreateOptions{Name: "b", Image: "x", Pool: "ghost"}); !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("ghost pool: want ErrNotFound, got %v", err)
+	}
+	if err := b.CreateInstance(ctx(), backend.CreateOptions{Name: "c", Image: "x", Network: "ghost"}); !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("ghost network: want ErrNotFound, got %v", err)
+	}
+	// Failed creates must not leave partial instances behind.
+	if _, err := b.GetInstance(ctx(), "a"); !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("partial instance a left behind: %v", err)
 	}
 }
 

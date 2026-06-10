@@ -38,20 +38,63 @@ func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) erro
 	if _, ok := f.instances[opt.Name]; ok {
 		return conflict("instance %q already exists", opt.Name)
 	}
+	// Validate references up front so a failed create leaves nothing behind.
+	for _, p := range opt.Profiles {
+		if _, ok := f.profiles[p]; !ok {
+			return invalid("unknown profile %q", p)
+		}
+	}
+	if opt.Pool != "" {
+		if _, ok := f.pools[opt.Pool]; !ok {
+			return notFoundf("storage pool %q", opt.Pool)
+		}
+	}
+	if opt.Network != "" {
+		if _, ok := f.networks[opt.Network]; !ok {
+			return notFoundf("network %q", opt.Network)
+		}
+	}
 	status := "Stopped"
 	if opt.Start {
 		status = "Running"
 	}
+	profiles := opt.Profiles
+	if len(profiles) == 0 {
+		profiles = []string{"default"}
+	}
+	// limits.cpu/limits.memory live on the Instance view (the real driver
+	// derives them from expanded config); everything else is instance config.
+	config := map[string]string{}
+	var limitsCPU, limitsMemory string
+	for k, v := range opt.Config {
+		switch k {
+		case "limits.cpu":
+			limitsCPU = v
+		case "limits.memory":
+			limitsMemory = v
+		default:
+			config[k] = v
+		}
+	}
+	devices := map[string]map[string]string{}
+	if opt.Pool != "" {
+		devices["root"] = map[string]string{"type": "disk", "path": "/", "pool": opt.Pool}
+	}
+	if opt.Network != "" {
+		devices["eth0"] = map[string]string{"type": "nic", "name": "eth0", "network": opt.Network}
+	}
 	f.instances[opt.Name] = &instance{
 		Instance: backend.Instance{
-			Name:      opt.Name,
-			Status:    status,
-			Image:     opt.Image,
-			CreatedAt: f.now(),
-			Profiles:  []string{"default"},
+			Name:         opt.Name,
+			Status:       status,
+			Image:        opt.Image,
+			CreatedAt:    f.now(),
+			Profiles:     append([]string(nil), profiles...),
+			LimitsCPU:    limitsCPU,
+			LimitsMemory: limitsMemory,
 		},
-		config:  map[string]string{},
-		devices: map[string]map[string]string{},
+		config:  config,
+		devices: devices,
 		files:   seedFiles(opt.Name),
 	}
 	f.logOp(fmt.Sprintf("Creating instance %q", opt.Name))

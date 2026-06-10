@@ -206,10 +206,26 @@ func createRequest(opt backend.CreateOptions) (api.InstancesPost, error) {
 		source.Alias = opt.Image
 	}
 
-	return api.InstancesPost{
+	req := api.InstancesPost{
 		Name:   opt.Name,
 		Type:   instanceType,
 		Start:  opt.Start,
 		Source: source,
-	}, nil
+	}
+	// InstancesPost has no creation-time pool/network fields: like the incus
+	// CLI's -s/-n flags, the pool rides a local "root" disk device and the
+	// network a local "eth0" nic device, both shadowing any profile-supplied
+	// device of the same name. The daemon validates all references.
+	req.Profiles = opt.Profiles
+	req.Config = opt.Config
+	if opt.Pool != "" || opt.Network != "" {
+		req.Devices = map[string]map[string]string{}
+		if opt.Pool != "" {
+			req.Devices["root"] = map[string]string{"type": "disk", "path": "/", "pool": opt.Pool}
+		}
+		if opt.Network != "" {
+			req.Devices["eth0"] = map[string]string{"type": "nic", "name": "eth0", "network": opt.Network}
+		}
+	}
+	return req, nil
 }

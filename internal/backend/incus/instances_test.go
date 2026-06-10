@@ -37,6 +37,31 @@ func TestCreateRequestUsesExactImageFingerprintAndType(t *testing.T) {
 	assert.True(t, req.Start)
 }
 
+func TestCreateRequestMapsProfilesPoolNetworkConfig(t *testing.T) {
+	req, err := createRequest(backend.CreateOptions{
+		Name: "demo", Image: "debian/12",
+		Profiles: []string{"default", "gpu"},
+		Pool:     "fast0",
+		Network:  "incusbr0",
+		Config:   map[string]string{"limits.cpu": "2"},
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"default", "gpu"}, req.Profiles)
+	assert.Equal(t, "2", req.Config["limits.cpu"])
+	assert.Equal(t, map[string]string{"type": "disk", "path": "/", "pool": "fast0"}, req.Devices["root"])
+	assert.Equal(t, map[string]string{"type": "nic", "name": "eth0", "network": "incusbr0"}, req.Devices["eth0"])
+}
+
+func TestCreateRequestZeroOptionsSendNoOverrides(t *testing.T) {
+	req, err := createRequest(backend.CreateOptions{Name: "demo", Image: "debian/12"})
+
+	require.NoError(t, err)
+	assert.Nil(t, req.Profiles, "empty profiles keep the daemon default")
+	assert.Nil(t, req.Devices, "no device overrides without pool/network")
+	assert.Nil(t, req.Config)
+}
+
 func TestLifecycleActionsSendCorrectIncusAction(t *testing.T) {
 	cases := []struct {
 		name   string

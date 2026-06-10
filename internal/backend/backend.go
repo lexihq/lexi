@@ -309,13 +309,26 @@ type LocalImage struct {
 	CreatedAt   time.Time
 }
 
-// CreateOptions parameterizes CreateInstance.
+// CreateOptions parameterizes CreateInstance. The zero value of every optional
+// field preserves the plain create: default profile, profile-supplied root
+// disk and network, no extra config.
 type CreateOptions struct {
 	Name        string
 	Image       string // display alias on the images remote
 	Fingerprint string // exact image identity; empty falls back to Image
 	Type        string // "container" | "virtual-machine"; empty defaults to container
 	Start       bool
+	// Profiles to apply in order (later override earlier); empty keeps the
+	// daemon's default ([default]).
+	Profiles []string
+	// Pool overrides the root disk's storage pool via a local "root" device,
+	// shadowing any profile-supplied root disk (mirrors `incus create -s`).
+	Pool string
+	// Network attaches a managed network via a local "eth0" nic device
+	// (mirrors `incus create -n`).
+	Network string
+	// Config seeds initial instance config keys (limits, cloud-init, ...).
+	Config map[string]string
 }
 
 // Backend is the single seam between the HTTP layer and a container driver.

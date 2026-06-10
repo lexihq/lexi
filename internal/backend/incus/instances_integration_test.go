@@ -42,6 +42,49 @@ func TestRoundTripLifecycle(t *testing.T) {
 	}
 }
 
+// TestCreateWithOptionsRoundTrip creates an instance with an explicit profile
+// list, root pool, network, and initial config, then asserts everything
+// applied (profiles on the instance, root/eth0 local devices, config keys).
+func TestCreateWithOptionsRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	name := uniqueName("opts")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+
+	pools, err := b.ListStoragePools(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, pools, "need a storage pool")
+	nets, err := b.ListNetworks(ctx)
+	require.NoError(t, err)
+	var network string
+	for _, n := range nets {
+		if n.Managed {
+			network = n.Name
+			break
+		}
+	}
+	require.NotEmpty(t, network, "need a managed network")
+
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{
+		Name: name, Image: testImage,
+		Profiles: []string{"default"},
+		Pool:     pools[0].Name,
+		Network:  network,
+		Config:   map[string]string{"limits.cpu": "1", "user.lxcon": "yes"},
+	}))
+
+	inst, err := b.GetInstance(ctx, name)
+	require.NoError(t, err)
+	require.Equal(t, []string{"default"}, inst.Profiles)
+	require.Equal(t, "1", inst.LimitsCPU)
+
+	cfg, err := b.GetInstanceConfig(ctx, name)
+	require.NoError(t, err)
+	require.Equal(t, "yes", cfg.Config["user.lxcon"])
+	require.Equal(t, pools[0].Name, cfg.LocalDevices["root"]["pool"])
+	require.Equal(t, network, cfg.LocalDevices["eth0"]["network"])
+}
+
 func TestRestartPauseResumeRoundTrip(t *testing.T) {
 	b := newBackend(t)
 	ctx := context.Background()

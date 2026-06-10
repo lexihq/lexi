@@ -83,6 +83,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("GET /instances/{name}/files/download", h.downloadFile)
 	mux.HandleFunc("POST /instances/{name}/files/upload", h.uploadFile)
 	mux.HandleFunc("POST /instances/{name}/devices", h.addDevice)
+	mux.HandleFunc("POST /instances/{name}/devices/{device}", h.updateDevice)
 	mux.HandleFunc("POST /instances/{name}/devices/{device}/delete", h.removeDevice)
 	mux.HandleFunc("POST /instances/{name}/snapshots", h.createSnapshot)
 	mux.HandleFunc("GET /instances/{name}/snapshots/schedule", h.snapshotSchedule)

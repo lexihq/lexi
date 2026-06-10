@@ -423,6 +423,35 @@ test("add and remove a proxy device in the Devices tab", async ({ page }) => {
   }).toPass({ timeout: 10000 });
 });
 
+test("edit a device in place in the Devices tab", async ({ page }) => {
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Devices" }).click();
+  const devices = page.locator("#devices");
+
+  // Add a proxy device to edit.
+  const addForm = devices.locator("details", { hasText: "Add proxy" });
+  await addForm.locator("summary").click();
+  await addForm.locator('input[name="device"]').fill("edit-me");
+  await addForm.locator('input[name="listen"]').fill("tcp:0.0.0.0:80");
+  await addForm.locator('input[name="connect"]').fill("tcp:127.0.0.1:80");
+  await addForm.getByRole("button", { name: "Add proxy" }).click();
+  await expect(devices.getByText("edit-me", { exact: true })).toBeVisible();
+
+  // Edit it: new listen, blank connect (= remove the key).
+  const editForm = devices.locator("details", { hasText: "Edit" }).first();
+  await editForm.locator("summary").click();
+  await editForm.locator('input[name="listen"]').fill("tcp:0.0.0.0:9090");
+  await editForm.locator('input[name="connect"]').fill("");
+  await editForm.getByRole("button", { name: "Save" }).click();
+
+  await expect(devices.getByText("tcp:0.0.0.0:9090")).toBeVisible();
+  await expect(devices.getByText("tcp:127.0.0.1:80")).toHaveCount(0);
+
+  // Cleanup so other tests see a pristine demo instance.
+  await devices.getByRole("button", { name: "Remove" }).click();
+  await expect(devices.getByText("edit-me", { exact: true })).toHaveCount(0);
+});
+
 test("create and delete a network in the Networks section", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Networks" }).click();

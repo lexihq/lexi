@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -68,6 +69,51 @@ func (h handlers) addDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := deviceConfigFromForm(r.Form.Get("type"), r.Form)
 	if err := h.backend.AddDevice(r.Context(), name, device, cfg); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderDevices(w, r, name)
+}
+
+// updateDevice applies the per-device edit form: the device type's known
+// fields update in place (blank = remove that key); every other key —
+// including "type" and keys the typed form doesn't know — is preserved. The
+// hidden version field makes the write conditional, so a concurrent change
+// conflicts (409) instead of being silently overwritten.
+func (h handlers) updateDevice(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := r.PathValue("name")
+	device := r.PathValue("device")
+	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	current, ok := cfg.LocalDevices[device]
+	if !ok {
+		h.fail(w, fmt.Errorf("device %q on %q: %w", device, name, backend.ErrNotFound))
+		return
+	}
+	next := maps.Clone(current)
+	for _, dt := range ui.DeviceTypes {
+		if dt.Type != current["type"] {
+			continue
+		}
+		for _, f := range dt.Fields {
+			if !r.Form.Has(f) {
+				continue // only fields the form submitted
+			}
+			if v := strings.TrimSpace(r.Form.Get(f)); v != "" {
+				next[f] = v
+			} else {
+				delete(next, f)
+			}
+		}
+	}
+	if err := h.backend.UpdateDevice(r.Context(), name, device, next, r.Form.Get("version")); err != nil {
 		h.fail(w, err)
 		return
 	}

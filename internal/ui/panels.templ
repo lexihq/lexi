@@ -219,13 +219,16 @@ templ DevicesSection(caps backend.Capabilities, name string, cfg backend.Instanc
 		} else {
 			for _, dn := range sortedDeviceNames(cfg.LocalDevices) {
 				<div class="mb-3 flex items-start justify-between gap-2">
-					<div>
+					<div class="grow">
 						<p class="text-sm font-medium">{ dn }</p>
 						<dl class="grid gap-1 pl-3 text-sm sm:grid-cols-2">
 							for _, k := range sortedKeys(cfg.LocalDevices[dn]) {
 								<div><dt class="text-muted-foreground">{ k }</dt><dd>{ cfg.LocalDevices[dn][k] }</dd></div>
 							}
 						</dl>
+						if caps.Devices {
+							@editDeviceForm(name, dn, cfg.LocalDevices[dn], cfg.Version)
+						}
 					</div>
 					if caps.Devices {
 						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + name + "/devices/" + url.PathEscape(dn) + "/delete", "hx-target": "#devices", "hx-swap": "outerHTML"}}) {
@@ -250,6 +253,37 @@ templ DevicesSection(caps backend.Capabilities, name string, cfg backend.Instanc
 			</div>
 		}
 	</div>
+}
+
+// editDeviceForm is the collapsible in-place editor for one local device: the
+// type's fields pre-filled (blank = remove on save), every other key preserved
+// server-side. Rendered only for types the typed forms know. The hidden version
+// makes the save conditional on the instance state the panel was rendered from.
+templ editDeviceForm(name, device string, dev map[string]string, version string) {
+	for _, dt := range DeviceTypes {
+		if dt.Type == dev["type"] {
+			<details class="ml-3 mt-1 max-w-md rounded-md border p-2">
+				<summary class="cursor-pointer text-xs font-medium text-muted-foreground">Edit</summary>
+				<form
+					method="post"
+					action={ templ.URL("/instances/" + name + "/devices/" + url.PathEscape(device)) }
+					hx-post={ "/instances/" + name + "/devices/" + url.PathEscape(device) }
+					hx-target="#devices"
+					hx-swap="outerHTML"
+					class="mt-2 space-y-2"
+				>
+					<input type="hidden" name="version" value={ version }/>
+					for _, f := range dt.Fields {
+						<input name={ f } placeholder={ f } value={ dev[f] } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+					}
+					@button.Button(button.Props{Type: button.TypeSubmit, Size: button.SizeSm}) {
+						@icon.Icon("save")(icon.Props{Class: "size-4"})
+						Save
+					}
+				</form>
+			</details>
+		}
+	}
 }
 
 // addDeviceForm is one collapsible typed add-form: a device name plus the type's

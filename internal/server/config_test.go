@@ -139,3 +139,60 @@ func TestRemoveUnknownDeviceIs404(t *testing.T) {
 	res := formRequest(t, New(b), "/instances/demo/devices/ghost/delete", url.Values{}, true)
 	assertStatus(t, res, http.StatusNotFound)
 }
+
+func TestUpdateDeviceMergesKnownFieldsPreservesUnknown(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, b.AddDevice(t.Context(), "demo", "web", map[string]string{
+		"type": "proxy", "listen": "tcp:0.0.0.0:80", "connect": "tcp:127.0.0.1:80",
+		"limits.ingress": "10Mbit", // not a typed form field; must survive
+	}))
+	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+
+	// New listen value, blank connect (= remove), bind untouched-blank (absent
+	// before, stays absent).
+	res := formRequest(t, New(b), "/instances/demo/devices/web",
+		url.Values{"version": {cfg.Version}, "listen": {"tcp:0.0.0.0:8080"}, "connect": {""}, "bind": {""}}, true)
+	assertStatus(t, res, http.StatusOK)
+
+	got, err := b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	dev := got.LocalDevices["web"]
+	assert.Equal(t, "tcp:0.0.0.0:8080", dev["listen"])
+	assert.Equal(t, "10Mbit", dev["limits.ingress"], "unknown keys must be preserved")
+	assert.Equal(t, "proxy", dev["type"], "type must be preserved")
+	assert.NotContains(t, dev, "connect", "blank known field removes the key")
+}
+
+func TestUpdateDeviceHandlerStaleVersionIs409(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, b.AddDevice(t.Context(), "demo", "web", map[string]string{"type": "proxy", "listen": "a"}))
+	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	require.NoError(t, b.UpdateDevice(t.Context(), "demo", "web", map[string]string{"type": "proxy", "listen": "b"}, cfg.Version))
+
+	res := formRequest(t, New(b), "/instances/demo/devices/web",
+		url.Values{"version": {cfg.Version}, "listen": {"c"}}, true)
+	assertStatus(t, res, http.StatusConflict)
+}
+
+func TestUpdateDeviceUnknownDeviceIs404(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	res := formRequest(t, New(b), "/instances/demo/devices/ghost", url.Values{"listen": {"x"}}, true)
+	assertStatus(t, res, http.StatusNotFound)
+}
+
+func TestDevicesPanelRendersEditForms(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, b.AddDevice(t.Context(), "demo", "web", map[string]string{"type": "proxy", "listen": "tcp:0.0.0.0:80"}))
+	res := request(t, New(b), "GET", "/instances/demo/devices", "", true)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, `hx-post="/instances/demo/devices/web"`)
+	assert.Contains(t, body, `name="version"`)
+	assert.Contains(t, body, `value="tcp:0.0.0.0:80"`) // pre-filled field
+}

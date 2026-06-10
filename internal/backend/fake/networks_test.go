@@ -36,6 +36,44 @@ func TestNetworkCRUD(t *testing.T) {
 	require.ErrorIs(t, f.DeleteNetwork(ctx(), "eth0"), backend.ErrInvalid) // unmanaged
 }
 
+func TestUpdateNetworkReplacesConfigAndDescription(t *testing.T) {
+	f := New()
+	br, err := f.GetNetwork(ctx(), "incusbr0")
+	require.NoError(t, err)
+	require.NotEmpty(t, br.Version)
+
+	require.NoError(t, f.UpdateNetwork(ctx(), "incusbr0", "lab bridge", map[string]string{"ipv4.nat": "false"}, br.Version))
+
+	got, err := f.GetNetwork(ctx(), "incusbr0")
+	require.NoError(t, err)
+	assert.Equal(t, "lab bridge", got.Description)
+	assert.Equal(t, map[string]string{"ipv4.nat": "false"}, got.Config)
+	assert.NotEqual(t, br.Version, got.Version, "version must change on update")
+}
+
+func TestUpdateNetworkStaleVersionConflicts(t *testing.T) {
+	f := New()
+	br, err := f.GetNetwork(ctx(), "incusbr0")
+	require.NoError(t, err)
+
+	require.NoError(t, f.UpdateNetwork(ctx(), "incusbr0", "first", nil, br.Version))
+	// Replaying the original version must conflict instead of overwriting.
+	require.ErrorIs(t, f.UpdateNetwork(ctx(), "incusbr0", "second", nil, br.Version), backend.ErrConflict)
+
+	// Empty version updates unconditionally (server-config semantics).
+	require.NoError(t, f.UpdateNetwork(ctx(), "incusbr0", "second", nil, ""))
+}
+
+func TestUpdateNetworkUnmanagedIsInvalid(t *testing.T) {
+	f := New()
+	require.ErrorIs(t, f.UpdateNetwork(ctx(), "eth0", "", nil, ""), backend.ErrInvalid)
+}
+
+func TestUpdateNetworkNotFound(t *testing.T) {
+	f := New()
+	require.ErrorIs(t, f.UpdateNetwork(ctx(), "missing", "", nil, ""), backend.ErrNotFound)
+}
+
 func TestNetworkUsedByDerivedFromNic(t *testing.T) {
 	f := New()
 	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo"}))

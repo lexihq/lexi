@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"sort"
+	"strconv"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -27,7 +28,9 @@ func (f *Fake) GetNetwork(_ context.Context, name string) (backend.Network, erro
 	if _, ok := f.networks[name]; !ok {
 		return backend.Network{}, notFoundf("network %q", name)
 	}
-	return f.networkView(name), nil
+	n := f.networkView(name)
+	n.Version = strconv.Itoa(f.networkVersions[name])
+	return n, nil
 }
 
 func (f *Fake) CreateNetwork(_ context.Context, n backend.Network) error {
@@ -41,6 +44,32 @@ func (f *Fake) CreateNetwork(_ context.Context, n backend.Network) error {
 		Name: n.Name, Type: n.Type, Managed: true,
 		Description: n.Description, Config: maps.Clone(n.Config),
 	}
+	return nil
+}
+
+func (f *Fake) UpdateNetwork(_ context.Context, name, description string, config map[string]string, version string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	net, ok := f.networks[name]
+	if !ok {
+		return notFoundf("network %q", name)
+	}
+	if !net.Managed {
+		return invalid("network %q is unmanaged", name)
+	}
+	// Empty version = unconditional, mirroring UpdateServerConfig; a stale
+	// version means a concurrent writer landed first.
+	if version != "" && version != strconv.Itoa(f.networkVersions[name]) {
+		return conflict("network %q version %s", name, version)
+	}
+	net.Description = description
+	net.Config = maps.Clone(config)
+	if net.Config == nil {
+		net.Config = map[string]string{}
+	}
+	f.networks[name] = net
+	f.networkVersions[name]++
 	return nil
 }
 
@@ -62,6 +91,7 @@ func (f *Fake) DeleteNetwork(_ context.Context, name string) error {
 		}
 	}
 	delete(f.networks, name)
+	delete(f.networkVersions, name)
 	return nil
 }
 

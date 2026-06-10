@@ -97,6 +97,9 @@ type Network struct {
 	Description string
 	Config      map[string]string
 	UsedBy      []string
+	// Version is an opaque concurrency token for UpdateNetwork, populated by
+	// GetNetwork (empty on list entries).
+	Version string
 }
 
 // StoragePool is an Incus storage pool. Pools are driver-specific infra
@@ -324,6 +327,11 @@ type Backend interface {
 	ListNetworks(ctx context.Context) ([]Network, error)
 	GetNetwork(ctx context.Context, name string) (Network, error)
 	CreateNetwork(ctx context.Context, n Network) error
+	// UpdateNetwork updates a managed network's description and replaces its
+	// config map. A non-empty version (from GetNetwork) makes the update
+	// conditional: ErrConflict if the network changed since that read; empty
+	// updates unconditionally.
+	UpdateNetwork(ctx context.Context, name, description string, config map[string]string, version string) error
 	DeleteNetwork(ctx context.Context, name string) error
 
 	ListStoragePools(ctx context.Context) ([]StoragePool, error)

@@ -42,7 +42,10 @@ type Fake struct {
 	instances map[string]*instance
 	profiles  map[string]backend.Profile
 	networks  map[string]backend.Network
-	pools     map[string]*storagePool
+	// networkVersions are per-network counters bumped on update; the
+	// Get/Update version token (missing key reads as 0).
+	networkVersions map[string]int
+	pools           map[string]*storagePool
 	images    map[string]*backend.LocalImage // keyed by fingerprint
 	ops       []backend.Operation            // newest first, capped at maxOps
 	opSeq     int
@@ -79,6 +82,7 @@ func New() *Fake {
 			},
 			"eth0": {Name: "eth0", Type: "physical", Managed: false},
 		},
+		networkVersions: map[string]int{},
 		pools: map[string]*storagePool{
 			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
 			"zfs0":    {StoragePool: backend.StoragePool{Name: "zfs0", Driver: "zfs", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},

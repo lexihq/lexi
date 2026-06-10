@@ -598,6 +598,31 @@ test("snapshot a custom volume: create, restore, and delete", async ({ page }) =
   }).toPass({ timeout: 10000 });
 });
 
+test("storage: create and delete a pool; in-use pool can't be deleted", async ({ page }) => {
+  // The pool delete button asks via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
+  await page.goto("/storage");
+  await page.getByRole("link", { name: "Create pool" }).click();
+  await expect(page).toHaveURL(/\/storage\/new$/);
+  await page.locator('input[name="name"]').fill("e2e-pool");
+  await page.getByRole("button", { name: "Create" }).click();
+
+  await expect(page).toHaveURL(/\/storage$/);
+  await expect(page.getByRole("link", { name: "e2e-pool" })).toBeVisible();
+
+  // Delete the (unused) pool from its detail page.
+  await page.getByRole("link", { name: "e2e-pool" }).click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page).toHaveURL(/\/storage$/);
+  await expect(page.getByRole("link", { name: "e2e-pool" })).toHaveCount(0);
+
+  // The seeded default pool is referenced by the default profile's root
+  // device, so its delete button is disabled.
+  await page.getByRole("link", { name: "default", exact: true }).click();
+  await expect(page).toHaveURL(/\/storage\/default$/);
+  await expect(page.getByRole("button", { name: "Delete", exact: true })).toBeDisabled();
+});
+
 test("backend errors surface as a toast", async ({ page }) => {
   await page.goto("/networks/new");
   // incusbr0 is seeded → creating it again conflicts (409).
@@ -769,23 +794,29 @@ test("files tab: edit a text file in the browser", async ({ page }) => {
     await expect(files.getByText("hostname")).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10000 });
 
-  // Open the editor for /etc/hostname; the seeded content holds the instance name.
+  // Open the editor for /etc/hostname.
   await files
     .getByRole("row", { name: /hostname/ })
     .getByRole("link", { name: "Edit" })
     .click();
   await expect(page).toHaveURL(/\/files\/edit\?path=%2Fetc%2Fhostname/);
   const textarea = page.locator('textarea[name="content"]');
-  await expect(textarea).toHaveValue(/demo/);
+  // Don't assert the seeded value: with reuseExistingServer a previous run's
+  // edit may still be in place. Non-empty proves the read path.
+  await expect(textarea).not.toHaveValue("");
 
   // Save new content and land back on the Files tab.
   await textarea.fill("edited-by-e2e\n");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page).toHaveURL(/tab=files/);
 
-  // Re-open: the edit persisted.
+  // Re-open: the edit persisted. Then restore the seeded content via a second
+  // save so reruns against a reused server see a pristine file.
   await page.goto("/instances/demo/files/edit?path=%2Fetc%2Fhostname");
   await expect(page.locator('textarea[name="content"]')).toHaveValue("edited-by-e2e\n");
+  await page.locator('textarea[name="content"]').fill("demo\n");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page).toHaveURL(/tab=files/);
 
   // The seeded binary file is refused with a clear message.
   const res = await page.request.get("/instances/demo/files/edit?path=%2Froot%2Fblob.bin");

@@ -34,6 +34,46 @@ func (h handlers) storagePool(w http.ResponseWriter, r *http.Request) {
 	h.renderShell(w, r, http.StatusOK, ui.StoragePoolPage(h.backend.Capabilities(), p, vols))
 }
 
+func (h handlers) poolCreateForm(w http.ResponseWriter, r *http.Request) {
+	h.renderShell(w, r, http.StatusOK, ui.StoragePoolCreatePage(h.backend.Capabilities()))
+}
+
+// createPool builds a pool from the form (name/driver/description + optional
+// key/value config rows) and redirects to the list. Incus validates the config.
+func (h handlers) createPool(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(r.Form.Get("name"))
+	driver := strings.TrimSpace(r.Form.Get("driver"))
+	if name == "" || driver == "" {
+		h.fail(w, fmt.Errorf("pool name and driver are required: %w", backend.ErrInvalid))
+		return
+	}
+	p := backend.StoragePool{
+		Name:        name,
+		Driver:      driver,
+		Description: r.Form.Get("description"),
+		Config:      zipConfigPairs(r.Form["key"], r.Form["value"]),
+	}
+	if err := h.backend.CreateStoragePool(r.Context(), p); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/storage", http.StatusSeeOther)
+}
+
+// deletePool removes an unused pool from its detail page, then redirects to
+// the list (the detail page no longer exists). In-use pools 409 in the backend.
+func (h handlers) deletePool(w http.ResponseWriter, r *http.Request) {
+	if err := h.backend.DeleteStoragePool(r.Context(), r.PathValue("pool")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/storage", http.StatusSeeOther)
+}
+
 // createVolume builds a custom volume from the form (name/content-type + optional
 // key/value config rows) and redirects to the pool. Incus validates the config.
 func (h handlers) createVolume(w http.ResponseWriter, r *http.Request) {

@@ -30,6 +30,48 @@ func TestStoragePoolUnknownIs404(t *testing.T) {
 	assertStatus(t, res, http.StatusNotFound)
 }
 
+func TestPoolCreateFormRenders(t *testing.T) {
+	res := request(t, New(fake.New()), "GET", "/storage/new", "", false)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, "Create pool")
+	assert.Contains(t, body, `name="driver"`)
+}
+
+func TestCreatePoolAppliesAndRedirects(t *testing.T) {
+	b := fake.New()
+	res := formRequest(t, New(b), "/storage",
+		url.Values{"name": {"scratch"}, "driver": {"dir"}, "description": {"made in test"},
+			"key": {"source", ""}, "value": {"/tmp/scratch", ""}}, false)
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/storage", res.Header().Get("Location"))
+
+	p, err := b.GetStoragePool(t.Context(), "scratch")
+	require.NoError(t, err)
+	assert.Equal(t, "dir", p.Driver)
+	assert.Equal(t, "made in test", p.Description)
+	assert.Equal(t, "/tmp/scratch", p.Config["source"])
+}
+
+func TestCreatePoolBlankNameIs400(t *testing.T) {
+	res := formRequest(t, New(fake.New()), "/storage", url.Values{"name": {" "}, "driver": {"dir"}}, false)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestDeletePoolRedirects(t *testing.T) {
+	b := fake.New()
+	res := formRequest(t, New(b), "/storage/zfs0/delete", url.Values{}, false)
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/storage", res.Header().Get("Location"))
+	_, err := b.GetStoragePool(t.Context(), "zfs0")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+}
+
+func TestDeletePoolInUseIs409(t *testing.T) {
+	res := formRequest(t, New(fake.New()), "/storage/default/delete", url.Values{}, false)
+	assertStatus(t, res, http.StatusConflict)
+}
+
 func TestCreateVolumeAppliesAndRedirects(t *testing.T) {
 	b := fake.New()
 	res := formRequest(t, New(b), "/storage/default/volumes",

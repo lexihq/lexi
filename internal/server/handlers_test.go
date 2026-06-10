@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -30,4 +31,45 @@ func TestStatusForSentinels(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, dup.Code)
 
 	assert.Equal(t, http.StatusBadRequest, statusFor(fmt.Errorf("invalid limits: %w", backend.ErrInvalid)))
+}
+
+func TestCSRFGuardBlocksCrossOriginPost(t *testing.T) {
+	srv := New(fake.New())
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/instances/demo/start", nil)
+	req.Header.Set("Origin", "http://evil.example")
+	res := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(res, req)
+	assertStatus(t, res, http.StatusForbidden)
+}
+
+func TestCSRFGuardBlocksCrossSiteFetch(t *testing.T) {
+	srv := New(fake.New())
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/instances/demo/start", nil)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	res := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(res, req)
+	assertStatus(t, res, http.StatusForbidden)
+}
+
+func TestCSRFGuardAllowsSameOriginPost(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+	srv := New(b)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/instances/demo/start", nil)
+	// httptest requests use host "example.com"; a same-origin browser POST
+	// carries that as Origin plus Sec-Fetch-Site: same-origin.
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	res := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(res, req)
+	assertStatus(t, res, http.StatusSeeOther)
+}
+
+func TestCSRFGuardIgnoresGets(t *testing.T) {
+	srv := New(fake.New())
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	res := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(res, req)
+	assertStatus(t, res, http.StatusOK)
 }

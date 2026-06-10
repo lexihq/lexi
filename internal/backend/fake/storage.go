@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -38,6 +39,14 @@ func (f *Fake) CreateStoragePool(_ context.Context, p backend.StoragePool) error
 
 	if strings.TrimSpace(p.Name) == "" || strings.TrimSpace(p.Driver) == "" {
 		return invalid("storage pool name and driver are required")
+	}
+	// Incus parity: reject names the daemon refuses so fake-backed tests
+	// can't pass with names production rejects (same as fake profile names).
+	if strings.ContainsAny(p.Name, " \t\n/") || len(p.Name) > 64 {
+		return invalid("storage pool name %q is not a valid pool name", p.Name)
+	}
+	if !slices.Contains([]string{"dir", "zfs", "btrfs", "lvm"}, p.Driver) {
+		return invalid("storage pool driver %q is not supported", p.Driver)
 	}
 	if _, ok := f.pools[p.Name]; ok {
 		return conflict("storage pool %q already exists", p.Name)

@@ -1,6 +1,7 @@
 package fake
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -33,6 +34,12 @@ func TestCreateStoragePoolValidatesNameAndDriver(t *testing.T) {
 	f := New()
 	require.ErrorIs(t, f.CreateStoragePool(ctx(), backend.StoragePool{Driver: "dir"}), backend.ErrInvalid)
 	require.ErrorIs(t, f.CreateStoragePool(ctx(), backend.StoragePool{Name: "data"}), backend.ErrInvalid)
+	// Incus parity: names with whitespace or slashes and unknown drivers are
+	// rejected, so fake-backed tests can't pass with requests production refuses.
+	require.ErrorIs(t, f.CreateStoragePool(ctx(), backend.StoragePool{Name: "bad name", Driver: "dir"}), backend.ErrInvalid)
+	require.ErrorIs(t, f.CreateStoragePool(ctx(), backend.StoragePool{Name: "bad/name", Driver: "dir"}), backend.ErrInvalid)
+	require.ErrorIs(t, f.CreateStoragePool(ctx(), backend.StoragePool{Name: strings.Repeat("x", 65), Driver: "dir"}), backend.ErrInvalid)
+	require.ErrorIs(t, f.CreateStoragePool(ctx(), backend.StoragePool{Name: "data", Driver: "bogus"}), backend.ErrInvalid)
 }
 
 func TestStoragePoolUsedByListsProfileReferences(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/adam/lxcon/internal/backend"
+	"github.com/lxc/incus/v6/shared/api"
 	"github.com/stretchr/testify/require"
 )
 
@@ -158,6 +159,16 @@ func TestAcknowledgeWarningRoundTrip(t *testing.T) {
 		t.Skip("no warnings on this host")
 	}
 	target := warnings[0]
+	// Restore the warning's pre-test status so the daemon isn't left with a
+	// warning this test silenced.
+	t.Cleanup(func() {
+		if target.Status == "acknowledged" {
+			return
+		}
+		if err := b.srv.UpdateWarning(target.UUID, api.WarningPut{Status: target.Status}, ""); err != nil {
+			t.Errorf("restore warning %s to %q: %v", target.UUID, target.Status, err)
+		}
+	})
 
 	require.NoError(t, b.AcknowledgeWarning(ctx, target.UUID))
 

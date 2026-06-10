@@ -94,6 +94,30 @@ func (h handlers) renderWithSidebar(w http.ResponseWriter, r *http.Request, code
 	}
 }
 
+// csrfGuard rejects cross-site browser mutations: every state change in lxcon
+// is a POST, and trusting a pasted certificate or deleting a pool must not be
+// triggerable by a foreign page's form. Browsers mark cross-site requests via
+// Sec-Fetch-Site and send Origin on POSTs; requests carrying neither header
+// (curl, Go tests) pass through — CSRF is a browser-only vector.
+func csrfGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+				http.Error(w, "cross-site request rejected", http.StatusForbidden)
+				return
+			}
+			if origin := r.Header.Get("Origin"); origin != "" {
+				u, err := url.Parse(origin)
+				if err != nil || u.Host != r.Host {
+					http.Error(w, "cross-origin request rejected", http.StatusForbidden)
+					return
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func isHTMX(r *http.Request) bool {
 	return r.Header.Get("Hx-Request") == "true"
 }

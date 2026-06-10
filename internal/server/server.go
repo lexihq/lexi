@@ -103,7 +103,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/delete", h.deleteSnapshot)
 
 	return &http.Server{
-		Handler:           mux,
+		Handler:           csrfGuard(mux),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 }

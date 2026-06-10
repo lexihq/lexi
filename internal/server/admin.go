@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -53,10 +54,20 @@ func (h handlers) updateServerConfig(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/server", http.StatusSeeOther)
 }
 
+// maxCertificateBytes caps the pasted-PEM form body; real certificates are a
+// few KiB.
+const maxCertificateBytes = 64 << 10
+
 // addCertificate adds a pasted PEM certificate to the trust store, then
 // redirects to the Server page.
 func (h handlers) addCertificate(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxCertificateBytes)
 	if err := r.ParseForm(); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			h.renderError(w, http.StatusRequestEntityTooLarge, "certificate is too large")
+			return
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}

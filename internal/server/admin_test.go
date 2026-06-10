@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,4 +145,10 @@ func TestAckWarningFlipsStatusAndReturnsTable(t *testing.T) {
 func TestAckWarningGhostIs404(t *testing.T) {
 	res := formRequest(t, New(fake.New()), "/server/warnings/ghost/ack", url.Values{}, true)
 	assertStatus(t, res, http.StatusNotFound)
+}
+
+func TestAddCertificateTooLargeIs413(t *testing.T) {
+	form := url.Values{"name": {"big"}, "type": {"client"}, "certificate": {strings.Repeat("x", (64<<10)+1)}}
+	res := formRequest(t, New(fake.New()), "/server/certificates", form, false)
+	assertStatus(t, res, http.StatusRequestEntityTooLarge)
 }

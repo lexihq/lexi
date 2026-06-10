@@ -246,7 +246,10 @@ func TestWarningsTableEmptyState(t *testing.T) {
 }
 
 func TestFilesPanelRendersEntriesAndControls(t *testing.T) {
-	html := render(t, FilesPanel("demo", "/etc", []backend.FileEntry{
+	caps := testCaps()
+	caps.FileDelete = true
+	caps.FileMkdir = true
+	html := render(t, FilesPanel(caps, "demo", "/etc", []backend.FileEntry{
 		{Name: "ssl", Dir: true, Mode: "0755"},
 		{Name: "hostname", Mode: "0644"},
 	}))
@@ -262,6 +265,18 @@ func TestFilesPanelRendersEntriesAndControls(t *testing.T) {
 	assertContains(t, html, `hx-encoding="multipart/form-data"`)
 	assertContains(t, html, `value="/etc"`)
 	assertContains(t, html, "0644")
+	// Folder creation and per-row delete (with confirm), capability-gated.
+	assertContains(t, html, `hx-post="/instances/demo/files/mkdir"`)
+	assertContains(t, html, `hx-post="/instances/demo/files/delete?path=%2Fetc%2Fhostname"`)
+	assertContains(t, html, `hx-confirm`)
+}
+
+func TestFilesPanelHidesDeleteAndMkdirWithoutCaps(t *testing.T) {
+	html := render(t, FilesPanel(testCaps(), "demo", "/etc", []backend.FileEntry{
+		{Name: "hostname", Mode: "0644"},
+	}))
+	assertNotContains(t, html, "/files/mkdir")
+	assertNotContains(t, html, "/files/delete")
 }
 
 func TestInstanceBodyGatesFilesTab(t *testing.T) {
@@ -529,6 +544,13 @@ func assertContains(t *testing.T, s, want string) {
 	t.Helper()
 	if !strings.Contains(s, want) {
 		t.Fatalf("expected %q to contain %q", s, want)
+	}
+}
+
+func assertNotContains(t *testing.T, s, unwanted string) {
+	t.Helper()
+	if strings.Contains(s, unwanted) {
+		t.Fatalf("expected %q to not contain %q", s, unwanted)
 	}
 }
 

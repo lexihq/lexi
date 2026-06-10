@@ -124,6 +124,51 @@ func TestUploadStripsClientPathFromFilename(t *testing.T) {
 	assert.Equal(t, "hi", buf.String())
 }
 
+func TestDeleteFileRemovesAndReturnsPanel(t *testing.T) {
+	b := demoFake(t)
+	res := request(t, New(b), "POST", "/instances/demo/files/delete?path=%2Fetc%2Fhostname", "", true)
+	assertStatus(t, res, http.StatusOK)
+	// The panel re-renders at the parent directory.
+	assert.Contains(t, res.Body.String(), "os-release")
+	assert.NotContains(t, res.Body.String(), "hostname")
+
+	err := b.PullFile(t.Context(), "demo", "/etc/hostname", &bytes.Buffer{})
+	require.ErrorIs(t, err, backend.ErrNotFound)
+}
+
+func TestDeleteFileRelativePathIs400(t *testing.T) {
+	res := request(t, New(demoFake(t)), "POST", "/instances/demo/files/delete?path=etc", "", true)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestDeleteNonEmptyDirIs400(t *testing.T) {
+	res := request(t, New(demoFake(t)), "POST", "/instances/demo/files/delete?path=%2Fetc", "", true)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestMkdirCreatesAndReturnsPanel(t *testing.T) {
+	b := demoFake(t)
+	res := request(t, New(b), "POST", "/instances/demo/files/mkdir?dir=%2F&name=data", "", true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "data")
+
+	entries, err := b.ListFiles(t.Context(), "demo", "/data")
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
+func TestMkdirBadNameIs400(t *testing.T) {
+	for _, name := range []string{"", ".", "..", "a%2Fb"} {
+		res := request(t, New(demoFake(t)), "POST", "/instances/demo/files/mkdir?dir=%2F&name="+name, "", true)
+		assertStatus(t, res, http.StatusBadRequest)
+	}
+}
+
+func TestMkdirExistingIs409(t *testing.T) {
+	res := request(t, New(demoFake(t)), "POST", "/instances/demo/files/mkdir?dir=%2F&name=etc", "", true)
+	assertStatus(t, res, http.StatusConflict)
+}
+
 func TestUploadTooLargeIs413(t *testing.T) {
 	old := maxFileUploadBytes
 	maxFileUploadBytes = 16

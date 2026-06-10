@@ -40,8 +40,9 @@ func crumbs(dir string) []crumb {
 
 // FilesPanel is the Files tab: breadcrumb navigation, an upload form targeting
 // the current directory, and the directory listing. Navigation re-renders the
-// panel in place (hx-get targeting #files).
-templ FilesPanel(name, dir string, entries []backend.FileEntry) {
+// panel in place (hx-get targeting #files). Folder creation and deletion are
+// gated on the probed FileMkdir/FileDelete capabilities.
+templ FilesPanel(caps backend.Capabilities, name, dir string, entries []backend.FileEntry) {
 	<div id="files">
 		<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
 			<nav class="flex items-center gap-1 text-sm">
@@ -58,20 +59,37 @@ templ FilesPanel(name, dir string, entries []backend.FileEntry) {
 					>{ c.Label }</button>
 				}
 			</nav>
-			<form
-				hx-post={ "/instances/" + url.PathEscape(name) + "/files/upload" }
-				hx-encoding="multipart/form-data"
-				hx-target="#files"
-				hx-swap="outerHTML"
-				class="flex items-center gap-2"
-			>
-				<input type="hidden" name="path" value={ dir }/>
-				<input type="file" name="file" required class="text-sm"/>
-				@button.Button(button.Props{Type: button.TypeSubmit, Size: button.SizeSm}) {
-					@icon.Icon("upload")(icon.Props{Class: "size-4"})
-					Upload
+			<div class="flex flex-wrap items-center gap-3">
+				if caps.FileMkdir {
+					<form
+						hx-post={ "/instances/" + url.PathEscape(name) + "/files/mkdir" }
+						hx-target="#files"
+						hx-swap="outerHTML"
+						class="flex items-center gap-2"
+					>
+						<input type="hidden" name="dir" value={ dir }/>
+						<input name="name" placeholder="folder name" required class="h-8 w-32 rounded-md border bg-background px-2 text-sm"/>
+						@button.Button(button.Props{Type: button.TypeSubmit, Size: button.SizeSm, Variant: button.VariantOutline}) {
+							@icon.Icon("folder-plus")(icon.Props{Class: "size-4"})
+							New folder
+						}
+					</form>
 				}
-			</form>
+				<form
+					hx-post={ "/instances/" + url.PathEscape(name) + "/files/upload" }
+					hx-encoding="multipart/form-data"
+					hx-target="#files"
+					hx-swap="outerHTML"
+					class="flex items-center gap-2"
+				>
+					<input type="hidden" name="path" value={ dir }/>
+					<input type="file" name="file" required class="text-sm"/>
+					@button.Button(button.Props{Type: button.TypeSubmit, Size: button.SizeSm}) {
+						@icon.Icon("upload")(icon.Props{Class: "size-4"})
+						Upload
+					}
+				</form>
+			</div>
 		</div>
 		@table.Table() {
 			@table.Header() {
@@ -125,16 +143,29 @@ templ FilesPanel(name, dir string, entries []backend.FileEntry) {
 							<span class="font-mono text-xs text-muted-foreground">{ e.Mode }</span>
 						}
 						@table.Cell() {
-							if !e.Dir {
-								<a
-									href={ templ.URL("/instances/" + url.PathEscape(name) + "/files/download?path=" + url.QueryEscape(childPath(dir, e.Name))) }
-									hx-boost="false"
-									class="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
-								>
-									@icon.Icon("download")(icon.Props{Class: "size-4"})
-									Download
-								</a>
-							}
+							<div class="flex items-center justify-end gap-3">
+								if !e.Dir {
+									<a
+										href={ templ.URL("/instances/" + url.PathEscape(name) + "/files/download?path=" + url.QueryEscape(childPath(dir, e.Name))) }
+										hx-boost="false"
+										class="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
+									>
+										@icon.Icon("download")(icon.Props{Class: "size-4"})
+										Download
+									</a>
+								}
+								if caps.FileDelete {
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{
+										"hx-post":    "/instances/" + url.PathEscape(name) + "/files/delete?path=" + url.QueryEscape(childPath(dir, e.Name)),
+										"hx-confirm": "Delete " + e.Name + "?",
+										"hx-target":  "#files",
+										"hx-swap":    "outerHTML",
+									}}) {
+										@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+										Delete
+									}
+								}
+							</div>
 						}
 					}
 				}

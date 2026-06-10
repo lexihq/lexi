@@ -710,6 +710,56 @@ test("files tab: browse, download, and upload", async ({ page }) => {
   }).toPass({ timeout: 10000 });
 });
 
+test("files tab: create folder, delete file and folder", async ({ page }) => {
+  // Delete buttons ask via hx-confirm; accept every dialog.
+  page.on("dialog", (d) => d.accept());
+  await page.goto("/instances/demo?tab=files");
+  const files = page.locator("#files");
+  await expect(files).toBeVisible();
+
+  // Create a folder at the root and see its row appear. Freshly swapped-in
+  // panels can lose a click (htmx wires them a tick later), so retry.
+  await expect(async () => {
+    await files.locator('input[name="name"]').fill("e2e-dir");
+    await files.getByRole("button", { name: "New folder" }).click();
+    await expect(files.getByRole("button", { name: "e2e-dir" })).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
+  // Enter it (empty) and upload a file into it.
+  await expect(async () => {
+    await files.getByRole("button", { name: "e2e-dir" }).click();
+    await expect(files.getByText("Empty directory.")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+  await files.locator('input[type="file"]').setInputFiles({
+    name: "inner.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("inner"),
+  });
+  await expect(async () => {
+    await files.getByRole("button", { name: "Upload" }).click();
+    await expect(files.getByText("inner.txt")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
+  // Delete the file; the panel re-renders in the same directory.
+  await expect(async () => {
+    await files.getByRole("button", { name: "Delete" }).click();
+    await expect(files.getByText("inner.txt")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
+  // Go up and delete the now-empty folder.
+  await expect(async () => {
+    await files.getByRole("button", { name: "..", exact: true }).click();
+    await expect(files.getByRole("button", { name: "e2e-dir" })).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+  await expect(async () => {
+    await files
+      .getByRole("row", { name: /e2e-dir/ })
+      .getByRole("button", { name: "Delete" })
+      .click();
+    await expect(files.getByRole("button", { name: "e2e-dir" })).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});
+
 test("server section: overview, config apply, warning delete", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Server", exact: true }).click();

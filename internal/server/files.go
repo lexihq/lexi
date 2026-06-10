@@ -43,12 +43,22 @@ func (h handlers) filesPanel(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
+	h.renderFiles(w, r, name, dir)
+}
+
+// renderFiles re-renders the Files panel at dir for HTMX requests, otherwise
+// redirects back to the instance's Files tab.
+func (h handlers) renderFiles(w http.ResponseWriter, r *http.Request, name, dir string) {
+	if !isHTMX(r) {
+		http.Redirect(w, r, "/instances/"+url.PathEscape(name)+"?tab=files", http.StatusSeeOther)
+		return
+	}
 	entries, err := h.backend.ListFiles(r.Context(), name, dir)
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
-	h.render(w, r, http.StatusOK, ui.FilesPanel(name, dir, entries))
+	h.render(w, r, http.StatusOK, ui.FilesPanel(h.backend.Capabilities(), name, dir, entries))
 }
 
 // attachmentWriter defers the download headers until the backend produces the
@@ -135,14 +145,42 @@ func (h handlers) uploadFile(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	if isHTMX(r) {
-		entries, err := h.backend.ListFiles(r.Context(), name, dir)
-		if err != nil {
-			h.fail(w, err)
-			return
-		}
-		h.render(w, r, http.StatusOK, ui.FilesPanel(name, dir, entries))
+	h.renderFiles(w, r, name, dir)
+}
+
+// deleteFile removes the instance file (or empty directory) given by the path
+// form value, then re-renders the panel at its parent directory.
+func (h handlers) deleteFile(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	p, err := normalizeAbsPath(strings.TrimSpace(r.FormValue("path")))
+	if err != nil {
+		h.fail(w, err)
 		return
 	}
-	http.Redirect(w, r, "/instances/"+url.PathEscape(name)+"?tab=files", http.StatusSeeOther)
+	if err := h.backend.DeleteFile(r.Context(), name, p); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderFiles(w, r, name, path.Dir(p))
+}
+
+// makeDirectory creates a folder named by the name form value inside the dir
+// form value, then re-renders the panel at dir.
+func (h handlers) makeDirectory(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	dir, err := normalizeAbsPath(strings.TrimSpace(r.FormValue("dir")))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	folder := strings.TrimSpace(r.FormValue("name"))
+	if folder == "" || folder == "." || folder == ".." || strings.Contains(folder, "/") {
+		h.fail(w, fmt.Errorf("folder name %q must be a single path component: %w", folder, backend.ErrInvalid))
+		return
+	}
+	if err := h.backend.MakeDirectory(r.Context(), name, strings.TrimSuffix(dir, "/")+"/"+folder); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderFiles(w, r, name, dir)
 }

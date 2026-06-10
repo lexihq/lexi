@@ -3,6 +3,7 @@
 package incus
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"testing"
@@ -68,4 +69,54 @@ func TestPublishImageRoundTrip(t *testing.T) {
 	for _, img := range imgs {
 		assert.NotEqual(t, fingerprint, img.Fingerprint, "deleted image still listed")
 	}
+}
+
+// TestImageUpdateExportImportRoundTrip publishes an instance (a unified image),
+// edits its description/public flag, exports the tarball, deletes the original,
+// and re-imports it with a fresh alias.
+func TestImageUpdateExportImportRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+
+	name := uniqueName("imgrt")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
+
+	alias := name + "-img"
+	require.NoError(t, b.PublishImage(ctx, name, alias))
+	imgs, err := b.ListLocalImages(ctx)
+	require.NoError(t, err)
+	var fingerprint string
+	for _, img := range imgs {
+		if slices.Contains(img.Aliases, alias) {
+			fingerprint = img.Fingerprint
+		}
+	}
+	require.NotEmpty(t, fingerprint)
+	t.Cleanup(func() { _ = b.DeleteImage(ctx, fingerprint) })
+
+	// Update description + public and read both back.
+	require.NoError(t, b.UpdateImage(ctx, fingerprint, "edited by lxcon", true))
+	imgs, err = b.ListLocalImages(ctx)
+	require.NoError(t, err)
+	idx := slices.IndexFunc(imgs, func(i backend.LocalImage) bool { return i.Fingerprint == fingerprint })
+	require.GreaterOrEqual(t, idx, 0)
+	assert.Equal(t, "edited by lxcon", imgs[idx].Description)
+	assert.True(t, imgs[idx].Public)
+
+	// Export the unified tarball, delete the original, re-import under a new
+	// alias (same fingerprint content).
+	var buf bytes.Buffer
+	require.NoError(t, b.ExportImage(ctx, fingerprint, &buf))
+	require.Greater(t, buf.Len(), 0)
+	require.NoError(t, b.DeleteImage(ctx, fingerprint))
+
+	restored := alias + "-restored"
+	require.NoError(t, b.ImportImage(ctx, &buf, restored))
+	t.Cleanup(func() { _ = b.DeleteImage(ctx, fingerprint) })
+	imgs, err = b.ListLocalImages(ctx)
+	require.NoError(t, err)
+	idx = slices.IndexFunc(imgs, func(i backend.LocalImage) bool { return slices.Contains(i.Aliases, restored) })
+	require.GreaterOrEqual(t, idx, 0, "re-imported image missing")
+	assert.Equal(t, fingerprint, imgs[idx].Fingerprint, "import preserves the image identity")
 }

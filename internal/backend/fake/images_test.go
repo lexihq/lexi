@@ -1,8 +1,10 @@
 package fake
 
 import (
+	"bytes"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -201,6 +203,91 @@ func TestAddImageAliasDuplicate(t *testing.T) {
 
 func TestRemoveImageAliasGhost(t *testing.T) {
 	err := New().RemoveImageAlias(ctx(), "no-such-alias")
+	if !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestExportImportImageRoundTrip(t *testing.T) {
+	b := New()
+	imgs := mustLocal(t, b)
+	fp := imgs[0].Fingerprint
+
+	var buf bytes.Buffer
+	if err := b.ExportImage(ctx(), fp, &buf); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	if err := b.ImportImage(ctx(), &buf, "restored"); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	after, err := b.ListLocalImages(ctx())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	var found *backend.LocalImage
+	for i := range after {
+		if slices.Contains(after[i].Aliases, "restored") {
+			found = &after[i]
+		}
+	}
+	if found == nil || found.Fingerprint != "imported-"+fp {
+		t.Fatalf("imported image missing or wrong fingerprint: %+v", found)
+	}
+}
+
+func TestExportImageGhostIs404(t *testing.T) {
+	err := New().ExportImage(ctx(), "ghost", &bytes.Buffer{})
+	if !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestImportImageForeignBlobIsInvalid(t *testing.T) {
+	err := New().ImportImage(ctx(), strings.NewReader("not an image"), "")
+	if !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
+	}
+}
+
+func TestImportImageAliasConflict(t *testing.T) {
+	b := New()
+	imgs := mustLocal(t, b)
+	fp := imgs[0].Fingerprint
+	taken := imgs[0].Aliases[0]
+
+	var buf bytes.Buffer
+	if err := b.ExportImage(ctx(), fp, &buf); err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	err := b.ImportImage(ctx(), &buf, taken)
+	if !errors.Is(err, backend.ErrConflict) {
+		t.Fatalf("want ErrConflict for taken alias, got %v", err)
+	}
+}
+
+func TestUpdateImageSetsDescriptionAndPublic(t *testing.T) {
+	b := New()
+	imgs := mustLocal(t, b)
+	fp := imgs[0].Fingerprint
+
+	if err := b.UpdateImage(ctx(), fp, "edited", true); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	after := mustLocal(t, b)
+	for _, img := range after {
+		if img.Fingerprint == fp {
+			if img.Description != "edited" || !img.Public {
+				t.Fatalf("update not applied: %+v", img)
+			}
+			return
+		}
+	}
+	t.Fatal("image disappeared")
+}
+
+func TestUpdateImageGhostIs404(t *testing.T) {
+	err := New().UpdateImage(ctx(), "ghost", "x", false)
 	if !errors.Is(err, backend.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}

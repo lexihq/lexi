@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -106,6 +109,7 @@ func (b *incusBackend) ListLocalImages(_ context.Context) ([]backend.LocalImage,
 			SizeBytes:   img.Size,
 			Type:        img.Type,
 			CreatedAt:   img.CreatedAt,
+			Public:      img.Public,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Fingerprint < out[j].Fingerprint })
@@ -189,6 +193,83 @@ func (b *incusBackend) AddImageAlias(_ context.Context, fingerprint, alias strin
 func (b *incusBackend) RemoveImageAlias(_ context.Context, alias string) error {
 	if err := b.srv.DeleteImageAlias(alias); err != nil {
 		return fmt.Errorf("delete image alias %q: %w", alias, mapErr(err))
+	}
+	return nil
+}
+
+// ExportImage streams the image tarball to w. The client demands an
+// io.ReadWriteSeeker target, so the download spools through a temp file before
+// being copied out. Split images (separate metadata + rootfs; the client
+// refuses them when no rootfs target is given) are ErrUnsupported — a browser
+// download is a single file.
+func (b *incusBackend) ExportImage(_ context.Context, fingerprint string, w io.Writer) error {
+	tmp, err := os.CreateTemp("", "lxcon-image-export-*")
+	if err != nil {
+		return fmt.Errorf("export image %q: %w", fingerprint, err)
+	}
+	defer func() {
+		if cerr := tmp.Close(); cerr != nil {
+			slog.Warn("close image export spool", "image", fingerprint, "err", cerr)
+		}
+		if rerr := os.Remove(tmp.Name()); rerr != nil {
+			slog.Warn("remove image export spool", "image", fingerprint, "err", rerr)
+		}
+	}()
+
+	if _, err := b.srv.GetImageFile(fingerprint, incusclient.ImageFileRequest{MetaFile: tmp}); err != nil {
+		if strings.Contains(err.Error(), "Multi-part image") {
+			return fmt.Errorf("image %q is a split image (metadata + rootfs) and cannot be downloaded as one file: %w", fingerprint, backend.ErrUnsupported)
+		}
+		return fmt.Errorf("export image %q: %w", fingerprint, mapErr(err))
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("export image %q: %w", fingerprint, err)
+	}
+	if _, err := io.Copy(w, tmp); err != nil {
+		return fmt.Errorf("export image %q: %w", fingerprint, err)
+	}
+	return nil
+}
+
+// ImportImage creates a local image from a unified tarball, tagging it with
+// alias when given (a failed alias rolls the import back, like PublishImage).
+func (b *incusBackend) ImportImage(ctx context.Context, r io.Reader, alias string) error {
+	op, err := b.srv.CreateImage(api.ImagesPost{}, &incusclient.ImageCreateArgs{MetaFile: r})
+	if err := waitOp(ctx, op, err, "import image"); err != nil {
+		return err
+	}
+	if alias == "" {
+		return nil
+	}
+	fp, ok := op.Get().Metadata["fingerprint"].(string)
+	if !ok || fp == "" {
+		return errors.New("import image: operation returned no fingerprint")
+	}
+	if err := b.AddImageAlias(ctx, fp, alias); err != nil {
+		if derr := b.DeleteImage(ctx, fp); derr != nil {
+			return errors.Join(err, fmt.Errorf("rollback imported image %q: %w", fp, derr))
+		}
+		return err
+	}
+	return nil
+}
+
+// UpdateImage sets the description property and the public flag via
+// GET-preserve-PUT with the fresh etag, so AutoUpdate/ExpiresAt/Profiles and
+// the other properties survive (a PUT silently clears omitted fields).
+func (b *incusBackend) UpdateImage(_ context.Context, fingerprint, description string, public bool) error {
+	img, etag, err := b.srv.GetImage(fingerprint)
+	if err != nil {
+		return fmt.Errorf("get image %q: %w", fingerprint, mapErr(err))
+	}
+	put := img.Writable()
+	if put.Properties == nil {
+		put.Properties = map[string]string{}
+	}
+	put.Properties["description"] = description
+	put.Public = public
+	if err := b.srv.UpdateImage(fingerprint, put, etag); err != nil {
+		return fmt.Errorf("update image %q: %w", fingerprint, mapErr(err))
 	}
 	return nil
 }

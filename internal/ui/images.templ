@@ -47,6 +47,18 @@ templ ImagesPage(caps backend.Capabilities, images []backend.LocalImage, instanc
 					}
 				</div>
 			</form>
+			<form method="post" action="/images/import" enctype="multipart/form-data" hx-boost="false" class="rounded-lg border bg-card p-4">
+				<h2 class="mb-2 text-lg font-medium">Import from file</h2>
+				<p class="mb-3 text-sm text-muted-foreground">Upload a unified image tarball (as produced by Export).</p>
+				<div class="flex gap-2">
+					<input name="image" type="file" required accept=".tar,.tar.gz,.tar.xz,.gz,.xz,application/octet-stream" class="w-1/2 rounded-md border bg-background px-3 py-1.5 text-sm"/>
+					<input name="alias" placeholder="alias (optional)" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						@icon.Icon("upload")(icon.Props{Class: "size-4"})
+						Import
+					}
+				</div>
+			</form>
 		</div>
 		@ImagesTable(images)
 	}
@@ -101,7 +113,25 @@ templ ImagesTable(images []backend.LocalImage) {
 							<span class="font-mono text-xs" title={ img.Fingerprint }>{ shortFingerprint(img.Fingerprint) }</span>
 						}
 						@table.Cell() {
-							{ img.Description }
+							<div class="flex items-center gap-1.5">
+								{ img.Description }
+								if img.Public {
+									<span class="rounded bg-accent px-1.5 py-0.5 text-xs">public</span>
+								}
+							</div>
+							<details class="mt-1">
+								<summary class="cursor-pointer text-xs text-muted-foreground">Edit details</summary>
+								<form hx-post={ "/images/" + url.PathEscape(img.Fingerprint) + "/config" } hx-target="#images-table" hx-swap="outerHTML" class="mt-1 space-y-1">
+									<input name="description" value={ img.Description } placeholder="description" class="h-7 w-full rounded border bg-background px-2 text-xs"/>
+									<label class="flex items-center gap-1.5 text-xs">
+										<input type="checkbox" name="public" checked?={ img.Public }/>
+										Public
+									</label>
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+										Save
+									}
+								</form>
+							</details>
 						}
 						@table.Cell() {
 							{ img.Arch }
@@ -113,10 +143,16 @@ templ ImagesTable(images []backend.LocalImage) {
 							{ sizeLabel(img.SizeBytes) }
 						}
 						@table.Cell() {
-							@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/images/" + url.PathEscape(img.Fingerprint) + "/delete", "hx-target": "#images-table", "hx-swap": "outerHTML"}}) {
-								@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
-								Delete
-							}
+							<div class="flex gap-2">
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/images/" + url.PathEscape(img.Fingerprint) + "/export", Attributes: templ.Attributes{"hx-boost": "false", "download": ""}}) {
+									@icon.Icon("download")(icon.Props{Class: "size-4"})
+									Export
+								}
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/images/" + url.PathEscape(img.Fingerprint) + "/delete", "hx-target": "#images-table", "hx-swap": "outerHTML"}}) {
+									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+									Delete
+								}
+							</div>
 						}
 					}
 				}

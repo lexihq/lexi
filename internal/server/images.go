@@ -1,8 +1,10 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -76,6 +78,74 @@ func (h handlers) publishImage(w http.ResponseWriter, r *http.Request) {
 func (h handlers) deleteImage(w http.ResponseWriter, r *http.Request) {
 	fingerprint := r.PathValue("fingerprint")
 	h.imageAction(w, r, func() error { return h.backend.DeleteImage(r.Context(), fingerprint) })
+}
+
+// updateImage applies the per-image details form: description and the public
+// visibility flag.
+func (h handlers) updateImage(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	fingerprint := r.PathValue("fingerprint")
+	description := strings.TrimSpace(r.Form.Get("description"))
+	public := r.Form.Get("public") != ""
+	h.imageAction(w, r, func() error { return h.backend.UpdateImage(r.Context(), fingerprint, description, public) })
+}
+
+// exportImage streams an image tarball as a file download. The image is
+// validated up front so a missing fingerprint 404s cleanly before the response
+// body is committed (split images still fail mid-probe with ErrUnsupported,
+// surfaced as plain text).
+func (h handlers) exportImage(w http.ResponseWriter, r *http.Request) {
+	fingerprint := r.PathValue("fingerprint")
+	images, err := h.backend.ListLocalImages(r.Context())
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if !slices.ContainsFunc(images, func(img backend.LocalImage) bool { return img.Fingerprint == fingerprint }) {
+		h.fail(w, fmt.Errorf("image %q: %w", fingerprint, backend.ErrNotFound))
+		return
+	}
+	name := fingerprint
+	if len(name) > 12 {
+		name = name[:12]
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name+".tar"))
+	if err := h.backend.ExportImage(r.Context(), fingerprint, w); err != nil {
+		http.Error(w, err.Error(), statusFor(err))
+		return
+	}
+}
+
+// importImage creates a local image from an uploaded unified tarball. The file
+// upload uses a plain multipart form, so success redirects to the Images page.
+func (h handlers) importImage(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
+	// The request body is bounded by MaxBytesReader immediately above.
+	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			h.renderError(w, http.StatusRequestEntityTooLarge, "image file is too large")
+			return
+		}
+		h.renderError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	file, _, err := r.FormFile("image")
+	if err != nil {
+		h.renderError(w, http.StatusBadRequest, "image file is required")
+		return
+	}
+	defer closeAndLog("uploaded image file", file)
+
+	if err := h.backend.ImportImage(r.Context(), file, strings.TrimSpace(r.FormValue("alias"))); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/images", http.StatusSeeOther)
 }
 
 func (h handlers) addImageAlias(w http.ResponseWriter, r *http.Request) {

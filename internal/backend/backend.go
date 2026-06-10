@@ -307,6 +307,7 @@ type LocalImage struct {
 	SizeBytes   int64
 	Type        string // "container" | "virtual-machine"
 	CreatedAt   time.Time
+	Public      bool // visible to unauthenticated clients
 }
 
 // CreateOptions parameterizes CreateInstance. The zero value of every optional
@@ -471,6 +472,18 @@ type Backend interface {
 	DeleteImage(ctx context.Context, fingerprint string) error
 	AddImageAlias(ctx context.Context, fingerprint, alias string) error
 	RemoveImageAlias(ctx context.Context, alias string) error
+	// ExportImage streams the image as a single tarball to w. Split images
+	// (separate metadata + rootfs, e.g. simplestreams copies) are
+	// ErrUnsupported.
+	ExportImage(ctx context.Context, fingerprint string, w io.Writer) error
+	// ImportImage creates a local image from a unified tarball read from r,
+	// tagging it with alias when non-empty (a failed alias rolls the import
+	// back, like PublishImage).
+	ImportImage(ctx context.Context, r io.Reader, alias string) error
+	// UpdateImage sets the image's description and public visibility,
+	// preserving its other properties and flags (GET-preserve-PUT; the small
+	// two-field edit is deliberately unversioned — last write wins).
+	UpdateImage(ctx context.Context, fingerprint, description string, public bool) error
 
 	// ListOperations returns running and recently finished daemon tasks,
 	// newest first.

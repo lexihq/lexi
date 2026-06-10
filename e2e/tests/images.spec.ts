@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 // The managed Images section over the local image store.
 // All tests run against the shared fake-backed server (instance "demo" seeded).
@@ -42,5 +43,47 @@ test("manage local images: copy, publish, alias add/remove, delete", async ({ pa
   await expect(async () => {
     await table.getByRole("row", { name: /e2e-pub/ }).getByRole("button", { name: "Delete" }).click();
     await expect(table.getByText("e2e-pub")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});
+
+test("edit image details, export, and re-import", async ({ page }) => {
+  await page.goto("/images");
+  const table = page.locator("#images-table");
+  const row = table.getByRole("row", { name: /debian\/12/ }).first();
+
+  // Edit description + public via the row's details form.
+  await expect(async () => {
+    await row.getByText("Edit details").click();
+    await row.locator('input[name="description"]').fill("edited by e2e");
+    await row.getByRole("checkbox", { name: "Public" }).check();
+    await row.getByRole("button", { name: "Save" }).click();
+    await expect(table.getByText("edited by e2e").first()).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+  // exact: true keeps this from matching the (hidden) "Public" checkbox label
+  // inside other rows' closed details — getByText is case-insensitive without it.
+  await expect(table.getByText("public", { exact: true }).first()).toBeVisible();
+
+  // Export downloads a tarball named after the fingerprint.
+  const downloadPromise = page.waitForEvent("download");
+  await table.getByRole("row", { name: /edited by e2e/ }).first().getByRole("link", { name: "Export" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/\.tar$/);
+
+  // Re-import the downloaded blob with a fresh alias.
+  const path = await download.path();
+  await page.locator('form[action="/images/import"] input[name="image"]').setInputFiles({
+    name: "image.tar",
+    mimeType: "application/octet-stream",
+    buffer: readFileSync(path!),
+  });
+  await page.locator('form[action="/images/import"] input[name="alias"]').fill("e2e-restored");
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page).toHaveURL(/\/images$/);
+  await expect(table.getByText("e2e-restored")).toBeVisible();
+
+  // Clean up the imported image (shared server state).
+  await expect(async () => {
+    await table.getByRole("row", { name: /e2e-restored/ }).getByRole("button", { name: "Delete" }).click();
+    await expect(table.getByText("e2e-restored")).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 });

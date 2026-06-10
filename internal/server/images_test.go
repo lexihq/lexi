@@ -1,7 +1,10 @@
 package server
 
 import (
+	"bytes"
+	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"slices"
 	"testing"
@@ -130,4 +133,88 @@ func TestRemoveImageAliasBlankIs400(t *testing.T) {
 func TestRemoveImageAliasGhostIs404(t *testing.T) {
 	res := formRequest(t, New(fake.New()), "/images/aliases/delete", url.Values{"alias": {"ghost"}}, false)
 	assertStatus(t, res, http.StatusNotFound)
+}
+
+func TestUpdateImageAppliesAndReturnsTable(t *testing.T) {
+	b := fake.New()
+	imgs, err := b.ListLocalImages(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, imgs)
+	fp := imgs[0].Fingerprint
+
+	res := formRequest(t, New(b), "/images/"+fp+"/config",
+		url.Values{"description": {"edited by test"}, "public": {"on"}}, true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "edited by test")
+
+	after, err := b.ListLocalImages(t.Context())
+	require.NoError(t, err)
+	idx := slices.IndexFunc(after, func(i backend.LocalImage) bool { return i.Fingerprint == fp })
+	require.GreaterOrEqual(t, idx, 0)
+	assert.Equal(t, "edited by test", after[idx].Description)
+	assert.True(t, after[idx].Public)
+}
+
+func TestUpdateImageGhostIs404(t *testing.T) {
+	res := formRequest(t, New(fake.New()), "/images/ghost/config", url.Values{"description": {"x"}}, true)
+	assertStatus(t, res, http.StatusNotFound)
+}
+
+func TestExportImageDownloads(t *testing.T) {
+	b := fake.New()
+	imgs, err := b.ListLocalImages(t.Context())
+	require.NoError(t, err)
+	fp := imgs[0].Fingerprint
+
+	res := request(t, New(b), "GET", "/images/"+fp+"/export", "", false)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Header().Get("Content-Disposition"), ".tar")
+	assert.Contains(t, res.Body.String(), fp, "fake export blob carries the fingerprint")
+}
+
+func TestExportImageGhostIs404(t *testing.T) {
+	res := request(t, New(fake.New()), "GET", "/images/ghost/export", "", false)
+	assertStatus(t, res, http.StatusNotFound)
+}
+
+// importImageRequest posts a multipart image upload.
+func importImageRequest(t *testing.T, srv *http.Server, content, alias string) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if alias != "" {
+		require.NoError(t, mw.WriteField("alias", alias))
+	}
+	fw, err := mw.CreateFormFile("image", "image.tar")
+	require.NoError(t, err)
+	_, err = fw.Write([]byte(content))
+	require.NoError(t, err)
+	require.NoError(t, mw.Close())
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/images/import", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	res := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(res, req)
+	return res
+}
+
+func TestImportImageRoundTrip(t *testing.T) {
+	b := fake.New()
+	imgs, err := b.ListLocalImages(t.Context())
+	require.NoError(t, err)
+	fp := imgs[0].Fingerprint
+
+	// Export through the handler, re-import with a new alias.
+	export := request(t, New(b), "GET", "/images/"+fp+"/export", "", false)
+	assertStatus(t, export, http.StatusOK)
+
+	res := importImageRequest(t, New(b), export.Body.String(), "restored")
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/images", res.Header().Get("Location"))
+	assert.Contains(t, localAliases(t, b), "restored")
+}
+
+func TestImportImageForeignBlobIs400(t *testing.T) {
+	res := importImageRequest(t, New(fake.New()), "garbage", "")
+	assertStatus(t, res, http.StatusBadRequest)
 }

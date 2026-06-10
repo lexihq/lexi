@@ -3,6 +3,7 @@ package incus
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -122,6 +123,32 @@ func (b *incusBackend) PullFileInfo(_ context.Context, instance, path string, w 
 		return backend.FileInfo{}, fmt.Errorf("file %q exceeds the %d byte limit: %w", path, limit, backend.ErrInvalid)
 	}
 	return info, nil
+}
+
+// PullFileHead streams up to limit bytes of the file at path to w and reports
+// its metadata plus whether the file was longer than limit (truncated). It
+// reads at most limit+1 bytes from the daemon stream before closing, so a huge
+// log is not downloaded in full. Directories and symlinks report their type
+// without content.
+func (b *incusBackend) PullFileHead(_ context.Context, instance, path string, w io.Writer, limit int64) (backend.FileInfo, bool, error) {
+	content, resp, err := b.srv.GetInstanceFile(instance, path)
+	if err != nil {
+		return backend.FileInfo{}, false, fmt.Errorf("pull file %q: %w", path, mapErr(err))
+	}
+	defer closeAndLogFile(path, content)
+	info := backend.FileInfo{Type: resp.Type, Mode: fmt.Sprintf("%04o", resp.Mode), UID: resp.UID, GID: resp.GID}
+	if resp.Type != "file" || content == nil {
+		return info, false, nil
+	}
+	if _, err := io.Copy(w, io.LimitReader(content, limit)); err != nil {
+		return backend.FileInfo{}, false, fmt.Errorf("pull file %q: %w", path, err)
+	}
+	// One more byte present means the file was longer than the limit.
+	extra, err := io.CopyN(io.Discard, content, 1)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return backend.FileInfo{}, false, fmt.Errorf("pull file %q: %w", path, err)
+	}
+	return info, extra > 0, nil
 }
 
 // DeleteFile removes the instance file at path. The daemon API is

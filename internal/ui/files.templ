@@ -147,6 +147,13 @@ templ FilesPanel(caps backend.Capabilities, name, dir string, entries []backend.
 							<div class="flex items-center justify-end gap-3">
 								if !e.Dir {
 									<a
+										href={ templ.URL("/instances/" + url.PathEscape(name) + "/files/view?path=" + url.QueryEscape(childPath(dir, e.Name))) }
+										class="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
+									>
+										@icon.Icon("eye")(icon.Props{Class: "size-4"})
+										View
+									</a>
+									<a
 										href={ templ.URL("/instances/" + url.PathEscape(name) + "/files/edit?path=" + url.QueryEscape(childPath(dir, e.Name))) }
 										class="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
 									>
@@ -208,6 +215,36 @@ templ FileEditorPage(caps backend.Capabilities, name, p, content string, info ba
 				<a href={ templ.URL("/instances/" + url.PathEscape(name) + "?tab=files") } class="text-sm underline-offset-4 hover:underline">Cancel</a>
 			</div>
 		</form>
+	}
+}
+
+// FileViewerPage is the read-only view of one instance file: its content in a
+// <pre>, with a truncation notice when the file was longer than the viewer cap.
+// Unlike the editor it tolerates large or binary logs.
+templ FileViewerPage(caps backend.Capabilities, name, p, content string, info backend.FileInfo, truncated bool) {
+	@Layout(name+" · view "+p, caps, Nav{Section: NavInstances, Instance: name}) {
+		<div class="mb-4">
+			<a href={ templ.URL("/instances/" + url.PathEscape(name) + "?tab=files") } class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Files</a>
+			<h1 class="mt-2 text-2xl font-semibold">{ p }</h1>
+			<p class="text-sm text-muted-foreground">{ name } · mode { info.Mode } · uid { strconv.FormatInt(info.UID, 10) } · gid { strconv.FormatInt(info.GID, 10) }</p>
+		</div>
+		if truncated {
+			<p class="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
+				Showing the start of a large file — download it for the full contents.
+			</p>
+		}
+		<pre class="max-w-full overflow-auto rounded-md border bg-background p-3 font-mono text-xs whitespace-pre-wrap">{ content }</pre>
+		<div class="mt-3 flex items-center gap-3">
+			<a
+				href={ templ.URL("/instances/" + url.PathEscape(name) + "/files/download?path=" + url.QueryEscape(p)) }
+				hx-boost="false"
+				class="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
+			>
+				@icon.Icon("download")(icon.Props{Class: "size-4"})
+				Download
+			</a>
+			<a href={ templ.URL("/instances/" + url.PathEscape(name) + "?tab=files") } class="text-sm underline-offset-4 hover:underline">Back</a>
+		</div>
 	}
 }
 

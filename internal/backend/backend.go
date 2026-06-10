@@ -438,6 +438,12 @@ type Backend interface {
 	// ErrInvalid without streaming the remainder. Directories and symlinks
 	// report their type without content.
 	PullFileInfo(ctx context.Context, instance, path string, w io.Writer, limit int64) (FileInfo, error)
+	// PullFileHead streams up to limit bytes of the file at path to w and
+	// reports its metadata plus whether the file was longer than limit
+	// (truncated). Unlike PullFileInfo it never rejects large files: the
+	// read-only viewer shows the head plus a truncation notice. Directories and
+	// symlinks report their type without content. limit must be > 0.
+	PullFileHead(ctx context.Context, instance, path string, w io.Writer, limit int64) (info FileInfo, truncated bool, err error)
 	// DeleteFile removes the instance file at path; directories must be empty
 	// (the daemon API is non-recursive). Deleting "/" is ErrInvalid.
 	DeleteFile(ctx context.Context, instance, path string) error

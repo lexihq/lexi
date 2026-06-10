@@ -192,6 +192,37 @@ func (f *Fake) PullFileInfo(_ context.Context, instance, p string, w io.Writer, 
 	return info, nil
 }
 
+func (f *Fake) PullFileHead(_ context.Context, instance, p string, w io.Writer, limit int64) (backend.FileInfo, bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[instance]
+	if !ok {
+		return backend.FileInfo{}, false, notFound(instance)
+	}
+	p, err := normalizePath(p)
+	if err != nil {
+		return backend.FileInfo{}, false, err
+	}
+	node, ok := in.files[p]
+	if !ok {
+		return backend.FileInfo{}, false, notFoundf("file %q", p)
+	}
+	info := backend.FileInfo{Type: node.fileType(), Mode: node.mode, UID: node.uid, GID: node.gid}
+	if node.dir || node.symlink {
+		return info, false, nil
+	}
+	content := node.content
+	truncated := int64(len(content)) > limit
+	if truncated {
+		content = content[:limit]
+	}
+	if _, err := io.Copy(w, bytes.NewReader(content)); err != nil {
+		return backend.FileInfo{}, false, err
+	}
+	return info, truncated, nil
+}
+
 // SeedSymlink plants a symlink node, which the file-transfer API cannot
 // create; tests use it to exercise non-regular-file handling.
 func (f *Fake) SeedSymlink(instance, p string) {

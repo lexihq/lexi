@@ -213,6 +213,50 @@ func TestEditFileFormTooLargeIs400(t *testing.T) {
 	assertStatus(t, res, http.StatusBadRequest)
 }
 
+func TestViewFileShowsContent(t *testing.T) {
+	res := request(t, New(demoFake(t)), "GET", "/instances/demo/files/view?path=%2Fetc%2Fos-release", "", false)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "Fake Linux")
+}
+
+func TestViewFileBinaryIsShownNotRefused(t *testing.T) {
+	b := demoFake(t)
+	require.NoError(t, b.PushFile(t.Context(), "demo", "/root/app.log", strings.NewReader("start\x00\xffend"),
+		backend.FileWriteOptions{}))
+	res := request(t, New(b), "GET", "/instances/demo/files/view?path=%2Froot%2Fapp.log", "", false)
+	assertStatus(t, res, http.StatusOK)
+	assert.NotContains(t, res.Body.String(), "\x00", "NUL bytes should be sanitized out of the page")
+}
+
+func TestViewFileTruncatedShowsNotice(t *testing.T) {
+	old := maxViewableFileBytes
+	maxViewableFileBytes = 8
+	t.Cleanup(func() { maxViewableFileBytes = old })
+
+	b := demoFake(t)
+	require.NoError(t, b.PushFile(t.Context(), "demo", "/root/big.log", strings.NewReader(strings.Repeat("x", 64)),
+		backend.FileWriteOptions{}))
+	res := request(t, New(b), "GET", "/instances/demo/files/view?path=%2Froot%2Fbig.log", "", false)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "download it for the full")
+}
+
+func TestViewFileEscapesHTML(t *testing.T) {
+	b := demoFake(t)
+	require.NoError(t, b.PushFile(t.Context(), "demo", "/root/x.log",
+		strings.NewReader("</pre><script>alert(1)</script>"), backend.FileWriteOptions{}))
+	res := request(t, New(b), "GET", "/instances/demo/files/view?path=%2Froot%2Fx.log", "", false)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.NotContains(t, body, "<script>alert(1)</script>", "file content must not be rendered as live markup")
+	assert.Contains(t, body, "&lt;script&gt;", "content should be HTML-escaped")
+}
+
+func TestViewFileDirectoryIs400(t *testing.T) {
+	res := request(t, New(demoFake(t)), "GET", "/instances/demo/files/view?path=%2Fetc", "", false)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
 func TestSaveFilePreservesMetadataAndRedirects(t *testing.T) {
 	b := demoFake(t)
 	require.NoError(t, b.PushFile(t.Context(), "demo", "/root/app.conf", strings.NewReader("old\n"),

@@ -74,6 +74,19 @@ func TestFileMetadataRoundTrip(t *testing.T) {
 	_, err = b.PullFileInfo(ctx, name, target, &bytes.Buffer{}, 1)
 	require.ErrorIs(t, err, backend.ErrInvalid)
 
+	// PullFileHead truncates to the limit and reports it (the read-only viewer
+	// path); a generous limit returns the whole file untruncated.
+	buf.Reset()
+	_, truncated, err := b.PullFileHead(ctx, name, target, &buf, 1)
+	require.NoError(t, err)
+	require.True(t, truncated)
+	require.Equal(t, "v", buf.String())
+	buf.Reset()
+	_, truncated, err = b.PullFileHead(ctx, name, target, &buf, 1<<20)
+	require.NoError(t, err)
+	require.False(t, truncated)
+	require.Equal(t, "v2\n", buf.String())
+
 	// Overwriting with different options keeps the existing metadata — the
 	// daemon ignores ownership/mode headers on overwrite (fake mirrors this).
 	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader("v3\n"),

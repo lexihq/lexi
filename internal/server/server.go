@@ -89,6 +89,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/files/upload", h.uploadFile)
 	mux.HandleFunc("POST /instances/{name}/files/delete", h.deleteFile)
 	mux.HandleFunc("POST /instances/{name}/files/mkdir", h.makeDirectory)
+	mux.HandleFunc("GET /instances/{name}/files/view", h.viewFile)
 	mux.HandleFunc("GET /instances/{name}/files/edit", h.editFileForm)
 	mux.HandleFunc("POST /instances/{name}/files/edit", h.saveFile)
 	mux.HandleFunc("POST /instances/{name}/devices", h.addDevice)

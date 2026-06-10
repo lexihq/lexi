@@ -840,6 +840,29 @@ test("files tab: edit a text file in the browser", async ({ page }) => {
   expect(await res.text()).toContain("binary file");
 });
 
+test("files tab: view a log the editor refuses", async ({ page }) => {
+  await page.goto("/instances/demo?tab=files");
+  const files = page.locator("#files");
+  await expect(files).toBeVisible();
+  await expect(async () => {
+    await files.getByRole("button", { name: "root" }).click();
+    await expect(files.getByText("app.log")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
+  // The editor refuses the log's control bytes...
+  const edit = await page.request.get("/instances/demo/files/edit?path=%2Froot%2Fapp.log");
+  expect(edit.status()).toBe(400);
+
+  // ...but the read-only viewer renders it.
+  await files
+    .getByRole("row", { name: /app\.log/ })
+    .getByRole("link", { name: "View" })
+    .click();
+  await expect(page).toHaveURL(/\/files\/view\?path=%2Froot%2Fapp\.log/);
+  await expect(page.getByText("boot ok")).toBeVisible();
+  await expect(page.getByText("listening")).toBeVisible();
+});
+
 test("server section: acknowledge a warning", async ({ page }) => {
   await page.goto("/server");
   const warnings = page.locator("#warnings");

@@ -171,6 +171,10 @@ func (h handlers) deleteFile(w http.ResponseWriter, r *http.Request) {
 // larger files must be downloaded instead.
 const maxEditableFileBytes = 1 << 20 // 1 MiB
 
+// maxViewableFileBytes caps what the read-only viewer loads; a larger file is
+// shown truncated with a download prompt. A var (not const) so tests can lower it.
+var maxViewableFileBytes int64 = 2 << 20 // 2 MiB
+
 // editFileForm renders the in-browser editor for a text file: its content in
 // a textarea plus the ownership and mode captured at read time, which the save
 // posts back so the write preserves them.
@@ -197,6 +201,33 @@ func (h handlers) editFileForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.FileEditorPage(h.backend.Capabilities(), name, p, string(content), info))
+}
+
+// viewFile renders a read-only view of a file: its content (truncated to
+// maxViewableFileBytes) in a <pre>, tolerant of large or binary logs the editor
+// refuses. Non-UTF8 bytes are replaced so the page stays valid UTF-8.
+func (h handlers) viewFile(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	p, err := requestPath(r)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	var buf bytes.Buffer
+	info, truncated, err := h.backend.PullFileHead(r.Context(), name, p, &buf, maxViewableFileBytes)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if info.Type != "file" {
+		h.renderError(w, http.StatusBadRequest, fmt.Sprintf("%q is not a viewable file", p))
+		return
+	}
+	// Neutralize bytes that break the page: invalid UTF-8 sequences and NUL
+	// (valid UTF-8, but the editor's binary marker and unsafe to render raw).
+	content := strings.ToValidUTF8(buf.String(), "�")
+	content = strings.ReplaceAll(content, "\x00", "�")
+	h.renderShell(w, r, http.StatusOK, ui.FileViewerPage(h.backend.Capabilities(), name, p, content, info, truncated))
 }
 
 // saveFile writes the edited content back with the ownership and mode the

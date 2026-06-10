@@ -282,6 +282,89 @@ func TestPullFileInfoSymlinkType(t *testing.T) {
 	}
 }
 
+func TestPullFileHeadWholeFile(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	if err := b.PushFile(ctx(), "demo", "/root/app.log", strings.NewReader("line1\nline2\n"),
+		backend.FileWriteOptions{Mode: "0644"}); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	var buf bytes.Buffer
+	info, truncated, err := b.PullFileHead(ctx(), "demo", "/root/app.log", &buf, 1<<20)
+	if err != nil {
+		t.Fatalf("pull head: %v", err)
+	}
+	if truncated || buf.String() != "line1\nline2\n" || info.Type != "file" {
+		t.Fatalf("got truncated=%v %q %+v, want full content", truncated, buf.String(), info)
+	}
+}
+
+func TestPullFileHeadTruncatesLargeFile(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	if err := b.PushFile(ctx(), "demo", "/root/big.log", strings.NewReader("abcdefghij"),
+		backend.FileWriteOptions{Mode: "0644"}); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	var buf bytes.Buffer
+	_, truncated, err := b.PullFileHead(ctx(), "demo", "/root/big.log", &buf, 4)
+	if err != nil {
+		t.Fatalf("pull head: %v", err)
+	}
+	if !truncated || buf.String() != "abcd" {
+		t.Fatalf("got truncated=%v %q, want truncated head \"abcd\"", truncated, buf.String())
+	}
+}
+
+func TestPullFileHeadExactLimitNotTruncated(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	if err := b.PushFile(ctx(), "demo", "/root/exact.log", strings.NewReader("abcd"),
+		backend.FileWriteOptions{Mode: "0644"}); err != nil {
+		t.Fatalf("push: %v", err)
+	}
+
+	var buf bytes.Buffer
+	_, truncated, err := b.PullFileHead(ctx(), "demo", "/root/exact.log", &buf, 4)
+	if err != nil {
+		t.Fatalf("pull head: %v", err)
+	}
+	if truncated || buf.String() != "abcd" {
+		t.Fatalf("a file exactly at the limit is not truncated: got truncated=%v %q", truncated, buf.String())
+	}
+}
+
+func TestPullFileHeadDirectoryReportsTypeWithoutContent(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	var buf bytes.Buffer
+	info, truncated, err := b.PullFileHead(ctx(), "demo", "/etc", &buf, 1<<20)
+	if err != nil {
+		t.Fatalf("pull head: %v", err)
+	}
+	if info.Type != "directory" || buf.Len() != 0 || truncated {
+		t.Fatalf("want directory with no content, got %+v (%d bytes, truncated=%v)", info, buf.Len(), truncated)
+	}
+}
+
+func TestPullFileHeadSymlinkReportsTypeWithoutContent(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	b.SeedSymlink("demo", "/etc/localtime")
+
+	var buf bytes.Buffer
+	info, truncated, err := b.PullFileHead(ctx(), "demo", "/etc/localtime", &buf, 1<<20)
+	if err != nil {
+		t.Fatalf("pull head: %v", err)
+	}
+	if info.Type != "symlink" || buf.Len() != 0 || truncated {
+		t.Fatalf("want symlink with no content, got %+v (%d bytes, truncated=%v)", info, buf.Len(), truncated)
+	}
+}
+
 func TestDeleteFileRemovesFile(t *testing.T) {
 	b := New()
 	mustCreate(t, b, "demo")

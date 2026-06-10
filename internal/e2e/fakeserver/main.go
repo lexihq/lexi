@@ -32,6 +32,12 @@ func main() {
 		slog.Error("seed binary file", "err", err)
 		os.Exit(1)
 	}
+	// A log with control bytes the editor refuses but the read-only viewer shows.
+	if err := b.PushFile(context.Background(), *instance, "/root/app.log",
+		strings.NewReader("boot ok\nstarting service\x00\xff\nlistening\n"), backend.FileWriteOptions{}); err != nil {
+		slog.Error("seed log file", "err", err)
+		os.Exit(1)
+	}
 
 	srv := server.New(b)
 	srv.Addr = *addr

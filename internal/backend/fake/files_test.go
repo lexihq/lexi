@@ -154,3 +154,101 @@ func TestPushFileGhostInstanceIs404(t *testing.T) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}
 }
+
+func TestPushFileMissingParentIs404(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	err := b.PushFile(ctx(), "demo", "/no/such/file.txt", strings.NewReader("x"))
+	if !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestDeleteFileRemovesFile(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	if err := b.DeleteFile(ctx(), "demo", "/etc/hostname"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if e := entryNamed(mustList(t, b, "demo", "/etc"), "hostname"); e != nil {
+		t.Fatalf("hostname should be gone, got %+v", e)
+	}
+}
+
+func TestDeleteFileEmptyDir(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	if err := b.MakeDirectory(ctx(), "demo", "/empty"); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := b.DeleteFile(ctx(), "demo", "/empty"); err != nil {
+		t.Fatalf("delete empty dir: %v", err)
+	}
+	if e := entryNamed(mustList(t, b, "demo", "/"), "empty"); e != nil {
+		t.Fatalf("empty dir should be gone, got %+v", e)
+	}
+}
+
+func TestDeleteFileNonEmptyDirIsInvalid(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	err := b.DeleteFile(ctx(), "demo", "/etc")
+	if !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
+	}
+}
+
+func TestDeleteFileRootIsInvalid(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	err := b.DeleteFile(ctx(), "demo", "/")
+	if !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
+	}
+}
+
+func TestDeleteFileMissingIs404(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	err := b.DeleteFile(ctx(), "demo", "/no/such")
+	if !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestMakeDirectoryListsAsEmptyDir(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+
+	if err := b.MakeDirectory(ctx(), "demo", "/data"); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	e := entryNamed(mustList(t, b, "demo", "/"), "data")
+	if e == nil || !e.Dir {
+		t.Fatalf("expected /data directory entry, got %+v", e)
+	}
+	entries := mustList(t, b, "demo", "/data")
+	if len(entries) != 0 {
+		t.Fatalf("new directory should be empty, got %+v", entries)
+	}
+}
+
+func TestMakeDirectoryExistingIsConflict(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	err := b.MakeDirectory(ctx(), "demo", "/etc")
+	if !errors.Is(err, backend.ErrConflict) {
+		t.Fatalf("want ErrConflict, got %v", err)
+	}
+}
+
+func TestMakeDirectoryMissingParentIs404(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "demo")
+	err := b.MakeDirectory(ctx(), "demo", "/no/such")
+	if !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}

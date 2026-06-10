@@ -76,6 +76,8 @@ func New() (*incusBackend, error) {
 			ImageManagement: true,
 			Operations:      true,
 			Files:           true,
+			FileDelete:      srv.HasExtension("file_delete"),
+			FileMkdir:       srv.HasExtension("directory_manipulation"),
 			ServerAdmin:     true,
 		},
 		cpuSamples: make(map[string]cpuSample),

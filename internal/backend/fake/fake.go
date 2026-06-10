@@ -156,6 +156,8 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		ImageManagement: true,
 		Operations:      true,
 		Files:           true,
+		FileDelete:      true,
+		FileMkdir:       true,
 		ServerAdmin:     true,
 	}
 }

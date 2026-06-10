@@ -139,6 +139,63 @@ func (f *Fake) PushFile(_ context.Context, instance, p string, r io.Reader) erro
 	return nil
 }
 
+func (f *Fake) DeleteFile(_ context.Context, instance, p string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[instance]
+	if !ok {
+		return notFound(instance)
+	}
+	p, err := normalizePath(p)
+	if err != nil {
+		return err
+	}
+	if p == "/" {
+		return invalid("cannot delete %q", p)
+	}
+	node, ok := in.files[p]
+	if !ok {
+		return notFoundf("file %q", p)
+	}
+	if node.dir {
+		prefix := p + "/"
+		for key := range in.files {
+			if strings.HasPrefix(key, prefix) {
+				return invalid("directory %q is not empty", p)
+			}
+		}
+	}
+	delete(in.files, p)
+	return nil
+}
+
+func (f *Fake) MakeDirectory(_ context.Context, instance, p string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	in, ok := f.instances[instance]
+	if !ok {
+		return notFound(instance)
+	}
+	p, err := normalizePath(p)
+	if err != nil {
+		return err
+	}
+	if _, ok := in.files[p]; ok {
+		return conflict("%q already exists", p)
+	}
+	parent, ok := in.files[path.Dir(p)]
+	if !ok {
+		return notFoundf("directory %q", path.Dir(p))
+	}
+	if !parent.dir {
+		return invalid("%q is a file, not a directory", path.Dir(p))
+	}
+	in.files[p] = &fakeFile{dir: true, mode: "0755"}
+	return nil
+}
+
 // normalizePath requires an absolute path and strips a trailing slash (except
 // for the root itself).
 func normalizePath(p string) (string, error) {

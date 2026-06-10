@@ -40,3 +40,35 @@ func TestFilePushPullRoundTrip(t *testing.T) {
 	require.NoError(t, b.PullFile(ctx, name, target, &buf))
 	require.Equal(t, content, buf.String())
 }
+
+// TestFileMkdirDeleteRoundTrip creates a directory, pushes a file into it,
+// deletes the file, then deletes the (now empty) directory.
+func TestFileMkdirDeleteRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	caps := b.Capabilities()
+	if !caps.FileMkdir || !caps.FileDelete {
+		t.Skipf("daemon lacks file extensions: mkdir=%v delete=%v", caps.FileMkdir, caps.FileDelete)
+	}
+	ctx := context.Background()
+	name := uniqueName("filedir")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
+
+	const dir = "/root/lxcon-dir"
+	require.NoError(t, b.MakeDirectory(ctx, name, dir))
+
+	const target = dir + "/inner.txt"
+	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader("inner\n")))
+
+	// Non-empty directory delete must fail before the file is removed.
+	require.Error(t, b.DeleteFile(ctx, name, dir))
+
+	require.NoError(t, b.DeleteFile(ctx, name, target))
+	require.NoError(t, b.DeleteFile(ctx, name, dir))
+
+	entries, err := b.ListFiles(ctx, name, "/root")
+	require.NoError(t, err)
+	for _, e := range entries {
+		require.NotEqual(t, "lxcon-dir", e.Name, "directory should be gone")
+	}
+}

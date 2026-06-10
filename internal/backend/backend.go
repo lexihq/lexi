@@ -52,6 +52,12 @@ type Capabilities struct {
 	Operations bool
 	// Files is instance file transfer: browse, download, upload.
 	Files bool
+	// FileDelete is instance file / empty-directory removal (Incus extension
+	// "file_delete").
+	FileDelete bool
+	// FileMkdir is instance directory creation (Incus extension
+	// "directory_manipulation").
+	FileMkdir bool
 	// ServerAdmin is the Server section: overview, config, certificates,
 	// warnings.
 	ServerAdmin bool
@@ -403,6 +409,11 @@ type Backend interface {
 	PullFile(ctx context.Context, instance, path string, w io.Writer) error
 	// PushFile creates (or overwrites) the instance file at path from r.
 	PushFile(ctx context.Context, instance, path string, r io.Reader) error
+	// DeleteFile removes the instance file at path; directories must be empty
+	// (the daemon API is non-recursive). Deleting "/" is ErrInvalid.
+	DeleteFile(ctx context.Context, instance, path string) error
+	// MakeDirectory creates a directory at path (parents must exist).
+	MakeDirectory(ctx context.Context, instance, path string) error
 
 	GetServerOverview(ctx context.Context) (ServerOverview, error)
 	// GetServerConfig returns the server config map plus an opaque version

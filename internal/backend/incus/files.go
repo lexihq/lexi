@@ -85,6 +85,30 @@ func (b *incusBackend) PushFile(_ context.Context, instance, path string, r io.R
 	return nil
 }
 
+// DeleteFile removes the instance file at path. The daemon API is
+// non-recursive: directories must be empty, and deleting "/" is rejected.
+func (b *incusBackend) DeleteFile(_ context.Context, instance, path string) error {
+	if path == "/" {
+		return fmt.Errorf("delete file: cannot delete %q: %w", path, backend.ErrInvalid)
+	}
+	if err := b.srv.DeleteInstanceFile(instance, path); err != nil {
+		return fmt.Errorf("delete file %q: %w", path, mapErr(err))
+	}
+	return nil
+}
+
+// MakeDirectory creates a root-owned 0755 directory at path (parents must exist).
+func (b *incusBackend) MakeDirectory(_ context.Context, instance, path string) error {
+	err := b.srv.CreateInstanceFile(instance, path, incusclient.InstanceFileArgs{
+		Type: "directory",
+		Mode: 0o755,
+	})
+	if err != nil {
+		return fmt.Errorf("make directory %q: %w", path, mapErr(err))
+	}
+	return nil
+}
+
 // closeAndLogFile closes a file-content reader, logging (not failing) close
 // errors — the content has either been fully consumed or deliberately skipped.
 // The reader is nil for directories (the client returns no body for them).

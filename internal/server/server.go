@@ -27,6 +27,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("GET /partials/sidebar", h.sidebar)
 	mux.HandleFunc("GET /partials/images", h.imagePicker)
 	mux.HandleFunc("GET /partials/operations", h.operationsPanel)
+	mux.HandleFunc("GET /partials/pool-options", h.poolOptions)
 	mux.HandleFunc("GET /images", h.imagesPage)
 	mux.HandleFunc("POST /images/copy", h.copyImage)
 	mux.HandleFunc("POST /images/publish", h.publishImage)

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/backend/fake"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,4 +46,21 @@ func TestMoveInstanceBlankPoolIs400(t *testing.T) {
 func TestMoveInstanceUnknownPoolIs404(t *testing.T) {
 	res := formRequest(t, New(newInstance(t)), "/instances/demo/move", url.Values{"pool": {"ghostpool"}}, false)
 	assertStatus(t, res, http.StatusNotFound)
+}
+
+func TestPoolOptionsPartialListsPools(t *testing.T) {
+	res := request(t, New(fake.New()), "GET", "/partials/pool-options", "", true)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, `<select name="pool"`)
+	assert.Contains(t, body, `value="default"`)
+	assert.Contains(t, body, `value="zfs0"`)
+}
+
+func TestInstanceRowMoveFormLazyLoadsPoolOptions(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	res := request(t, New(b), "GET", "/", "", false)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), `hx-get="/partials/pool-options"`)
 }

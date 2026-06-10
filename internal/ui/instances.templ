@@ -51,6 +51,17 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance) {
 	}
 }
 
+// PoolSelect is the move form's pool dropdown, fetched lazily by each row so
+// the pool list isn't threaded through every InstanceRow render.
+templ PoolSelect(pools []backend.StoragePool) {
+	<select name="pool" class="h-8 w-32 rounded-md border bg-background px-2 text-sm">
+		<option value="">move to pool…</option>
+		for _, p := range pools {
+			<option value={ p.Name }>{ p.Name }</option>
+		}
+	</select>
+}
+
 templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 	@table.Row(table.RowProps{ID: "instance-" + inst.Name}) {
 		@table.Cell() {
@@ -107,7 +118,9 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 						}
 					</form>
 					<form method="post" action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/move") } hx-boost="false" class="flex gap-2">
-						<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="pool" placeholder="move to pool"/>
+						<div hx-get="/partials/pool-options" hx-trigger="intersect once" hx-swap="innerHTML" class="inline-block">
+							<select name="pool" disabled class="h-8 w-32 rounded-md border bg-background px-2 text-sm"><option value="">pools…</option></select>
+						</div>
 						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
 							@icon.Icon("move")(icon.Props{Class: "size-4"})
 							Move

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/ui"
 )
 
 func (h handlers) renameInstance(w http.ResponseWriter, r *http.Request) {
@@ -40,4 +41,15 @@ func (h handlers) moveInstance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirectToInstance(w, r.PathValue("name"))
+}
+
+// poolOptions is the lazily-loaded <select> for the move form: instance rows
+// fetch it on first reveal so the pool list isn't threaded through every row.
+func (h handlers) poolOptions(w http.ResponseWriter, r *http.Request) {
+	pools, err := h.backend.ListStoragePools(r.Context())
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.render(w, r, http.StatusOK, ui.PoolSelect(pools))
 }

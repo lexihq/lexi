@@ -3,6 +3,7 @@ package ui
 import (
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -146,6 +147,13 @@ templ FilesPanel(caps backend.Capabilities, name, dir string, entries []backend.
 							<div class="flex items-center justify-end gap-3">
 								if !e.Dir {
 									<a
+										href={ templ.URL("/instances/" + url.PathEscape(name) + "/files/edit?path=" + url.QueryEscape(childPath(dir, e.Name))) }
+										class="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
+									>
+										@icon.Icon("pencil")(icon.Props{Class: "size-4"})
+										Edit
+									</a>
+									<a
 										href={ templ.URL("/instances/" + url.PathEscape(name) + "/files/download?path=" + url.QueryEscape(childPath(dir, e.Name))) }
 										hx-boost="false"
 										class="inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
@@ -175,6 +183,32 @@ templ FilesPanel(caps backend.Capabilities, name, dir string, entries []backend.
 			<p class="mt-3 text-sm text-muted-foreground">Empty directory.</p>
 		}
 	</div>
+}
+
+// FileEditorPage is the in-browser text editor for one instance file. The
+// hidden mode/uid/gid fields carry the metadata captured at read time, so
+// saving writes the content back without clobbering ownership or mode.
+templ FileEditorPage(caps backend.Capabilities, name, p, content string, info backend.FileInfo) {
+	@Layout(name+" · edit "+p, caps, Nav{Section: NavInstances, Instance: name}) {
+		<div class="mb-4">
+			<a href={ templ.URL("/instances/" + url.PathEscape(name) + "?tab=files") } class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Files</a>
+			<h1 class="mt-2 text-2xl font-semibold">{ p }</h1>
+			<p class="text-sm text-muted-foreground">{ name } · mode { info.Mode } · uid { strconv.FormatInt(info.UID, 10) } · gid { strconv.FormatInt(info.GID, 10) }</p>
+		</div>
+		<form method="post" action={ templ.URL("/instances/" + url.PathEscape(name) + "/files/edit?path=" + url.QueryEscape(p)) } class="max-w-3xl space-y-3">
+			<input type="hidden" name="mode" value={ info.Mode }/>
+			<input type="hidden" name="uid" value={ strconv.FormatInt(info.UID, 10) }/>
+			<input type="hidden" name="gid" value={ strconv.FormatInt(info.GID, 10) }/>
+			<textarea name="content" rows="24" spellcheck="false" class="w-full rounded-md border bg-background p-3 font-mono text-sm">{ content }</textarea>
+			<div class="flex items-center gap-2">
+				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					@icon.Icon("save")(icon.Props{Class: "size-4"})
+					Save
+				}
+				<a href={ templ.URL("/instances/" + url.PathEscape(name) + "?tab=files") } class="text-sm underline-offset-4 hover:underline">Cancel</a>
+			</div>
+		</form>
+	}
 }
 
 // parentDir is the directory one level up, never above the root.

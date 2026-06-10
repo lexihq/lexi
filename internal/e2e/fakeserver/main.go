@@ -9,6 +9,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/backend/fake"
@@ -23,6 +24,12 @@ func main() {
 	b := fake.New()
 	if err := b.CreateInstance(context.Background(), backend.CreateOptions{Name: *instance, Image: "debian/12"}); err != nil {
 		slog.Error("seed instance", "err", err)
+		os.Exit(1)
+	}
+	// A binary file so the e2e suite can assert the editor refuses it.
+	if err := b.PushFile(context.Background(), *instance, "/root/blob.bin",
+		strings.NewReader("\x7fELF\x00\x01\x02"), backend.FileWriteOptions{}); err != nil {
+		slog.Error("seed binary file", "err", err)
 		os.Exit(1)
 	}
 

@@ -5,6 +5,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -167,6 +168,72 @@ func TestMkdirBadNameIs400(t *testing.T) {
 func TestMkdirExistingIs409(t *testing.T) {
 	res := request(t, New(demoFake(t)), "POST", "/instances/demo/files/mkdir?dir=%2F&name=etc", "", true)
 	assertStatus(t, res, http.StatusConflict)
+}
+
+func TestEditFileFormShowsContentAndMetadata(t *testing.T) {
+	b := demoFake(t)
+	require.NoError(t, b.PushFile(t.Context(), "demo", "/root/app.conf", strings.NewReader("key=value\n"),
+		backend.FileWriteOptions{Mode: "0600", UID: 1000, GID: 1000}))
+
+	res := request(t, New(b), "GET", "/instances/demo/files/edit?path=%2Froot%2Fapp.conf", "", false)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, "key=value")
+	assert.Contains(t, body, `name="mode" value="0600"`)
+	assert.Contains(t, body, `name="uid" value="1000"`)
+	assert.Contains(t, body, `name="gid" value="1000"`)
+}
+
+func TestEditFileFormDirectoryIs400(t *testing.T) {
+	res := request(t, New(demoFake(t)), "GET", "/instances/demo/files/edit?path=%2Fetc", "", false)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestEditFileFormSymlinkIs400(t *testing.T) {
+	b := demoFake(t)
+	b.SeedSymlink("demo", "/etc/localtime")
+	res := request(t, New(b), "GET", "/instances/demo/files/edit?path=%2Fetc%2Flocaltime", "", false)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestEditFileFormBinaryIs400(t *testing.T) {
+	b := demoFake(t)
+	require.NoError(t, b.PushFile(t.Context(), "demo", "/root/blob.bin", strings.NewReader("ab\x00cd"),
+		backend.FileWriteOptions{}))
+	res := request(t, New(b), "GET", "/instances/demo/files/edit?path=%2Froot%2Fblob.bin", "", false)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestEditFileFormTooLargeIs400(t *testing.T) {
+	b := demoFake(t)
+	big := strings.Repeat("x", (1<<20)+1)
+	require.NoError(t, b.PushFile(t.Context(), "demo", "/root/big.txt", strings.NewReader(big),
+		backend.FileWriteOptions{}))
+	res := request(t, New(b), "GET", "/instances/demo/files/edit?path=%2Froot%2Fbig.txt", "", false)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestSaveFilePreservesMetadataAndRedirects(t *testing.T) {
+	b := demoFake(t)
+	require.NoError(t, b.PushFile(t.Context(), "demo", "/root/app.conf", strings.NewReader("old\n"),
+		backend.FileWriteOptions{Mode: "0600", UID: 1000, GID: 1000}))
+
+	form := url.Values{"content": {"new\r\ncontents\r\n"}, "mode": {"0600"}, "uid": {"1000"}, "gid": {"1000"}}
+	res := formRequest(t, New(b), "/instances/demo/files/edit?path=%2Froot%2Fapp.conf", form, false)
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Contains(t, res.Header().Get("Location"), "tab=files")
+
+	var buf bytes.Buffer
+	info, err := b.PullFileInfo(t.Context(), "demo", "/root/app.conf", &buf, 0)
+	require.NoError(t, err)
+	assert.Equal(t, "new\ncontents\n", buf.String())
+	assert.Equal(t, backend.FileInfo{Type: "file", Mode: "0600", UID: 1000, GID: 1000}, info)
+}
+
+func TestSaveFileBadOwnershipIs400(t *testing.T) {
+	form := url.Values{"content": {"x"}, "mode": {"0644"}, "uid": {"abc"}, "gid": {"0"}}
+	res := formRequest(t, New(demoFake(t)), "/instances/demo/files/edit?path=%2Fetc%2Fhostname", form, false)
+	assertStatus(t, res, http.StatusBadRequest)
 }
 
 func TestUploadTooLargeIs413(t *testing.T) {

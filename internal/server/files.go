@@ -1,13 +1,16 @@
 package server
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/ui"
@@ -162,6 +165,71 @@ func (h handlers) deleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderFiles(w, r, name, path.Dir(p))
+}
+
+// maxEditableFileBytes caps what the in-browser editor will load (inclusive);
+// larger files must be downloaded instead.
+const maxEditableFileBytes = 1 << 20 // 1 MiB
+
+// editFileForm renders the in-browser editor for a text file: its content in
+// a textarea plus the ownership and mode captured at read time, which the save
+// posts back so the write preserves them.
+func (h handlers) editFileForm(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	p, err := requestPath(r)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	var buf bytes.Buffer
+	info, err := h.backend.PullFileInfo(r.Context(), name, p, &buf, maxEditableFileBytes)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if info.Type != "file" {
+		h.renderError(w, http.StatusBadRequest, fmt.Sprintf("%q is not an editable file", p))
+		return
+	}
+	content := buf.Bytes()
+	if bytes.ContainsRune(content, 0) || !utf8.Valid(content) {
+		h.renderError(w, http.StatusBadRequest, fmt.Sprintf("%q is a binary file; download it instead", p))
+		return
+	}
+	h.renderShell(w, r, http.StatusOK, ui.FileEditorPage(h.backend.Capabilities(), name, p, string(content), info))
+}
+
+// saveFile writes the edited content back with the ownership and mode the
+// editor captured at read time, then redirects to the Files tab.
+func (h handlers) saveFile(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	p, err := requestPath(r)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	uid, err := strconv.ParseInt(r.Form.Get("uid"), 10, 64)
+	if err != nil {
+		h.fail(w, fmt.Errorf("bad uid %q: %w", r.Form.Get("uid"), backend.ErrInvalid))
+		return
+	}
+	gid, err := strconv.ParseInt(r.Form.Get("gid"), 10, 64)
+	if err != nil {
+		h.fail(w, fmt.Errorf("bad gid %q: %w", r.Form.Get("gid"), backend.ErrInvalid))
+		return
+	}
+	// Textareas submit CRLF line endings; instance files are LF.
+	content := strings.ReplaceAll(r.Form.Get("content"), "\r\n", "\n")
+	opts := backend.FileWriteOptions{Mode: r.Form.Get("mode"), UID: uid, GID: gid}
+	if err := h.backend.PushFile(r.Context(), name, p, strings.NewReader(content), opts); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/instances/"+url.PathEscape(name)+"?tab=files", http.StatusSeeOther)
 }
 
 // makeDirectory creates a folder named by the name form value inside the dir

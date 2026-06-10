@@ -760,6 +760,39 @@ test("files tab: create folder, delete file and folder", async ({ page }) => {
   }).toPass({ timeout: 10000 });
 });
 
+test("files tab: edit a text file in the browser", async ({ page }) => {
+  await page.goto("/instances/demo?tab=files");
+  const files = page.locator("#files");
+  await expect(files).toBeVisible();
+  await expect(async () => {
+    await files.getByRole("button", { name: "etc" }).click();
+    await expect(files.getByText("hostname")).toBeVisible({ timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
+  // Open the editor for /etc/hostname; the seeded content holds the instance name.
+  await files
+    .getByRole("row", { name: /hostname/ })
+    .getByRole("link", { name: "Edit" })
+    .click();
+  await expect(page).toHaveURL(/\/files\/edit\?path=%2Fetc%2Fhostname/);
+  const textarea = page.locator('textarea[name="content"]');
+  await expect(textarea).toHaveValue(/demo/);
+
+  // Save new content and land back on the Files tab.
+  await textarea.fill("edited-by-e2e\n");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page).toHaveURL(/tab=files/);
+
+  // Re-open: the edit persisted.
+  await page.goto("/instances/demo/files/edit?path=%2Fetc%2Fhostname");
+  await expect(page.locator('textarea[name="content"]')).toHaveValue("edited-by-e2e\n");
+
+  // The seeded binary file is refused with a clear message.
+  const res = await page.request.get("/instances/demo/files/edit?path=%2Froot%2Fblob.bin");
+  expect(res.status()).toBe(400);
+  expect(await res.text()).toContain("binary file");
+});
+
 test("server section: overview, config apply, warning delete", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Server", exact: true }).click();

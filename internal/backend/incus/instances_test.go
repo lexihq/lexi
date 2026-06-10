@@ -60,6 +60,12 @@ func TestCreateRequestZeroOptionsSendNoOverrides(t *testing.T) {
 	assert.Nil(t, req.Profiles, "empty profiles keep the daemon default")
 	assert.Nil(t, req.Devices, "no device overrides without pool/network")
 	assert.Nil(t, req.Config)
+
+	// A non-nil empty slice must also stay unset: the daemon applies the
+	// default profile only for nil, while [] means "no profiles at all".
+	req, err = createRequest(backend.CreateOptions{Name: "demo", Image: "debian/12", Profiles: []string{}})
+	require.NoError(t, err)
+	assert.Nil(t, req.Profiles)
 }
 
 func TestLifecycleActionsSendCorrectIncusAction(t *testing.T) {

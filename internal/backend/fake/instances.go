@@ -50,8 +50,12 @@ func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) erro
 		}
 	}
 	if opt.Network != "" {
-		if _, ok := f.networks[opt.Network]; !ok {
+		n, ok := f.networks[opt.Network]
+		if !ok {
 			return notFoundf("network %q", opt.Network)
+		}
+		if !n.Managed {
+			return invalid("network %q is not managed", opt.Network)
 		}
 	}
 	status := "Stopped"

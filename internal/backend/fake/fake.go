@@ -2,6 +2,7 @@ package fake
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -172,12 +173,33 @@ func (f *Fake) Capabilities() backend.Capabilities {
 
 // view materializes the public Instance with an up-to-date snapshot count.
 // Callers must hold the mutex.
+// view materializes an instance with derived fields. Limits mirror the real
+// driver, which reads them from the daemon's expanded config: an instance-local
+// limit wins, else the last assigned profile that sets the key (later profiles
+// override earlier ones). Callers must hold the mutex.
 func (f *Fake) view(in *instance) backend.Instance {
 	out := in.Instance
 	out.Snapshots = len(in.snapshots)
 	out.IPv4 = append([]string(nil), in.IPv4...)
 	out.Profiles = append([]string(nil), in.Profiles...)
+	if out.LimitsCPU == "" {
+		out.LimitsCPU = f.profileConfigValue(in.Profiles, "limits.cpu")
+	}
+	if out.LimitsMemory == "" {
+		out.LimitsMemory = f.profileConfigValue(in.Profiles, "limits.memory")
+	}
 	return out
+}
+
+// profileConfigValue returns key's value from the last profile in override
+// order that sets it, or "". Callers must hold the mutex.
+func (f *Fake) profileConfigValue(profiles []string, key string) string {
+	for _, name := range slices.Backward(profiles) {
+		if v, ok := f.profiles[name].Config[key]; ok {
+			return v
+		}
+	}
+	return ""
 }
 
 func notFound(name string) error {

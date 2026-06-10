@@ -33,6 +33,18 @@ func (b *incusBackend) GetInstance(_ context.Context, name string) (backend.Inst
 }
 
 func (b *incusBackend) CreateInstance(ctx context.Context, opt backend.CreateOptions) error {
+	// The nic device built from opt.Network uses the "network" property, which
+	// only works for managed networks (unmanaged ones need nictype+parent, a
+	// shape this seam doesn't offer); reject unmanaged up front.
+	if opt.Network != "" {
+		n, _, err := b.srv.GetNetwork(opt.Network)
+		if err != nil {
+			return fmt.Errorf("get network %q: %w", opt.Network, mapErr(err))
+		}
+		if !n.Managed {
+			return fmt.Errorf("network %q is not managed: %w", opt.Network, backend.ErrInvalid)
+		}
+	}
 	req, err := createRequest(opt)
 	if err != nil {
 		return err
@@ -216,7 +228,12 @@ func createRequest(opt backend.CreateOptions) (api.InstancesPost, error) {
 	// CLI's -s/-n flags, the pool rides a local "root" disk device and the
 	// network a local "eth0" nic device, both shadowing any profile-supplied
 	// device of the same name. The daemon validates all references.
-	req.Profiles = opt.Profiles
+	//
+	// A zero-length profile list stays unset: the daemon applies the default
+	// profile only when Profiles is nil — an explicit [] means "no profiles".
+	if len(opt.Profiles) > 0 {
+		req.Profiles = opt.Profiles
+	}
 	req.Config = opt.Config
 	if opt.Pool != "" || opt.Network != "" {
 		req.Devices = map[string]map[string]string{}

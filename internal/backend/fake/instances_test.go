@@ -134,10 +134,33 @@ func TestCreateRejectsGhostReferences(t *testing.T) {
 	if err := b.CreateInstance(ctx(), backend.CreateOptions{Name: "c", Image: "x", Network: "ghost"}); !errors.Is(err, backend.ErrNotFound) {
 		t.Fatalf("ghost network: want ErrNotFound, got %v", err)
 	}
+	// The seeded "eth0" network is unmanaged: the nic device shape only works
+	// for managed networks, so the create is refused.
+	if err := b.CreateInstance(ctx(), backend.CreateOptions{Name: "d", Image: "x", Network: "eth0"}); !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("unmanaged network: want ErrInvalid, got %v", err)
+	}
 	// Failed creates must not leave partial instances behind.
 	if _, err := b.GetInstance(ctx(), "a"); !errors.Is(err, backend.ErrNotFound) {
 		t.Fatalf("partial instance a left behind: %v", err)
 	}
+}
+
+func TestInstanceLimitsInheritProfileConfig(t *testing.T) {
+	b := New()
+	require.NoError(t, b.CreateProfile(ctx(), "big", ""))
+	require.NoError(t, b.UpdateProfile(ctx(), "big", "", map[string]string{"limits.cpu": "8", "limits.memory": "8GiB"}, ""))
+	require.NoError(t, b.CreateInstance(ctx(), backend.CreateOptions{Name: "web", Image: "x", Profiles: []string{"default", "big"}}))
+
+	inst, err := b.GetInstance(ctx(), "web")
+	require.NoError(t, err)
+	assert.Equal(t, "8", inst.LimitsCPU, "profile-supplied limits surface on the view")
+	assert.Equal(t, "8GiB", inst.LimitsMemory)
+
+	// An instance-local limit overrides the profile's.
+	require.NoError(t, b.UpdateLimits(ctx(), "web", backend.Limits{CPU: "2", Memory: "8GiB"}))
+	inst, err = b.GetInstance(ctx(), "web")
+	require.NoError(t, err)
+	assert.Equal(t, "2", inst.LimitsCPU)
 }
 
 func TestStartStop(t *testing.T) {

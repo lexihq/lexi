@@ -455,6 +455,10 @@ type Backend interface {
 	// unconditionally.
 	UpdateServerConfig(ctx context.Context, config map[string]string, version string) error
 	ListCertificates(ctx context.Context) ([]Certificate, error)
+	// AddCertificate adds a PEM-encoded certificate to the daemon's trust
+	// store. Data that isn't a PEM CERTIFICATE block is ErrInvalid; the daemon
+	// is authoritative for X.509 validity and the certificate type.
+	AddCertificate(ctx context.Context, name, certType, pemData string) error
 	// ListWarnings returns daemon warnings, newest last-seen first.
 	ListWarnings(ctx context.Context) ([]Warning, error)
 	DeleteWarning(ctx context.Context, uuid string) error

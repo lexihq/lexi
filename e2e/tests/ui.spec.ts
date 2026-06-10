@@ -1,4 +1,6 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // End-to-end coverage of the UI actions that unit/Go tests exercise only at the
 // handler layer: the create flow, list-row actions, snapshots, limits, metrics,
@@ -596,6 +598,20 @@ test("snapshot a custom volume: create, restore, and delete", async ({ page }) =
     await page.locator("#volumes").getByRole("row", { name: /e2e-snapvol/ }).getByRole("button", { name: "Delete" }).click();
     await expect(page.locator("#volumes").getByText("e2e-snapvol")).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
+});
+
+test("server section: add a trusted certificate", async ({ page }) => {
+  const pem = readFileSync(join(__dirname, "..", "fixtures", "client.pem"), "utf8");
+  await page.goto("/server");
+
+  await page.locator('form[action="/server/certificates"] input[name="name"]').fill("e2e-cert");
+  await page.locator('form[action="/server/certificates"] select[name="type"]').selectOption("metrics");
+  await page.locator('textarea[name="certificate"]').fill(pem);
+  await page.getByRole("button", { name: "Add certificate" }).click();
+
+  // Redirects back to /server with the new cert listed. On a reused dev
+  // server the duplicate add 409-toasts instead, but the row still exists.
+  await expect(page.getByRole("cell", { name: "e2e-cert" })).toBeVisible();
 });
 
 test("storage: create and delete a pool; in-use pool can't be deleted", async ({ page }) => {

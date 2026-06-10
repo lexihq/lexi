@@ -2,6 +2,9 @@ package fake
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/pem"
 	"maps"
 	"sort"
 	"strconv"
@@ -51,6 +54,27 @@ func (f *Fake) ListCertificates(_ context.Context) ([]backend.Certificate, error
 	defer f.mu.Unlock()
 
 	return append([]backend.Certificate(nil), f.certificates...), nil
+}
+
+func (f *Fake) AddCertificate(_ context.Context, name, certType, pemData string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	block, _ := pem.Decode([]byte(pemData))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return invalid("certificate %q: not a PEM certificate", name)
+	}
+	sum := sha256.Sum256(block.Bytes)
+	fingerprint := hex.EncodeToString(sum[:])
+	for _, c := range f.certificates {
+		if c.Fingerprint == fingerprint {
+			return conflict("certificate %q already trusted", fingerprint)
+		}
+	}
+	f.certificates = append(f.certificates, backend.Certificate{
+		Name: name, Type: certType, Fingerprint: fingerprint,
+	})
+	return nil
 }
 
 func (f *Fake) ListWarnings(_ context.Context) ([]backend.Warning, error) {

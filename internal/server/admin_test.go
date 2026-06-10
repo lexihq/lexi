@@ -1,9 +1,17 @@
 package server
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"net/http"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend/fake"
 	"github.com/stretchr/testify/assert"
@@ -60,4 +68,60 @@ func TestDeleteWarningRemovesAndReturnsTable(t *testing.T) {
 func TestDeleteWarningGhostIs404(t *testing.T) {
 	res := formRequest(t, New(fake.New()), "/server/warnings/ghost/delete", url.Values{}, true)
 	assertStatus(t, res, http.StatusNotFound)
+}
+
+// adminTestCertPEM generates a self-signed certificate PEM for form posts.
+func adminTestCertPEM(t *testing.T) string {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.CreateCertificate(rand.Reader, &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "lxcon-server-test"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(time.Hour),
+	}, &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "lxcon-server-test"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(time.Hour),
+	}, &key.PublicKey, key)
+	require.NoError(t, err)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+}
+
+func TestAddCertificateAppliesAndRedirects(t *testing.T) {
+	b := fake.New()
+	form := url.Values{"name": {"ci"}, "type": {"metrics"}, "certificate": {adminTestCertPEM(t)}}
+	res := formRequest(t, New(b), "/server/certificates", form, false)
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/server", res.Header().Get("Location"))
+
+	certs, err := b.ListCertificates(t.Context())
+	require.NoError(t, err)
+	var found bool
+	for _, c := range certs {
+		if c.Name == "ci" && c.Type == "metrics" {
+			found = true
+		}
+	}
+	assert.True(t, found, "added certificate missing: %+v", certs)
+}
+
+func TestAddCertificateMissingFieldsIs400(t *testing.T) {
+	res := formRequest(t, New(fake.New()), "/server/certificates",
+		url.Values{"name": {""}, "type": {"client"}, "certificate": {""}}, false)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestAddCertificateBadTypeIs400(t *testing.T) {
+	res := formRequest(t, New(fake.New()), "/server/certificates",
+		url.Values{"name": {"x"}, "type": {"server"}, "certificate": {adminTestCertPEM(t)}}, false)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestAddCertificateBadPEMIs400(t *testing.T) {
+	res := formRequest(t, New(fake.New()), "/server/certificates",
+		url.Values{"name": {"x"}, "type": {"client"}, "certificate": {"garbage"}}, false)
+	assertStatus(t, res, http.StatusBadRequest)
 }

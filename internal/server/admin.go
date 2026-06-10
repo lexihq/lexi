@@ -1,8 +1,11 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
+	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/ui"
 )
 
@@ -44,6 +47,31 @@ func (h handlers) updateServerConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
 	if err := h.backend.UpdateServerConfig(r.Context(), config, r.Form.Get("version")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/server", http.StatusSeeOther)
+}
+
+// addCertificate adds a pasted PEM certificate to the trust store, then
+// redirects to the Server page.
+func (h handlers) addCertificate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(r.Form.Get("name"))
+	certType := r.Form.Get("type")
+	pemData := strings.TrimSpace(r.Form.Get("certificate"))
+	if name == "" || pemData == "" {
+		h.fail(w, fmt.Errorf("certificate name and PEM data are required: %w", backend.ErrInvalid))
+		return
+	}
+	if certType != "client" && certType != "metrics" {
+		h.fail(w, fmt.Errorf("certificate type %q must be client or metrics: %w", certType, backend.ErrInvalid))
+		return
+	}
+	if err := h.backend.AddCertificate(r.Context(), name, certType, pemData); err != nil {
 		h.fail(w, err)
 		return
 	}

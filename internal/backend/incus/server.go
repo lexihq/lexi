@@ -2,6 +2,8 @@ package incus
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"maps"
 	"sort"
@@ -86,6 +88,26 @@ func (b *incusBackend) ListCertificates(_ context.Context) ([]backend.Certificat
 		})
 	}
 	return out, nil
+}
+
+// AddCertificate decodes the pasted PEM and hands the daemon the base64 DER;
+// the daemon is authoritative for X.509 validity and the certificate type.
+func (b *incusBackend) AddCertificate(_ context.Context, name, certType, pemData string) error {
+	block, _ := pem.Decode([]byte(pemData))
+	if block == nil || block.Type != "CERTIFICATE" {
+		return fmt.Errorf("add certificate %q: not a PEM certificate: %w", name, backend.ErrInvalid)
+	}
+	post := api.CertificatesPost{
+		CertificatePut: api.CertificatePut{
+			Name:        name,
+			Type:        certType,
+			Certificate: base64.StdEncoding.EncodeToString(block.Bytes),
+		},
+	}
+	if err := b.srv.CreateCertificate(post); err != nil {
+		return fmt.Errorf("add certificate %q: %w", name, mapErr(err))
+	}
+	return nil
 }
 
 // ListWarnings returns daemon warnings, newest last-seen first.

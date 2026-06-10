@@ -92,6 +92,21 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, con
 					}
 				}
 			}
+			<form method="post" action="/server/certificates" class="mt-4 max-w-xl space-y-2">
+				<h3 class="text-sm font-medium">Add certificate</h3>
+				<div class="flex gap-2">
+					<input name="name" required placeholder="name" class="h-9 w-2/3 rounded-md border bg-background px-3 text-sm"/>
+					<select name="type" class="h-9 w-1/3 rounded-md border bg-background px-3 text-sm">
+						<option value="client">client</option>
+						<option value="metrics">metrics</option>
+					</select>
+				</div>
+				<textarea name="certificate" required rows="5" spellcheck="false" placeholder="-----BEGIN CERTIFICATE-----" class="w-full rounded-md border bg-background p-3 font-mono text-xs"></textarea>
+				@button.Button(button.Props{Type: button.TypeSubmit, Size: button.SizeSm}) {
+					@icon.Icon("plus")(icon.Props{Class: "size-4"})
+					Add certificate
+				}
+			</form>
 		</section>
 		<section class="rounded-lg border bg-card p-4">
 			<h2 class="mb-3 text-lg font-medium">Warnings</h2>

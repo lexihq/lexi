@@ -1,8 +1,18 @@
 package fake
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/hex"
+	"encoding/pem"
 	"errors"
+	"math/big"
 	"testing"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -115,5 +125,70 @@ func TestDeleteWarningGhostIs404(t *testing.T) {
 	err := New().DeleteWarning(ctx(), "no-such-uuid")
 	if !errors.Is(err, backend.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+// testCertPEM generates a self-signed certificate and returns its PEM encoding
+// plus the sha256 fingerprint of the DER bytes.
+func testCertPEM(t *testing.T) (string, string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	tmpl := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "lxcon-test"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	sum := sha256.Sum256(der)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})), hex.EncodeToString(sum[:])
+}
+
+func TestAddCertificateStoresParsedEntry(t *testing.T) {
+	f := New()
+	pemData, fingerprint := testCertPEM(t)
+
+	if err := f.AddCertificate(ctx(), "ci-runner", "client", pemData); err != nil {
+		t.Fatalf("add certificate: %v", err)
+	}
+
+	certs, err := f.ListCertificates(ctx())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	var found *backend.Certificate
+	for i := range certs {
+		if certs[i].Name == "ci-runner" {
+			found = &certs[i]
+		}
+	}
+	if found == nil || found.Type != "client" || found.Fingerprint != fingerprint {
+		t.Fatalf("stored cert mismatch: %+v (want fingerprint %s)", found, fingerprint)
+	}
+}
+
+func TestAddCertificateBadPEMIsInvalid(t *testing.T) {
+	f := New()
+	err := f.AddCertificate(ctx(), "junk", "client", "not a pem")
+	if !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
+	}
+}
+
+func TestAddCertificateDuplicateIsConflict(t *testing.T) {
+	f := New()
+	pemData, _ := testCertPEM(t)
+	if err := f.AddCertificate(ctx(), "one", "client", pemData); err != nil {
+		t.Fatalf("first add: %v", err)
+	}
+	err := f.AddCertificate(ctx(), "two", "client", pemData)
+	if !errors.Is(err, backend.ErrConflict) {
+		t.Fatalf("want ErrConflict, got %v", err)
 	}
 }

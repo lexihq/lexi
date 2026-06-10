@@ -4,10 +4,20 @@ package incus
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/hex"
+	"encoding/pem"
 	"maps"
+	"math/big"
 	"testing"
 	"time"
 
+	"github.com/adam/lxcon/internal/backend"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,4 +99,49 @@ func TestServerAdminRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	_, err = b.ListWarnings(ctx)
 	require.NoError(t, err)
+}
+
+// TestAddCertificateRoundTrip adds a generated self-signed certificate to the
+// trust store, sees it listed, then removes it via the raw client.
+func TestAddCertificateRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	tmpl := x509.Certificate{
+		SerialNumber: big.NewInt(time.Now().UnixNano()),
+		Subject:      pkix.Name{CommonName: "lxcon-integration"},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().Add(time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+	sum := sha256.Sum256(der)
+	fingerprint := hex.EncodeToString(sum[:])
+	pemData := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}))
+	t.Cleanup(func() {
+		if err := b.srv.DeleteCertificate(fingerprint); err != nil {
+			t.Logf("cleanup certificate %s: %v", fingerprint, err)
+		}
+	})
+
+	name := uniqueName("lxcon-cert")
+	require.NoError(t, b.AddCertificate(ctx, name, "metrics", pemData))
+
+	certs, err := b.ListCertificates(ctx)
+	require.NoError(t, err)
+	var found bool
+	for _, c := range certs {
+		if c.Fingerprint == fingerprint {
+			found = true
+			require.Equal(t, name, c.Name)
+			require.Equal(t, "metrics", c.Type)
+		}
+	}
+	require.True(t, found, "added certificate not listed")
+
+	// Garbage is rejected locally; duplicates conflict at the daemon.
+	require.ErrorIs(t, b.AddCertificate(ctx, "junk", "client", "garbage"), backend.ErrInvalid)
+	require.ErrorIs(t, b.AddCertificate(ctx, name, "metrics", pemData), backend.ErrConflict)
 }

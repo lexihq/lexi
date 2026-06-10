@@ -46,6 +46,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /networks/{name}/delete", h.deleteNetwork)
 	mux.HandleFunc("GET /server", h.serverPage)
 	mux.HandleFunc("POST /server/config", h.updateServerConfig)
+	mux.HandleFunc("POST /server/certificates", h.addCertificate)
 	mux.HandleFunc("POST /server/warnings/{uuid}/delete", h.deleteWarning)
 	mux.HandleFunc("GET /storage", h.storagePools)
 	mux.HandleFunc("GET /storage/new", h.poolCreateForm)

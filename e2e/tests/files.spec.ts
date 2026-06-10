@@ -70,10 +70,13 @@ test("files tab: create folder, delete file and folder", async ({ page }) => {
     await expect(files.getByText("inner.txt")).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 
-  // Go up and delete the now-empty folder.
+  // Go up and delete the now-empty folder. Assert on the table row, not the
+  // button role: inside the folder the breadcrumb also renders an "e2e-dir"
+  // button, which would satisfy the check even when the ".." click was lost
+  // to the htmx settle race.
   await expect(async () => {
     await files.getByRole("button", { name: "..", exact: true }).click();
-    await expect(files.getByRole("button", { name: "e2e-dir" })).toBeVisible({ timeout: 1000 });
+    await expect(files.getByRole("row", { name: /e2e-dir/ })).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10000 });
   await expect(async () => {
     await files

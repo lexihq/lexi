@@ -3,7 +3,6 @@ package fake
 import (
 	"context"
 	"fmt"
-	"maps"
 	"sort"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -125,7 +124,7 @@ func (f *Fake) CloneInstance(_ context.Context, src, dst string) error {
 			Image:     from.Image,
 			CreatedAt: f.now(),
 		},
-		files: maps.Clone(from.files),
+		files: cloneFiles(from.files),
 	}
 	f.logOp(fmt.Sprintf("Cloning instance %q to %q", src, dst))
 	return nil

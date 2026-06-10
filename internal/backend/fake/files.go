@@ -4,23 +4,47 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"path"
 	"sort"
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 )
 
+// fakeFile is one node in a fake instance's filesystem: either a directory or
+// a regular file with content. Keys in the instance map are clean absolute
+// paths and every directory is an explicit entry.
+type fakeFile struct {
+	dir     bool
+	content []byte
+	mode    string // e.g. "0644"
+}
+
 // seedFiles is the starter filesystem every fake instance gets, so the Files
-// tab has something to browse. Directories are implied by key prefixes.
-func seedFiles(name string) map[string][]byte {
-	return map[string][]byte{
-		"/etc/hostname":   []byte(name + "\n"),
-		"/etc/os-release": []byte("NAME=\"Fake Linux\"\n"),
-		"/root/.profile":  []byte("# ~/.profile\n"),
+// tab has something to browse. Parent directories are seeded explicitly.
+func seedFiles(name string) map[string]*fakeFile {
+	return map[string]*fakeFile{
+		"/":               {dir: true, mode: "0755"},
+		"/etc":            {dir: true, mode: "0755"},
+		"/root":           {dir: true, mode: "0755"},
+		"/etc/hostname":   {content: []byte(name + "\n"), mode: "0644"},
+		"/etc/os-release": {content: []byte("NAME=\"Fake Linux\"\n"), mode: "0644"},
+		"/root/.profile":  {content: []byte("# ~/.profile\n"), mode: "0644"},
 	}
 }
 
-func (f *Fake) ListFiles(_ context.Context, instance, path string) ([]backend.FileEntry, error) {
+// cloneFiles deep-copies a filesystem map so clones don't share nodes.
+func cloneFiles(src map[string]*fakeFile) map[string]*fakeFile {
+	out := make(map[string]*fakeFile, len(src))
+	for k, v := range src {
+		n := *v
+		n.content = append([]byte(nil), v.content...)
+		out[k] = &n
+	}
+	return out
+}
+
+func (f *Fake) ListFiles(_ context.Context, instance, p string) ([]backend.FileEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -28,41 +52,29 @@ func (f *Fake) ListFiles(_ context.Context, instance, path string) ([]backend.Fi
 	if !ok {
 		return nil, notFound(instance)
 	}
-	path, err := normalizePath(path)
+	p, err := normalizePath(p)
 	if err != nil {
 		return nil, err
 	}
-	if _, ok := in.files[path]; ok {
-		return nil, invalid("%q is a file, not a directory", path)
+	node, ok := in.files[p]
+	if !ok {
+		return nil, notFoundf("directory %q", p)
+	}
+	if !node.dir {
+		return nil, invalid("%q is a file, not a directory", p)
 	}
 
-	prefix := path + "/"
-	if path == "/" {
+	prefix := p + "/"
+	if p == "/" {
 		prefix = "/"
 	}
-	seen := map[string]bool{}
 	var entries []backend.FileEntry
-	for key := range in.files {
+	for key, n := range in.files {
 		rest, ok := strings.CutPrefix(key, prefix)
-		if !ok || rest == "" {
+		if !ok || rest == "" || strings.Contains(rest, "/") {
 			continue
 		}
-		name, deeper := rest, false
-		if before, _, found := strings.Cut(rest, "/"); found {
-			name, deeper = before, true
-		}
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		if deeper {
-			entries = append(entries, backend.FileEntry{Name: name, Dir: true, Mode: "0755"})
-		} else {
-			entries = append(entries, backend.FileEntry{Name: name, Mode: "0644"})
-		}
-	}
-	if len(entries) == 0 && path != "/" {
-		return nil, notFoundf("directory %q", path)
+		entries = append(entries, backend.FileEntry{Name: rest, Dir: n.dir, Mode: n.mode})
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		if entries[i].Dir != entries[j].Dir {
@@ -73,7 +85,7 @@ func (f *Fake) ListFiles(_ context.Context, instance, path string) ([]backend.Fi
 	return entries, nil
 }
 
-func (f *Fake) PullFile(_ context.Context, instance, path string, w io.Writer) error {
+func (f *Fake) PullFile(_ context.Context, instance, p string, w io.Writer) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -81,22 +93,22 @@ func (f *Fake) PullFile(_ context.Context, instance, path string, w io.Writer) e
 	if !ok {
 		return notFound(instance)
 	}
-	path, err := normalizePath(path)
+	p, err := normalizePath(p)
 	if err != nil {
 		return err
 	}
-	content, ok := in.files[path]
+	node, ok := in.files[p]
 	if !ok {
-		if f.impliedDir(in, path) {
-			return invalid("%q is a directory", path)
-		}
-		return notFoundf("file %q", path)
+		return notFoundf("file %q", p)
 	}
-	_, err = io.Copy(w, bytes.NewReader(content))
+	if node.dir {
+		return invalid("%q is a directory", p)
+	}
+	_, err = io.Copy(w, bytes.NewReader(node.content))
 	return err
 }
 
-func (f *Fake) PushFile(_ context.Context, instance, path string, r io.Reader) error {
+func (f *Fake) PushFile(_ context.Context, instance, p string, r io.Reader) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -104,47 +116,37 @@ func (f *Fake) PushFile(_ context.Context, instance, path string, r io.Reader) e
 	if !ok {
 		return notFound(instance)
 	}
-	path, err := normalizePath(path)
+	p, err := normalizePath(p)
 	if err != nil {
 		return err
 	}
-	if path == "/" || f.impliedDir(in, path) {
-		return invalid("%q is a directory", path)
+	if existing, ok := in.files[p]; ok && existing.dir {
+		return invalid("%q is a directory", p)
+	}
+	// sftp semantics: push never creates parents.
+	parent, ok := in.files[path.Dir(p)]
+	if !ok {
+		return notFoundf("directory %q", path.Dir(p))
+	}
+	if !parent.dir {
+		return invalid("%q is a file, not a directory", path.Dir(p))
 	}
 	content, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}
-	if in.files == nil {
-		in.files = map[string][]byte{}
-	}
-	in.files[path] = content
+	in.files[p] = &fakeFile{content: content, mode: "0644"}
 	return nil
-}
-
-// impliedDir reports whether path exists as a directory implied by deeper
-// files. Callers must hold the mutex.
-func (f *Fake) impliedDir(in *instance, path string) bool {
-	prefix := path + "/"
-	if path == "/" {
-		return true
-	}
-	for key := range in.files {
-		if strings.HasPrefix(key, prefix) {
-			return true
-		}
-	}
-	return false
 }
 
 // normalizePath requires an absolute path and strips a trailing slash (except
 // for the root itself).
-func normalizePath(path string) (string, error) {
-	if !strings.HasPrefix(path, "/") {
-		return "", invalid("path %q must be absolute", path)
+func normalizePath(p string) (string, error) {
+	if !strings.HasPrefix(p, "/") {
+		return "", invalid("path %q must be absolute", p)
 	}
-	if path != "/" {
-		path = strings.TrimSuffix(path, "/")
+	if p != "/" {
+		p = strings.TrimSuffix(p, "/")
 	}
-	return path, nil
+	return p, nil
 }

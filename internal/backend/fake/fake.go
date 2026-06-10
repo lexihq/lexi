@@ -21,7 +21,7 @@ type instance struct {
 	snapshots []backend.Snapshot
 	config    map[string]string
 	devices   map[string]map[string]string
-	files     map[string][]byte // path → content; dirs implied by prefixes
+	files     map[string]*fakeFile // clean absolute path → node; dirs are explicit entries
 	// configVersion bumps on every config/device mutation; the
 	// GetInstanceConfig/UpdateDevice version token.
 	configVersion int

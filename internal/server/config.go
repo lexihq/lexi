@@ -126,7 +126,8 @@ func zipConfigPairs(keys, values []string) map[string]string {
 		}
 		v := ""
 		if i < len(values) {
-			v = values[i]
+			// Textareas submit newlines as CRLF; config values are stored LF.
+			v = strings.ReplaceAll(values[i], "\r\n", "\n")
 		}
 		out[k] = v
 	}

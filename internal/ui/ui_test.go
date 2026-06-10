@@ -493,7 +493,7 @@ func TestConfigPanelRendersRows(t *testing.T) {
 	}))
 	assertContains(t, html, `hx-post="/instances/demo/config"`)
 	assertContains(t, html, `value="security.nesting"`)
-	assertContains(t, html, `value="true"`)
+	assertContains(t, html, `>true</textarea>`) // values render as textarea text
 	assertContains(t, html, `name="key"`)
 }
 

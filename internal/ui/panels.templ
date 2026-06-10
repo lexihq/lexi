@@ -164,12 +164,12 @@ templ ConfigPanel(name string, cfg backend.InstanceConfig) {
 				for _, k := range sortedKeys(cfg.Config) {
 					<div class="flex gap-2">
 						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
-						<input name="value" value={ cfg.Config[k] } class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+						<textarea name="value" rows="1" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 text-sm">{ cfg.Config[k] }</textarea>
 					</div>
 				}
 				<div class="flex gap-2">
 					<input name="key" placeholder="key (e.g. security.nesting)" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
-					<input name="value" placeholder="value" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+					<textarea name="value" rows="1" placeholder="value" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 text-sm"></textarea>
 				</div>
 				<p class="text-xs text-muted-foreground">Clear a key and apply to remove it.</p>
 				@button.Button(button.Props{Type: button.TypeSubmit}) {

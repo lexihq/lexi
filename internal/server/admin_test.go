@@ -18,6 +18,7 @@ func TestServerPageRendersAllSections(t *testing.T) {
 	assert.Contains(t, body, "core.https_address")     // config row
 	assert.Contains(t, body, "admin-laptop")           // certificate
 	assert.Contains(t, body, "KVM support is missing") // warning message
+	assert.Contains(t, body, `<textarea name="value"`) // multiline-capable editor
 }
 
 func TestServerConfigApplyReplacesAndRedirects(t *testing.T) {

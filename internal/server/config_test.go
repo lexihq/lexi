@@ -51,6 +51,36 @@ func TestUpdateConfigAppliesAndReturnsPanel(t *testing.T) {
 	assert.Equal(t, "true", cfg.Config["security.nesting"])
 }
 
+func TestConfigPanelValueTextareaEscapesContent(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, b.UpdateInstanceConfig(t.Context(), "demo", map[string]string{
+		"user.user-data": "#cloud-config\npackages:\n  - htop",
+		"user.evil":      "</textarea><script>boom()</script>",
+	}))
+	res := request(t, New(b), "GET", "/instances/demo/config", "", true)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, `<textarea name="value"`)
+	// Multiline value rendered as element text, newlines intact.
+	assert.Contains(t, body, "#cloud-config\npackages:\n  - htop")
+	// A value containing a closing tag must be escaped, not break out.
+	assert.Contains(t, body, "&lt;/textarea&gt;")
+	assert.NotContains(t, body, "<script>boom()")
+}
+
+func TestUpdateConfigMultilineValueRoundTrips(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	// Browsers submit textarea newlines as CRLF; stored values must be LF.
+	res := formRequest(t, New(b), "/instances/demo/config",
+		url.Values{"key": {"user.user-data"}, "value": {"#cloud-config\r\nruncmd:\r\n  - ls"}}, true)
+	assertStatus(t, res, http.StatusOK)
+	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "#cloud-config\nruncmd:\n  - ls", cfg.Config["user.user-data"])
+}
+
 func TestConfigPanelUnknownInstanceIs404(t *testing.T) {
 	b := fake.New()
 	res := request(t, New(b), "GET", "/instances/ghost/config", "", true)

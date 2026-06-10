@@ -39,13 +39,13 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, con
 				for _, k := range sortedKeys(config) {
 					<div class="flex gap-2">
 						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
-						<input name="value" value={ config[k] } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+						<textarea name="value" rows="1" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm">{ config[k] }</textarea>
 					</div>
 				}
 				for i := 0; i < 3; i++ {
 					<div class="flex gap-2">
 						<input name="key" placeholder="user.mykey" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
-						<input name="value" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+						<textarea name="value" rows="1" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm"></textarea>
 					</div>
 				}
 				@button.Button(button.Props{Type: button.TypeSubmit}) {

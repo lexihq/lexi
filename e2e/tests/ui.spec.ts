@@ -354,7 +354,7 @@ test("edit instance config in the Configuration tab", async ({ page }) => {
 
   // Add a key via the trailing blank row.
   await config.locator('input[name="key"]').last().fill("security.nesting");
-  await config.locator('input[name="value"]').last().fill("true");
+  await config.locator('textarea[name="value"]').last().fill("true");
   await Promise.all([
     page.waitForResponse(
       (r) => r.request().method() === "POST" && r.url().includes("/instances/demo/config"),
@@ -372,6 +372,31 @@ test("edit instance config in the Configuration tab", async ({ page }) => {
     page.locator("#config").getByRole("button", { name: "Apply config" }).click(),
   ]);
   await expect(page.locator('#config input[value="security.nesting"]')).toHaveCount(0);
+});
+
+test("config values support multiline (cloud-init)", async ({ page }) => {
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Configuration" }).click();
+  const config = page.locator("#config");
+
+  await config.locator('input[name="key"]').last().fill("user.user-data");
+  await config
+    .locator('textarea[name="value"]')
+    .last()
+    .fill("#cloud-config\npackages:\n  - htop");
+  await Promise.all([
+    page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().includes("/instances/demo/config"),
+    ),
+    config.getByRole("button", { name: "Apply config" }).click(),
+  ]);
+
+  // The re-rendered panel keeps all three lines in the value textarea.
+  const row = page.locator('#config input[value="user.user-data"]');
+  await expect(row).toBeVisible();
+  await expect(
+    page.locator("#config textarea", { hasText: "#cloud-config" }).first(),
+  ).toHaveValue("#cloud-config\npackages:\n  - htop");
 });
 
 test("add and remove a proxy device in the Devices tab", async ({ page }) => {
@@ -609,7 +634,7 @@ test("server section: overview, config apply, warning delete", async ({ page }) 
 
   // Add a user.* key in the first blank row and apply (plain form + redirect).
   await page.locator('input[name="key"]').nth(1).fill("user.e2e");
-  await page.locator('input[name="value"]').nth(1).fill("yes");
+  await page.locator('textarea[name="value"]').nth(1).fill("yes");
   await page.getByRole("button", { name: "Apply config" }).click();
   await expect(page).toHaveURL(/\/server$/);
   await expect(page.locator('input[value="user.e2e"]')).toBeVisible();

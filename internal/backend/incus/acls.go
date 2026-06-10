@@ -49,38 +49,44 @@ func (b *incusBackend) CreateNetworkACL(_ context.Context, name, description str
 	return nil
 }
 
-// UpdateNetworkACL replaces the ACL's description and rule lists conditionally
-// on version (the GetNetworkACL etag; 412 → ErrConflict). An empty version
-// updates unconditionally. UpdateNetworkACL is synchronous.
+// UpdateNetworkACL replaces the ACL's description and rule lists via
+// GET-preserve-PUT, so the ACL's Config map is never dropped. The version is
+// the GetNetworkACL etag (412 → ErrConflict); an empty version updates
+// unconditionally. UpdateNetworkACL is synchronous.
 func (b *incusBackend) UpdateNetworkACL(_ context.Context, name, description string, ingress, egress []backend.NetworkACLRule, version string) error {
-	put := api.NetworkACLPut{
-		Description: description,
-		Ingress:     toAPIRules(ingress),
-		Egress:      toAPIRules(egress),
+	acl, _, err := b.srv.GetNetworkACL(name)
+	if err != nil {
+		return fmt.Errorf("get network ACL %q: %w", name, mapErr(err))
 	}
+	put := acl.Writable()
+	put.Description = description
+	put.Ingress = toAPIRules(ingress)
+	put.Egress = toAPIRules(egress)
 	if err := b.srv.UpdateNetworkACL(name, put, version); err != nil {
 		return fmt.Errorf("update network ACL %q: %w", name, mapErr(err))
 	}
 	return nil
 }
 
-// RenameNetworkACL renames an ACL. The target name is pre-checked so a
-// collision is a deterministic ErrConflict.
+// RenameNetworkACL renames an ACL. The source is pre-checked for use (the
+// daemon refuses renaming an attached ACL with an untyped error) and the
+// target name for collisions, so both surface as clean sentinels.
 func (b *incusBackend) RenameNetworkACL(ctx context.Context, name, newName string) error {
+	acl, _, err := b.srv.GetNetworkACL(name)
+	if err != nil {
+		return fmt.Errorf("get network ACL %q: %w", name, mapErr(err))
+	}
+	if n := len(acl.UsedBy); n > 0 {
+		return fmt.Errorf("network ACL %q is in use by %d object(s): %w", name, n, backend.ErrConflict)
+	}
 	acls, err := b.ListNetworkACLs(ctx)
 	if err != nil {
 		return err
 	}
-	var sourceExists, targetTaken bool
 	for _, a := range acls {
-		sourceExists = sourceExists || a.Name == name
-		targetTaken = targetTaken || a.Name == newName
-	}
-	if !sourceExists {
-		return fmt.Errorf("network ACL %q: %w", name, backend.ErrNotFound)
-	}
-	if targetTaken {
-		return fmt.Errorf("network ACL %q already exists: %w", newName, backend.ErrConflict)
+		if a.Name == newName {
+			return fmt.Errorf("network ACL %q already exists: %w", newName, backend.ErrConflict)
+		}
 	}
 	if err := b.srv.RenameNetworkACL(name, api.NetworkACLPost{Name: newName}); err != nil {
 		return fmt.Errorf("rename network ACL %q: %w", name, mapErr(err))
@@ -99,6 +105,12 @@ func (b *incusBackend) DeleteNetworkACL(_ context.Context, name string) error {
 		return fmt.Errorf("network ACL %q is in use by %d object(s): %w", name, n, backend.ErrConflict)
 	}
 	if err := b.srv.DeleteNetworkACL(name); err != nil {
+		// An attachment racing the UsedBy pre-check surfaces as the daemon's
+		// untyped "Cannot delete an ACL that is in use"; map it like the
+		// pre-check would.
+		if strings.Contains(err.Error(), "in use") {
+			return fmt.Errorf("network ACL %q is in use: %w", name, backend.ErrConflict)
+		}
 		return fmt.Errorf("delete network ACL %q: %w", name, mapErr(err))
 	}
 	return nil

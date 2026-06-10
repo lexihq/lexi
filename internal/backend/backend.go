@@ -117,7 +117,7 @@ type Network struct {
 // membership in NetworkACL.Ingress vs NetworkACL.Egress (the Incus API has no
 // direction field). Rules are order-independent.
 type NetworkACLRule struct {
-	Action          string // allow | reject | drop
+	Action          string // allow | allow-stateless | reject | drop
 	Source          string
 	Destination     string
 	Protocol        string // tcp | udp | icmp4 | icmp6 | "" (any)

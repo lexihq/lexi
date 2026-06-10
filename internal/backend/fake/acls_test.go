@@ -18,6 +18,8 @@ func TestNetworkACLCRUDRoundTrip(t *testing.T) {
 	require.NoError(t, f.CreateNetworkACL(ctx(), "web", "web traffic"))
 	require.ErrorIs(t, f.CreateNetworkACL(ctx(), "web", ""), backend.ErrConflict)
 	require.ErrorIs(t, f.CreateNetworkACL(ctx(), "bad name", ""), backend.ErrInvalid)
+	require.ErrorIs(t, f.CreateNetworkACL(ctx(), "@reserved", ""), backend.ErrInvalid)
+	require.ErrorIs(t, f.CreateNetworkACL(ctx(), "under_score", ""), backend.ErrInvalid)
 
 	acl, err := f.GetNetworkACL(ctx(), "web")
 	require.NoError(t, err)
@@ -67,6 +69,9 @@ func TestNetworkACLDeleteRefusedWhenReferenced(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, acl.UsedBy, "/1.0/networks/incusbr0")
 	require.ErrorIs(t, f.DeleteNetworkACL(ctx(), "web"), backend.ErrConflict)
+
+	// An attached ACL also cannot be renamed, like the daemon.
+	require.ErrorIs(t, f.RenameNetworkACL(ctx(), "web", "web2"), backend.ErrConflict)
 
 	// Detach and delete cleanly.
 	delete(cfg, "security.acls")

@@ -64,6 +64,8 @@ func TestNetworkACLAddAndDeleteRule(t *testing.T) {
 	assertStatus(t, stale, http.StatusConflict)
 	bad := formRequest(t, New(b), "/network-acls/web/rules", url.Values{"direction": {"sideways"}}, true)
 	assertStatus(t, bad, http.StatusBadRequest)
+	noToken := formRequest(t, New(b), "/network-acls/web/rules", url.Values{"direction": {"ingress"}, "action": {"allow"}}, true)
+	assertStatus(t, noToken, http.StatusBadRequest)
 
 	res = formRequest(t, New(b), "/network-acls/web/rules/delete", url.Values{
 		"direction": {"ingress"}, "index": {"0"}, "version": {acl.Version},

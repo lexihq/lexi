@@ -5,6 +5,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -37,7 +38,7 @@ func (f *Fake) CreateNetworkACL(_ context.Context, name, description string) err
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if !validAPIName(name) {
+	if !validACLName(name) {
 		return invalid("invalid network ACL name %q", name)
 	}
 	if _, ok := f.acls[name]; ok {
@@ -76,7 +77,11 @@ func (f *Fake) RenameNetworkACL(_ context.Context, name, newName string) error {
 	if !ok {
 		return notFoundf("network ACL %q", name)
 	}
-	if !validAPIName(newName) {
+	// Incus parity: the daemon refuses renaming an attached ACL.
+	if used := f.aclUsedBy(name); len(used) > 0 {
+		return conflict("network ACL %q is in use", name)
+	}
+	if !validACLName(newName) {
 		return invalid("invalid network ACL name %q", newName)
 	}
 	if _, exists := f.acls[newName]; exists {
@@ -125,4 +130,24 @@ func (f *Fake) aclUsedBy(name string) []string {
 	}
 	sort.Strings(used)
 	return used
+}
+
+// validACLName mirrors the daemon's acl.ValidName: an API name that does not
+// start with the reserved port-selector characters and is hostname-shaped (so
+// rules can tell an ACL reference from an IP).
+func validACLName(name string) bool {
+	if !validAPIName(name) {
+		return false
+	}
+	if strings.HasPrefix(name, "@") || strings.HasPrefix(name, "%") || strings.HasPrefix(name, "#") {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-':
+		default:
+			return false
+		}
+	}
+	return !strings.HasPrefix(name, "-") && !strings.HasSuffix(name, "-")
 }

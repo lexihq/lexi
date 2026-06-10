@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -55,6 +56,24 @@ func (h handlers) createNetwork(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/networks", http.StatusSeeOther)
+}
+
+// updateNetwork applies the network editor: description plus key/value rows
+// that replace the network's config (instance-config-editor semantics). The
+// hidden version field carries the token the form was rendered from, so a
+// concurrent change conflicts (409) instead of being silently overwritten.
+func (h handlers) updateNetwork(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := r.PathValue("name")
+	config := zipConfigPairs(r.Form["key"], r.Form["value"])
+	if err := h.backend.UpdateNetwork(r.Context(), name, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/networks/"+url.PathEscape(name), http.StatusSeeOther)
 }
 
 // deleteNetwork removes a network, then re-renders the list table on HTMX.

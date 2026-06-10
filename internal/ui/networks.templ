@@ -89,18 +89,48 @@ templ NetworkDetailPage(caps backend.Capabilities, n backend.Network) {
 				}
 			</p>
 		</div>
-		<section class="mb-8 rounded-lg border bg-card p-4">
-			<h2 class="mb-3 text-lg font-medium">Config</h2>
-			if len(n.Config) == 0 {
-				<p class="text-sm text-muted-foreground">No config keys.</p>
-			} else {
-				<dl class="grid gap-2 text-sm sm:grid-cols-2">
+		if n.Managed {
+			<section class="mb-8 rounded-lg border bg-card p-4">
+				<h2 class="mb-1 text-lg font-medium">Config</h2>
+				<p class="mb-3 text-sm text-muted-foreground">Clearing a key's name removes it on apply.</p>
+				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/networks/%s/config", n.Name)) } class="max-w-xl space-y-2">
+					<input type="hidden" name="version" value={ n.Version }/>
+					<div>
+						<label class="mb-1 block text-sm font-medium">Description</label>
+						<input name="description" value={ n.Description } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+					</div>
 					for _, k := range sortedKeys(n.Config) {
-						<div><dt class="text-muted-foreground">{ k }</dt><dd>{ n.Config[k] }</dd></div>
+						<div class="flex gap-2">
+							<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+							<input name="value" value={ n.Config[k] } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+						</div>
 					}
-				</dl>
-			}
-		</section>
+					for i := 0; i < 3; i++ {
+						<div class="flex gap-2">
+							<input name="key" placeholder="ipv4.nat" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+							<input name="value" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+						</div>
+					}
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						@icon.Icon("check")(icon.Props{Class: "size-4"})
+						Apply config
+					}
+				</form>
+			</section>
+		} else {
+			<section class="mb-8 rounded-lg border bg-card p-4">
+				<h2 class="mb-3 text-lg font-medium">Config</h2>
+				if len(n.Config) == 0 {
+					<p class="text-sm text-muted-foreground">No config keys.</p>
+				} else {
+					<dl class="grid gap-2 text-sm sm:grid-cols-2">
+						for _, k := range sortedKeys(n.Config) {
+							<div><dt class="text-muted-foreground">{ k }</dt><dd>{ n.Config[k] }</dd></div>
+						}
+					</dl>
+				}
+			</section>
+		}
 		<section class="rounded-lg border bg-card p-4">
 			<h2 class="mb-3 text-lg font-medium">Used by</h2>
 			if len(n.UsedBy) == 0 {

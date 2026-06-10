@@ -418,6 +418,19 @@ test("create and delete a network in the Networks section", async ({ page }) => 
   await expect(page.locator("#networks-table").getByText("e2e-net")).toHaveCount(0);
 });
 
+test("edit a managed network's description and config", async ({ page }) => {
+  await page.goto("/networks/incusbr0");
+  await page.locator('input[name="description"]').fill("edited by e2e");
+  // Blank key rows are appended after the existing config rows.
+  await page.locator('input[name="key"]').last().fill("user.e2e");
+  await page.locator('input[name="value"]').last().fill("yes");
+  await page.getByRole("button", { name: "Apply config" }).click();
+
+  await expect(page).toHaveURL(/\/networks\/incusbr0$/);
+  await expect(page.locator('input[name="description"]')).toHaveValue("edited by e2e");
+  await expect(page.locator('input[name="key"][value="user.e2e"]')).toBeVisible();
+});
+
 test("create and delete a custom volume in the Storage section", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Storage" }).click();

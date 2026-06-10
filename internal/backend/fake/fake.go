@@ -46,10 +46,10 @@ type Fake struct {
 	// Get/Update version token (missing key reads as 0).
 	networkVersions map[string]int
 	pools           map[string]*storagePool
-	images    map[string]*backend.LocalImage // keyed by fingerprint
-	ops       []backend.Operation            // newest first, capped at maxOps
-	opSeq     int
-	clock     time.Time
+	images          map[string]*backend.LocalImage // keyed by fingerprint
+	ops             []backend.Operation            // newest first, capped at maxOps
+	opSeq           int
+	clock           time.Time
 
 	serverConfig        map[string]string
 	serverConfigVersion int // bumped per update; the Get/Update version token

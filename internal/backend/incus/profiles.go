@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
@@ -73,6 +74,11 @@ func (b *incusBackend) DeleteProfile(_ context.Context, name string) error {
 		return fmt.Errorf("profile %q is in use by %d instance(s): %w", name, n, backend.ErrConflict)
 	}
 	if err := b.srv.DeleteProfile(name); err != nil {
+		// An attach racing the UsedBy pre-check surfaces here as the daemon's
+		// untyped "in use" error; map it to the same conflict the pre-check gives.
+		if strings.Contains(err.Error(), "in use") {
+			return fmt.Errorf("profile %q is in use: %w", name, backend.ErrConflict)
+		}
 		return fmt.Errorf("delete profile %q: %w", name, mapErr(err))
 	}
 	return nil

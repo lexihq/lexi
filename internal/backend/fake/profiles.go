@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -38,6 +39,10 @@ func (f *Fake) CreateProfile(_ context.Context, name, description string) error 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
+	// Incus parity: API object names exclude whitespace and path separators.
+	if strings.ContainsAny(name, " \t\n/") {
+		return invalid("invalid profile name %q", name)
+	}
 	if _, ok := f.profiles[name]; ok {
 		return conflict("profile %q already exists", name)
 	}

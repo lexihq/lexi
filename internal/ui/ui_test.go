@@ -564,3 +564,11 @@ func assertActiveTab(t *testing.T, html, label string) {
 		t.Fatalf("tab %q is not active (missing border-primary): %q", label, tag)
 	}
 }
+
+func TestProfileDetailEscapesNameInActionURLs(t *testing.T) {
+	html := render(t, ProfileDetailPage(backend.Capabilities{}, backend.Profile{
+		Name: "a#b", Config: map[string]string{},
+	}))
+	assertContains(t, html, `action="/profiles/a%23b/config"`)
+	assertContains(t, html, `action="/profiles/a%23b/delete"`)
+}

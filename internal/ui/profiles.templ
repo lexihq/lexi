@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"sort"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -71,7 +72,7 @@ templ ProfileDetailPage(caps backend.Capabilities, p backend.Profile) {
 				}
 			</div>
 			if p.Name != "default" {
-				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/profiles/%s/delete", p.Name)) }>
+				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/profiles/%s/delete", url.PathEscape(p.Name))) }>
 					@button.Button(button.Props{Variant: button.VariantDestructive, Type: button.TypeSubmit}) {
 						@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 						Delete
@@ -82,7 +83,7 @@ templ ProfileDetailPage(caps backend.Capabilities, p backend.Profile) {
 		<section class="mb-8 rounded-lg border bg-card p-4">
 			<h2 class="mb-1 text-lg font-medium">Config</h2>
 			<p class="mb-3 text-sm text-muted-foreground">Clearing a key's name removes it on apply. Devices are not affected.</p>
-			<form method="post" action={ templ.SafeURL(fmt.Sprintf("/profiles/%s/config", p.Name)) } class="max-w-xl space-y-2">
+			<form method="post" action={ templ.SafeURL(fmt.Sprintf("/profiles/%s/config", url.PathEscape(p.Name))) } class="max-w-xl space-y-2">
 				<input type="hidden" name="version" value={ p.Version }/>
 				<div>
 					<label class="mb-1 block text-sm font-medium">Description</label>

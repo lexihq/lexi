@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
@@ -93,7 +94,7 @@ templ NetworkDetailPage(caps backend.Capabilities, n backend.Network) {
 			<section class="mb-8 rounded-lg border bg-card p-4">
 				<h2 class="mb-1 text-lg font-medium">Config</h2>
 				<p class="mb-3 text-sm text-muted-foreground">Clearing a key's name removes it on apply.</p>
-				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/networks/%s/config", n.Name)) } class="max-w-xl space-y-2">
+				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/networks/%s/config", url.PathEscape(n.Name))) } class="max-w-xl space-y-2">
 					<input type="hidden" name="version" value={ n.Version }/>
 					<div>
 						<label class="mb-1 block text-sm font-medium">Description</label>

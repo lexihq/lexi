@@ -113,3 +113,10 @@ func TestDeleteProfileInUseConflicts(t *testing.T) {
 	require.NoError(t, f.SetInstanceProfiles(ctx(), "demo", []string{"default", "web"}))
 	require.ErrorIs(t, f.DeleteProfile(ctx(), "web"), backend.ErrConflict)
 }
+
+func TestCreateProfileInvalidNameIsInvalid(t *testing.T) {
+	f := New()
+	// Incus parity: API object names exclude whitespace and path separators.
+	require.ErrorIs(t, f.CreateProfile(ctx(), "has space", ""), backend.ErrInvalid)
+	require.ErrorIs(t, f.CreateProfile(ctx(), "a/b", ""), backend.ErrInvalid)
+}

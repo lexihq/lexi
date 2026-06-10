@@ -13,21 +13,59 @@ import (
 // link to the full-page terminal.
 templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, profiles []backend.Profile, tab string) {
 	@Layout(inst.Name, caps, Nav{Section: NavInstances, Instance: inst.Name}) {
-		<div class="mb-6 flex items-start justify-between gap-4">
-			<div>
-				<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>
-				<h1 class="mt-2 text-2xl font-semibold">{ inst.Name }</h1>
-				<p class="text-muted-foreground">{ inst.Status }</p>
-			</div>
+		@InstanceHeader(caps, inst)
+		@InstanceBody(caps, inst, snapshots, profiles, tab)
+	}
+}
+
+// InstanceHeader is the detail page's name/status block plus lifecycle
+// controls. The buttons post with ?from=header and swap this fragment in
+// place, so state changes update the header without leaving the page.
+templ InstanceHeader(caps backend.Capabilities, inst backend.Instance) {
+	{{ post := func(action string) string { return "/instances/" + url.PathEscape(inst.Name) + "/" + action + "?from=header" } }}
+	<div id="instance-header" class="mb-6 flex items-start justify-between gap-4">
+		<div>
+			<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>
+			<h1 class="mt-2 text-2xl font-semibold">{ inst.Name }</h1>
+			<p class="text-muted-foreground">{ inst.Status }</p>
+		</div>
+		<div class="flex flex-wrap justify-end gap-2">
+			if inst.Status != "Running" && inst.Status != "Frozen" {
+				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("start"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
+					@icon.Icon("circle-play")(icon.Props{Class: "size-4"})
+					Start
+				}
+			}
+			if inst.Status == "Running" || inst.Status == "Frozen" {
+				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("stop"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
+					@icon.Icon("circle-stop")(icon.Props{Class: "size-4"})
+					Stop
+				}
+			}
+			@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("restart"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
+				@icon.Icon("rotate-cw")(icon.Props{Class: "size-4"})
+				Restart
+			}
+			if caps.Pause && inst.Status == "Running" {
+				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("pause"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
+					@icon.Icon("pause")(icon.Props{Class: "size-4"})
+					Pause
+				}
+			}
+			if caps.Pause && inst.Status == "Frozen" {
+				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("resume"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
+					@icon.Icon("play")(icon.Props{Class: "size-4"})
+					Resume
+				}
+			}
 			if caps.Backup {
-				@button.Button(button.Props{Href: "/instances/" + inst.Name + "/export", Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-boost": "false"}}) {
+				@button.Button(button.Props{Size: button.SizeSm, Href: "/instances/" + inst.Name + "/export", Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-boost": "false"}}) {
 					@icon.Icon("download")(icon.Props{Class: "size-4"})
 					Export
 				}
 			}
 		</div>
-		@InstanceBody(caps, inst, snapshots, profiles, tab)
-	}
+	</div>
 }
 
 // InstanceBody is the swappable tab bar + active-tab content. HTMX tab links

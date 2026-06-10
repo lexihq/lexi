@@ -28,6 +28,12 @@ func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, action 
 		return
 	}
 	if isHTMX(r) {
+		// Detail-header buttons post with ?from=header and swap the header
+		// fragment in place; list-row buttons swap their row.
+		if r.URL.Query().Get("from") == "header" {
+			h.render(w, r, http.StatusOK, ui.InstanceHeader(h.backend.Capabilities(), inst))
+			return
+		}
 		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(), inst))
 		return
 	}

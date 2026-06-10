@@ -2,6 +2,7 @@ package server
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -148,4 +149,35 @@ func TestDetailTabReturnsFragmentForHXAndFullPageOtherwise(t *testing.T) {
 	assert.Contains(t, strings.ToLower(boostedBody), "<!doctype")
 	assert.Contains(t, boostedBody, "/partials/sidebar")
 	assert.Contains(t, boostedBody, `id="instance-body"`)
+}
+
+func TestInstanceDetailHeaderHasLifecycleControls(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	res := request(t, New(b), "GET", "/instances/demo", "", false)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, `id="instance-header"`)
+	// Stopped instance: Start + Restart in the header, posting back to the header.
+	assert.Contains(t, body, `hx-post="/instances/demo/start?from=header"`)
+	assert.Contains(t, body, `hx-target="#instance-header"`)
+}
+
+func TestLifecycleActionFromHeaderReturnsHeaderFragment(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	res := formRequest(t, New(b), "/instances/demo/start?from=header", url.Values{}, true)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, `id="instance-header"`)
+	assert.Contains(t, body, "Running")
+	assert.NotContains(t, body, "<tr") // header fragment, not the list row
+}
+
+func TestLifecycleActionWithoutHeaderStillReturnsRow(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	res := formRequest(t, New(b), "/instances/demo/start", url.Values{}, true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), `id="instance-demo"`) // the table row
 }

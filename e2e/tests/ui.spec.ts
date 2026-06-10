@@ -84,6 +84,21 @@ test("create page arch and type filters narrow the image list", async ({ page })
   await expect(results).not.toContainText("alpine/edge");
 });
 
+test("detail header lifecycle controls update status in place", async ({ page }) => {
+  await page.goto("/instances/demo");
+  const header = page.locator("#instance-header");
+  await expect(header.getByText("Stopped")).toBeVisible(); // seeded state
+
+  // Start from the header: status flips without a navigation.
+  await header.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(header.getByText("Running")).toBeVisible();
+  await expect(page).toHaveURL(/\/instances\/demo$/);
+
+  // Stop again so later tests see the seeded state.
+  await header.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect(header.getByText("Stopped")).toBeVisible();
+});
+
 test("logs panel refresh button re-fetches the console log", async ({ page }) => {
   await page.goto("/instances/demo");
   // The Logs panel now lives behind the Logs tab; opening it mounts #logs.

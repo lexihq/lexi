@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/stretchr/testify/assert"
@@ -16,7 +17,10 @@ import (
 // and asserts it is a non-empty gzip stream (the requested compression).
 func TestExportInstanceProducesTarball(t *testing.T) {
 	b := newBackend(t)
-	ctx := context.Background()
+	// Deadline so a daemon death mid-backup fails in minutes, not at TCP's
+	// ~5-minute give-up (observed as a 326s hang on a memory-tight host).
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 	name := uniqueName("export")
 	t.Cleanup(func() { cleanupInstance(t, b, name) })
 

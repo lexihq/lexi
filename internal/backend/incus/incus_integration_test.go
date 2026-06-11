@@ -17,11 +17,23 @@ const testImage = "alpine/edge"
 
 func newBackend(t *testing.T) *incusBackend {
 	t.Helper()
-	b, err := New()
-	if err != nil {
-		t.Fatalf("New: %v", err)
+	// Retry briefly: on a memory-tight host the daemon can get OOM-killed by a
+	// previous test's load and takes a few seconds to come back. Without the
+	// retry one daemon restart cascades into instant connect-EOF failures for
+	// every remaining test, hiding the real culprit.
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			time.Sleep(2 * time.Second)
+		}
+		b, err := New()
+		if err == nil {
+			return b
+		}
+		lastErr = err
 	}
-	return b
+	t.Fatalf("New: %v", lastErr)
+	return nil
 }
 
 func uniqueName(prefix string) string {
@@ -45,10 +57,7 @@ func cleanupInstance(t *testing.T, b *incusBackend, name string) {
 }
 
 func TestConnect(t *testing.T) {
-	b, err := New()
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
+	b := newBackend(t)
 	caps := b.Capabilities()
 	if caps.Tier != backend.TierIncus {
 		t.Fatalf("want tier %q, got %q", backend.TierIncus, caps.Tier)

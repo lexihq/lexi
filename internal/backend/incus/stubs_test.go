@@ -125,6 +125,10 @@ type instanceServerStub struct {
 	updatedServerEtag string         // etag captured by UpdateServer
 	resources         *api.Resources // returned by GetServerResources
 	certificates      []api.Certificate
+	certificate       *api.Certificate    // returned by GetCertificate
+	certificateEtag   string              // etag returned by GetCertificate
+	updatedCert       *api.CertificatePut // captured by UpdateCertificate
+	updatedCertEtag   string              // etag captured by UpdateCertificate
 	warnings          []api.Warning
 	deletedWarning    string // captured by DeleteWarning
 }
@@ -145,6 +149,16 @@ func (s *instanceServerStub) GetServerResources() (*api.Resources, error) {
 
 func (s *instanceServerStub) GetCertificates() ([]api.Certificate, error) {
 	return s.certificates, s.serverErr
+}
+
+func (s *instanceServerStub) GetCertificate(fingerprint string) (*api.Certificate, string, error) {
+	return s.certificate, s.certificateEtag, s.serverErr
+}
+
+func (s *instanceServerStub) UpdateCertificate(fingerprint string, put api.CertificatePut, etag string) error {
+	s.updatedCert = &put
+	s.updatedCertEtag = etag
+	return s.serverErr
 }
 
 func (s *instanceServerStub) GetWarnings() ([]api.Warning, error) {

@@ -385,6 +385,7 @@ func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 		NetworkForwards: true,
 		ImageRefresh:    true,
 		StoredBackups:   true,
+		CertificateEdit: true,
 	}
 }
 

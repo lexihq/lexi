@@ -90,6 +90,9 @@ type Capabilities struct {
 	// ImageRefresh is on-demand re-pull of images from their update source
 	// (Incus extension "image_force_refresh").
 	ImageRefresh bool
+	// CertificateEdit is rename + project restriction on trusted certificates
+	// (Incus extensions "certificate_update" + "certificate_project").
+	CertificateEdit bool
 }
 
 // Instance is a system container or virtual machine.
@@ -308,6 +311,7 @@ type Certificate struct {
 	Type        string // client | metrics | ...
 	Fingerprint string
 	Restricted  bool
+	Projects    []string // projects the cert is limited to when Restricted
 }
 
 // Warning is a daemon warning (e.g. a config problem Incus noticed).
@@ -816,6 +820,10 @@ type Backend interface {
 	// DeleteCertificate removes a certificate from the trust store by its
 	// fingerprint. An unknown fingerprint is ErrNotFound.
 	DeleteCertificate(ctx context.Context, fingerprint string) error
+	// UpdateCertificate renames a trusted certificate and sets its project
+	// restriction. When restricted, the cert is limited to the given projects.
+	// An empty name is ErrInvalid; an unknown fingerprint is ErrNotFound.
+	UpdateCertificate(ctx context.Context, fingerprint, name string, restricted bool, projects []string) error
 	// ListWarnings returns daemon warnings, newest last-seen first.
 	ListWarnings(ctx context.Context) ([]Warning, error)
 	DeleteWarning(ctx context.Context, uuid string) error

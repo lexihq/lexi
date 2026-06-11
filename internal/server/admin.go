@@ -99,6 +99,33 @@ func (h handlers) deleteCertificate(w http.ResponseWriter, r *http.Request) {
 	h.renderCertificates(w, r)
 }
 
+// updateCertificate renames a trusted certificate and sets its project
+// restriction, then re-renders the certificates table on HTMX. Projects are
+// a comma-separated list and only apply when restricted.
+func (h handlers) updateCertificate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := strings.TrimSpace(r.Form.Get("name"))
+	if name == "" {
+		h.fail(w, fmt.Errorf("certificate name is required: %w", backend.ErrInvalid))
+		return
+	}
+	restricted := r.Form.Get("restricted") == "on"
+	var projects []string
+	for p := range strings.SplitSeq(r.Form.Get("projects"), ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			projects = append(projects, p)
+		}
+	}
+	if err := h.backend.UpdateCertificate(r.Context(), r.PathValue("fingerprint"), name, restricted, projects); err != nil {
+		h.fail(w, err)
+		return
+	}
+	h.renderCertificates(w, r)
+}
+
 func (h handlers) renderCertificates(w http.ResponseWriter, r *http.Request) {
 	if !isHTMX(r) {
 		http.Redirect(w, r, "/server", http.StatusSeeOther)
@@ -109,7 +136,7 @@ func (h handlers) renderCertificates(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.render(w, r, http.StatusOK, ui.CertificatesTable(certs))
+	h.render(w, r, http.StatusOK, ui.CertificatesTable(h.backend.Capabilities(r.Context()), certs))
 }
 
 // deleteWarning removes a warning, then re-renders the warnings table on HTMX.

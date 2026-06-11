@@ -90,6 +90,27 @@ func (f *Fake) DeleteCertificate(ctx context.Context, fingerprint string) error 
 	return notFoundf("certificate %q", fingerprint)
 }
 
+func (f *Fake) UpdateCertificate(ctx context.Context, fingerprint, name string, restricted bool, projects []string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if name == "" {
+		return invalid("certificate name is required")
+	}
+	for i, c := range f.remote(ctx).certificates {
+		if c.Fingerprint == fingerprint {
+			f.remote(ctx).certificates[i].Name = name
+			f.remote(ctx).certificates[i].Restricted = restricted
+			if !restricted {
+				projects = nil
+			}
+			f.remote(ctx).certificates[i].Projects = append([]string(nil), projects...)
+			return nil
+		}
+	}
+	return notFoundf("certificate %q", fingerprint)
+}
+
 func (f *Fake) ListWarnings(ctx context.Context) ([]backend.Warning, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

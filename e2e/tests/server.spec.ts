@@ -27,6 +27,42 @@ test("server section: add then remove a trusted certificate", async ({ page }) =
   }).toPass({ timeout: 10000 });
 });
 
+test("server section: edit a trusted certificate (rename + restrict)", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
+  const pem = readFileSync(join(__dirname, "..", "fixtures", "cert-edit.pem"), "utf8");
+  await page.goto("/server");
+
+  // Add a dedicated cert to edit. On a reused dev server the duplicate add
+  // 409-toasts instead, but a row matching /e2e-cert-edit/ still exists
+  // (possibly already renamed by an earlier run).
+  await page.locator('form[action="/server/certificates"] input[name="name"]').fill("e2e-cert-edit");
+  await page.locator('form[action="/server/certificates"] select[name="type"]').selectOption("client");
+  await page.locator('textarea[name="certificate"]').fill(pem);
+  await page.getByRole("button", { name: "Add certificate" }).click();
+
+  const certs = page.locator("#certificates");
+  const row = certs.getByRole("row", { name: /e2e-cert-edit/ });
+  await expect(row).toBeVisible();
+
+  // Open the row's Edit form, rename and restrict to a project, and save:
+  // the #certificates table swaps in place with the new name and badge.
+  await row.getByText("Edit", { exact: true }).click();
+  await row.locator('input[name="name"]').fill("e2e-cert-edited");
+  await row.locator('input[name="restricted"]').check();
+  await row.locator('input[name="projects"]').fill("default");
+  await row.getByRole("button", { name: "Save" }).click();
+
+  const edited = certs.getByRole("row", { name: /e2e-cert-edited/ });
+  await expect(edited).toBeVisible();
+  await expect(edited.getByText("restricted")).toBeVisible();
+
+  // Clean up so reruns against a reused dev server start from a known state.
+  await expect(async () => {
+    await certs.getByRole("row", { name: /e2e-cert-edit/ }).getByRole("button", { name: "Delete" }).click();
+    await expect(certs.getByText("e2e-cert-edit")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});
+
 test("server section: acknowledge a warning", async ({ page }) => {
   await page.goto("/server");
   const warnings = page.locator("#warnings");

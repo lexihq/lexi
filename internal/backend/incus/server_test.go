@@ -81,6 +81,59 @@ func TestListCertificatesMaps(t *testing.T) {
 	assert.True(t, got[0].Restricted)
 }
 
+func TestListCertificatesMapsProjects(t *testing.T) {
+	b := &incusBackend{srv: &instanceServerStub{certificates: []api.Certificate{{
+		CertificatePut: api.CertificatePut{Name: "ci", Type: "client", Restricted: true, Projects: []string{"default", "dev"}},
+		Fingerprint:    "abc123",
+	}}}}
+
+	got, err := b.ListCertificates(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, []string{"default", "dev"}, got[0].Projects)
+}
+
+func TestUpdateCertificateSendsEtagAndKeepsTypeAndCert(t *testing.T) {
+	srv := &instanceServerStub{certificate: &api.Certificate{
+		CertificatePut: api.CertificatePut{Name: "old", Type: "metrics", Certificate: "base64der"},
+		Fingerprint:    "abc123",
+	}, certificateEtag: "cert-etag"}
+	b := &incusBackend{srv: srv}
+
+	require.NoError(t, b.UpdateCertificate(context.Background(), "abc123", "renamed", true, []string{"dev"}))
+
+	require.NotNil(t, srv.updatedCert)
+	// Type and the certificate body must survive the read-modify-write; only
+	// name/restriction change.
+	assert.Equal(t, "renamed", srv.updatedCert.Name)
+	assert.Equal(t, "metrics", srv.updatedCert.Type)
+	assert.Equal(t, "base64der", srv.updatedCert.Certificate)
+	assert.True(t, srv.updatedCert.Restricted)
+	assert.Equal(t, []string{"dev"}, srv.updatedCert.Projects)
+	assert.Equal(t, "cert-etag", srv.updatedCertEtag, "update must send the read etag")
+}
+
+func TestUpdateCertificateUnrestrictClearsProjects(t *testing.T) {
+	srv := &instanceServerStub{certificate: &api.Certificate{
+		CertificatePut: api.CertificatePut{Name: "ci", Type: "client", Restricted: true, Projects: []string{"dev"}},
+		Fingerprint:    "abc123",
+	}}
+	b := &incusBackend{srv: srv}
+
+	require.NoError(t, b.UpdateCertificate(context.Background(), "abc123", "ci", false, []string{"dev"}))
+
+	require.NotNil(t, srv.updatedCert)
+	assert.False(t, srv.updatedCert.Restricted)
+	assert.Empty(t, srv.updatedCert.Projects)
+}
+
+func TestUpdateCertificateEmptyNameIsInvalid(t *testing.T) {
+	b := &incusBackend{srv: &instanceServerStub{}}
+	err := b.UpdateCertificate(context.Background(), "abc123", "", false, nil)
+	require.ErrorIs(t, err, backend.ErrInvalid)
+}
+
 func TestListWarningsMapsAndSortsNewestFirst(t *testing.T) {
 	older := time.Date(2026, time.February, 1, 0, 0, 0, 0, time.UTC)
 	newer := older.Add(time.Hour)

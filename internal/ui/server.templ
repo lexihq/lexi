@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
@@ -54,7 +55,7 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, con
 		</section>
 		<section class="mb-8 rounded-lg border bg-card p-4">
 			<h2 class="mb-3 text-lg font-medium">Trusted certificates</h2>
-			@CertificatesTable(certs)
+			@CertificatesTable(caps, certs)
 			<form method="post" action="/server/certificates" class="mt-4 max-w-xl space-y-2">
 				<h3 class="text-sm font-medium">Add certificate</h3>
 				<div class="flex gap-2">
@@ -79,8 +80,8 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, con
 }
 
 // CertificatesTable is the swappable trust-store list (re-rendered in place by
-// delete).
-templ CertificatesTable(certs []backend.Certificate) {
+// edit and delete).
+templ CertificatesTable(caps backend.Capabilities, certs []backend.Certificate) {
 	<div id="certificates">
 		if len(certs) == 0 {
 			<p class="text-sm text-muted-foreground">No trusted certificates.</p>
@@ -100,6 +101,22 @@ templ CertificatesTable(certs []backend.Certificate) {
 						@table.Row() {
 							@table.Cell() {
 								{ c.Name }
+								if caps.CertificateEdit {
+									<details class="mt-1">
+										<summary class="cursor-pointer text-xs text-muted-foreground">Edit</summary>
+										<form hx-post={ "/server/certificates/" + url.PathEscape(c.Fingerprint) + "/update" } hx-target="#certificates" hx-swap="outerHTML" class="mt-1 space-y-1">
+											<input name="name" required value={ c.Name } placeholder="name" class="h-7 w-full rounded border bg-background px-2 text-xs"/>
+											<label class="flex items-center gap-1.5 text-xs" title="Limit this certificate to the listed projects">
+												<input type="checkbox" name="restricted" checked?={ c.Restricted }/>
+												Restrict to projects
+											</label>
+											<input name="projects" value={ strings.Join(c.Projects, ", ") } placeholder="default, dev" class="h-7 w-full rounded border bg-background px-2 text-xs" title="Comma-separated project names; only used when restricted"/>
+											@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+												Save
+											}
+										</form>
+									</details>
+								}
 							}
 							@table.Cell() {
 								{ c.Type }
@@ -109,7 +126,7 @@ templ CertificatesTable(certs []backend.Certificate) {
 							}
 							@table.Cell() {
 								if c.Restricted {
-									<span class="rounded bg-accent px-1.5 py-0.5 text-xs">restricted</span>
+									<span class="rounded bg-accent px-1.5 py-0.5 text-xs" title={ "Projects: " + strings.Join(c.Projects, ", ") }>restricted</span>
 								} else {
 									<span class="text-xs text-muted-foreground">full</span>
 								}

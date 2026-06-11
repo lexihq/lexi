@@ -85,6 +85,7 @@ func (b *incusBackend) ListCertificates(ctx context.Context) ([]backend.Certific
 			Type:        c.Type,
 			Fingerprint: c.Fingerprint,
 			Restricted:  c.Restricted,
+			Projects:    c.Projects,
 		})
 	}
 	return out, nil
@@ -114,6 +115,31 @@ func (b *incusBackend) AddCertificate(ctx context.Context, name, certType, pemDa
 func (b *incusBackend) DeleteCertificate(ctx context.Context, fingerprint string) error {
 	if err := b.server(ctx).DeleteCertificate(fingerprint); err != nil {
 		return fmt.Errorf("delete certificate %q: %w", fingerprint, mapErr(err))
+	}
+	return nil
+}
+
+// UpdateCertificate renames a trusted certificate and sets its project
+// restriction via read-modify-write: the cert body and type are preserved and
+// the read etag makes the update conditional on no concurrent change.
+func (b *incusBackend) UpdateCertificate(ctx context.Context, fingerprint, name string, restricted bool, projects []string) error {
+	if name == "" {
+		return fmt.Errorf("certificate name is required: %w", backend.ErrInvalid)
+	}
+	cert, etag, err := b.server(ctx).GetCertificate(fingerprint)
+	if err != nil {
+		return fmt.Errorf("get certificate %q: %w", fingerprint, mapErr(err))
+	}
+	put := cert.Writable()
+	put.Name = name
+	put.Restricted = restricted
+	if restricted {
+		put.Projects = projects
+	} else {
+		put.Projects = nil
+	}
+	if err := b.server(ctx).UpdateCertificate(fingerprint, put, etag); err != nil {
+		return fmt.Errorf("update certificate %q: %w", fingerprint, mapErr(err))
 	}
 	return nil
 }

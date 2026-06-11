@@ -147,6 +147,33 @@ func TestAddCertificateRoundTrip(t *testing.T) {
 	require.ErrorIs(t, b.AddCertificate(ctx, "junk", "client", "garbage"), backend.ErrInvalid)
 	require.ErrorIs(t, b.AddCertificate(ctx, name, "metrics", pemData), backend.ErrConflict)
 
+	// UpdateCertificate renames and restricts to a project, then unrestricting
+	// clears the project list. A ghost fingerprint is ErrNotFound.
+	renamed := name + "-renamed"
+	require.NoError(t, b.UpdateCertificate(ctx, fingerprint, renamed, true, []string{"default"}))
+	certs, err = b.ListCertificates(ctx)
+	require.NoError(t, err)
+	found = false
+	for _, c := range certs {
+		if c.Fingerprint == fingerprint {
+			found = true
+			require.Equal(t, renamed, c.Name)
+			require.True(t, c.Restricted)
+			require.Equal(t, []string{"default"}, c.Projects)
+		}
+	}
+	require.True(t, found, "renamed certificate not listed")
+	require.NoError(t, b.UpdateCertificate(ctx, fingerprint, renamed, false, nil))
+	certs, err = b.ListCertificates(ctx)
+	require.NoError(t, err)
+	for _, c := range certs {
+		if c.Fingerprint == fingerprint {
+			require.False(t, c.Restricted)
+			require.Empty(t, c.Projects)
+		}
+	}
+	require.ErrorIs(t, b.UpdateCertificate(ctx, strings.Repeat("0", 64), "ghost", false, nil), backend.ErrNotFound)
+
 	// DeleteCertificate removes it from the trust store; a ghost is ErrNotFound.
 	require.NoError(t, b.DeleteCertificate(ctx, fingerprint))
 	certs, err = b.ListCertificates(ctx)

@@ -11,6 +11,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"math/big"
+	"slices"
 	"testing"
 	"time"
 
@@ -215,6 +216,83 @@ func TestDeleteCertificateRemovesByFingerprint(t *testing.T) {
 
 func TestDeleteCertificateGhostIs404(t *testing.T) {
 	err := New().DeleteCertificate(ctx(), "no-such-fingerprint")
+	if !errors.Is(err, backend.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestUpdateCertificateRenamesAndRestricts(t *testing.T) {
+	f := New()
+	pemData, fingerprint := testCertPEM(t)
+	if err := f.AddCertificate(ctx(), "ci-runner", "client", pemData); err != nil {
+		t.Fatalf("add certificate: %v", err)
+	}
+
+	if err := f.UpdateCertificate(ctx(), fingerprint, "ci-runner-2", true, []string{"default", "dev"}); err != nil {
+		t.Fatalf("update certificate: %v", err)
+	}
+
+	certs, err := f.ListCertificates(ctx())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	var found *backend.Certificate
+	for i := range certs {
+		if certs[i].Fingerprint == fingerprint {
+			found = &certs[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("certificate %s missing after update", fingerprint)
+	}
+	if found.Name != "ci-runner-2" || !found.Restricted || !slices.Equal(found.Projects, []string{"default", "dev"}) {
+		t.Fatalf("updated cert mismatch: %+v", found)
+	}
+}
+
+func TestUpdateCertificateUnrestrictClearsProjects(t *testing.T) {
+	f := New()
+	pemData, fingerprint := testCertPEM(t)
+	if err := f.AddCertificate(ctx(), "ci-runner", "client", pemData); err != nil {
+		t.Fatalf("add certificate: %v", err)
+	}
+	if err := f.UpdateCertificate(ctx(), fingerprint, "ci-runner", true, []string{"default"}); err != nil {
+		t.Fatalf("restrict: %v", err)
+	}
+
+	if err := f.UpdateCertificate(ctx(), fingerprint, "ci-runner", false, nil); err != nil {
+		t.Fatalf("unrestrict: %v", err)
+	}
+
+	certs, err := f.ListCertificates(ctx())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, c := range certs {
+		if c.Fingerprint == fingerprint {
+			if c.Restricted || len(c.Projects) != 0 {
+				t.Fatalf("want unrestricted with no projects, got %+v", c)
+			}
+			return
+		}
+	}
+	t.Fatalf("certificate %s missing after update", fingerprint)
+}
+
+func TestUpdateCertificateEmptyNameIsInvalid(t *testing.T) {
+	f := New()
+	pemData, fingerprint := testCertPEM(t)
+	if err := f.AddCertificate(ctx(), "ci-runner", "client", pemData); err != nil {
+		t.Fatalf("add certificate: %v", err)
+	}
+	err := f.UpdateCertificate(ctx(), fingerprint, "", false, nil)
+	if !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
+	}
+}
+
+func TestUpdateCertificateGhostIs404(t *testing.T) {
+	err := New().UpdateCertificate(ctx(), "no-such-fingerprint", "name", false, nil)
 	if !errors.Is(err, backend.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}

@@ -150,6 +150,69 @@ func TestDeleteCertificateGhostIs404(t *testing.T) {
 	assertStatus(t, res, http.StatusNotFound)
 }
 
+func TestUpdateCertificateRenamesAndReturnsTable(t *testing.T) {
+	b := fake.New()
+	certs, err := b.ListCertificates(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, certs)
+	fingerprint := certs[0].Fingerprint
+
+	form := url.Values{"name": {"renamed"}, "restricted": {"on"}, "projects": {"default, dev"}}
+	res := formRequest(t, New(b), "/server/certificates/"+fingerprint+"/update", form, true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), `id="certificates"`)
+
+	after, err := b.ListCertificates(t.Context())
+	require.NoError(t, err)
+	var found bool
+	for _, c := range after {
+		if c.Fingerprint == fingerprint {
+			found = true
+			assert.Equal(t, "renamed", c.Name)
+			assert.True(t, c.Restricted)
+			assert.Equal(t, []string{"default", "dev"}, c.Projects)
+		}
+	}
+	require.True(t, found, "certificate missing after update: %+v", after)
+}
+
+func TestUpdateCertificateUnrestrictedIgnoresProjects(t *testing.T) {
+	b := fake.New()
+	certs, err := b.ListCertificates(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, certs)
+	fingerprint := certs[0].Fingerprint
+
+	form := url.Values{"name": {certs[0].Name}, "projects": {"default"}}
+	res := formRequest(t, New(b), "/server/certificates/"+fingerprint+"/update", form, true)
+	assertStatus(t, res, http.StatusOK)
+
+	after, err := b.ListCertificates(t.Context())
+	require.NoError(t, err)
+	for _, c := range after {
+		if c.Fingerprint == fingerprint {
+			assert.False(t, c.Restricted)
+			assert.Empty(t, c.Projects)
+		}
+	}
+}
+
+func TestUpdateCertificateEmptyNameIs400(t *testing.T) {
+	b := fake.New()
+	certs, err := b.ListCertificates(t.Context())
+	require.NoError(t, err)
+	require.NotEmpty(t, certs)
+	res := formRequest(t, New(b), "/server/certificates/"+certs[0].Fingerprint+"/update",
+		url.Values{"name": {""}}, true)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestUpdateCertificateGhostIs404(t *testing.T) {
+	res := formRequest(t, New(fake.New()), "/server/certificates/ghost/update",
+		url.Values{"name": {"x"}}, true)
+	assertStatus(t, res, http.StatusNotFound)
+}
+
 func TestAckWarningFlipsStatusAndReturnsTable(t *testing.T) {
 	b := fake.New()
 	res := formRequest(t, New(b), "/server/warnings/fake-warning-1/ack", url.Values{}, true)

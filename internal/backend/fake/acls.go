@@ -119,8 +119,9 @@ func (f *Fake) aclView(name string) backend.NetworkACL {
 	return acl
 }
 
-// aclUsedBy lists API paths of networks referencing the ACL via security.acls,
-// mirroring the daemon's UsedBy. Callers must hold the mutex.
+// aclUsedBy lists API paths of networks, instances, and profiles referencing
+// the ACL via security.acls (network config or NIC device config), mirroring
+// the daemon's UsedBy. Callers must hold the mutex.
 func (f *Fake) aclUsedBy(name string) []string {
 	var used []string
 	for netName, n := range f.networks {
@@ -128,8 +129,29 @@ func (f *Fake) aclUsedBy(name string) []string {
 			used = append(used, "/1.0/networks/"+netName)
 		}
 	}
+	for instName, inst := range f.instances {
+		if devicesReferenceACL(inst.devices, name) {
+			used = append(used, "/1.0/instances/"+instName)
+		}
+	}
+	for profName, p := range f.profiles {
+		if devicesReferenceACL(p.Devices, name) {
+			used = append(used, "/1.0/profiles/"+profName)
+		}
+	}
 	sort.Strings(used)
 	return used
+}
+
+// devicesReferenceACL reports whether any nic device lists the ACL in its
+// security.acls config.
+func devicesReferenceACL(devices map[string]map[string]string, name string) bool {
+	for _, dev := range devices {
+		if dev["type"] == "nic" && slices.Contains(splitCommaList(dev["security.acls"]), name) {
+			return true
+		}
+	}
+	return false
 }
 
 // validACLName mirrors the daemon's acl.ValidName: an API name that does not

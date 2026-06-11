@@ -53,6 +53,49 @@ test("backend errors surface as a toast", async ({ page }) => {
   await expect(page).toHaveURL(/\/networks\/new$/);
 });
 
+test("network ACLs: attach to an instance NIC, in-use guard, detach", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
+
+  // Create the ACL.
+  await page.goto("/network-acls");
+  await page.locator('input[name="name"]').fill("e2e-nic-acl");
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page).toHaveURL(/\/network-acls\/e2e-nic-acl$/);
+
+  // Attach it via a nic device on the demo instance.
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Devices" }).click();
+  const devices = page.locator("#devices");
+  const nicForm = devices.locator('details:has-text("Add nic")');
+  await nicForm.locator("summary").click();
+  await nicForm.locator('input[name="device"]').fill("aclnic");
+  await nicForm.locator('input[name="network"]').fill("incusbr0");
+  await nicForm.locator('input[name="security.acls"]').fill("e2e-nic-acl");
+  await nicForm.getByRole("button", { name: "Add nic" }).click();
+  await expect(devices.getByText("aclnic", { exact: true })).toBeVisible();
+
+  // The ACL now reports the attachment; the Delete button is disabled while
+  // anything references it.
+  await page.goto("/network-acls/e2e-nic-acl");
+  await expect(page.getByText(/In use by 1 object/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete", exact: true })).toBeDisabled();
+
+  // Detach (remove the device), then the delete goes through.
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Devices" }).click();
+  await expect(async () => {
+    await devices.getByRole("button", { name: "Remove" }).click();
+    await expect(devices.getByText("aclnic", { exact: true })).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+
+  await page.goto("/network-acls/e2e-nic-acl");
+  await expect(async () => {
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page).toHaveURL(/\/network-acls$/, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+  await expect(page.getByRole("link", { name: "e2e-nic-acl" })).toHaveCount(0);
+});
+
 test("network ACLs: create, add rule, remove rule, rename, delete", async ({ page }) => {
   page.on("dialog", (d) => d.accept());
   await page.goto("/networks");

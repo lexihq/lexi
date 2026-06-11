@@ -189,7 +189,7 @@ var DeviceTypes = []struct {
 	Fields []string
 }{
 	{"disk", []string{"source", "path", "pool"}},
-	{"nic", []string{"network", "name", "nictype"}},
+	{"nic", []string{"network", "name", "nictype", "security.acls"}},
 	{"gpu", []string{"gputype", "id", "pci"}},
 	{"proxy", []string{"listen", "connect", "bind"}},
 	{"tpm", []string{"path"}},

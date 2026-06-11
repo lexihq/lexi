@@ -54,6 +54,35 @@ func TestNetworkACLCRUDRoundTrip(t *testing.T) {
 	require.ErrorIs(t, f.DeleteNetworkACL(ctx(), "ghost"), backend.ErrNotFound)
 }
 
+func TestNetworkACLUsedByIncludesNICAttachments(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateNetworkACL(ctx(), "web", ""))
+
+	// Attach via an instance NIC device and a profile NIC device; both count
+	// as users, like the daemon's UsedBy.
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "c1", Image: "alpine/edge"}))
+	require.NoError(t, f.AddDevice(ctx(), "c1", "eth1", map[string]string{
+		"type": "nic", "network": "incusbr0", "security.acls": "web,other",
+	}))
+	require.NoError(t, f.AddProfileDevice(ctx(), "gpu", "eth1", map[string]string{
+		"type": "nic", "network": "incusbr0", "security.acls": "web",
+	}))
+
+	acl, err := f.GetNetworkACL(ctx(), "web")
+	require.NoError(t, err)
+	assert.Contains(t, acl.UsedBy, "/1.0/instances/c1")
+	assert.Contains(t, acl.UsedBy, "/1.0/profiles/gpu")
+
+	// NIC attachments block rename and delete, mirroring network attachments.
+	require.ErrorIs(t, f.RenameNetworkACL(ctx(), "web", "web2"), backend.ErrConflict)
+	require.ErrorIs(t, f.DeleteNetworkACL(ctx(), "web"), backend.ErrConflict)
+
+	// Detaching both frees the ACL.
+	require.NoError(t, f.RemoveDevice(ctx(), "c1", "eth1"))
+	require.NoError(t, f.RemoveProfileDevice(ctx(), "gpu", "eth1"))
+	require.NoError(t, f.DeleteNetworkACL(ctx(), "web"))
+}
+
 func TestNetworkACLDeleteRefusedWhenReferenced(t *testing.T) {
 	f := New()
 	require.NoError(t, f.CreateNetworkACL(ctx(), "web", ""))

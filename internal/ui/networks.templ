@@ -51,11 +51,7 @@ templ NetworksTable(networks []backend.Network) {
 			}
 			@table.Body() {
 				if len(networks) == 0 {
-					@table.Row() {
-						@table.Cell(table.CellProps{Attributes: templ.Attributes{"colspan": "5"}}) {
-							<span class="text-muted-foreground">No networks yet.</span>
-						}
-					}
+					@emptyRow("5", "No networks yet.")
 				}
 				for _, n := range networks {
 					@table.Row() {

@@ -29,11 +29,7 @@ templ ProfilesPage(caps backend.Capabilities, profiles []backend.Profile) {
 			}
 			@table.Body() {
 				if len(profiles) == 0 {
-					@table.Row() {
-						@table.Cell(table.CellProps{Attributes: templ.Attributes{"colspan": "3"}}) {
-							<span class="text-muted-foreground">No profiles yet.</span>
-						}
-					}
+					@emptyRow("3", "No profiles yet.")
 				}
 				for _, p := range profiles {
 					@table.Row() {

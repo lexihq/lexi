@@ -33,11 +33,7 @@ templ StoragePoolsPage(caps backend.Capabilities, pools []backend.StoragePool) {
 			}
 			@table.Body() {
 				if len(pools) == 0 {
-					@table.Row() {
-						@table.Cell(table.CellProps{Attributes: templ.Attributes{"colspan": "3"}}) {
-							<span class="text-muted-foreground">No storage pools yet.</span>
-						}
-					}
+					@emptyRow("3", "No storage pools yet.")
 				}
 				for _, p := range pools {
 					@table.Row() {
@@ -204,6 +200,9 @@ templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
 				}
 			}
 			@table.Body() {
+				if len(vols) == 0 {
+					@emptyRow("4", "No volumes yet.")
+				}
 				for _, v := range vols {
 					{{ ev := url.PathEscape(v.Name) }}
 					@table.Row() {
@@ -308,6 +307,9 @@ templ StorageVolumeSnapshotsTable(pool, volume string, snapshots []backend.Stora
 				}
 			}
 			@table.Body() {
+				if len(snapshots) == 0 {
+					@emptyRow("3", "No snapshots yet.")
+				}
 				for _, snap := range snapshots {
 					{{ es := url.PathEscape(snap.Name) }}
 					@table.Row() {

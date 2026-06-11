@@ -58,11 +58,7 @@ templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, curren
 			}
 			@table.Body() {
 				if len(projects) == 0 {
-					@table.Row() {
-						@table.Cell(table.CellProps{Attributes: templ.Attributes{"colspan": "4"}}) {
-							<span class="text-muted-foreground">No projects yet.</span>
-						}
-					}
+					@emptyRow("4", "No projects yet.")
 				}
 				for _, p := range projects {
 					@table.Row() {

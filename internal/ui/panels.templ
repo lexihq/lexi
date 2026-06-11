@@ -43,6 +43,9 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 				}
 			}
 			@table.Body() {
+				if len(snapshots) == 0 {
+					@emptyRow("4", "No snapshots yet.")
+				}
 				for _, snap := range snapshots {
 					{{ es := url.PathEscape(snap.Name) }}
 					@table.Row() {
@@ -93,7 +96,10 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 // the snapshots tab and re-rendered in place on submit.
 templ SnapshotScheduleForm(name string, schedule backend.SnapshotSchedule) {
 	{{ en := url.PathEscape(name) }}
-	<section id="snapshot-schedule" class="rounded-lg border bg-card p-4">
+	{{ /* mt-4 must live here, not only on the lazy-load placeholder: the hx
+	swap is outerHTML, so this section replaces the placeholder and its
+	margin. */ }}
+	<section id="snapshot-schedule" class="mt-4 rounded-lg border bg-card p-4">
 		<h2 class="mb-3 text-lg font-medium">Snapshot schedule</h2>
 		<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/schedule") } hx-post={ "/instances/" + en + "/snapshots/schedule" } hx-target="#snapshot-schedule" hx-swap="outerHTML" class="flex flex-wrap items-end gap-3">
 			<label class="text-sm">

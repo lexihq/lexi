@@ -55,11 +55,7 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, poo
 			}
 			@table.Body() {
 				if len(instances) == 0 {
-					@table.Row() {
-						@table.Cell(table.CellProps{Attributes: templ.Attributes{"colspan": "5"}}) {
-							<span class="text-muted-foreground">No instances yet — create one to get started.</span>
-						}
-					}
+					@emptyRow("5", "No instances yet — create one to get started.")
 				}
 				for _, inst := range instances {
 					@InstanceRow(caps, inst)
@@ -225,6 +221,16 @@ func deleteAttrs(name string) templ.Attributes {
 	attrs := instanceActionAttrs(name, "delete")
 	attrs["hx-confirm"] = "Delete instance " + name + "?"
 	return attrs
+}
+
+// emptyRow is the shared table empty state: one muted full-width row shown
+// instead of bare headers when a list has nothing in it.
+templ emptyRow(colspan, message string) {
+	@table.Row() {
+		@table.Cell(table.CellProps{Attributes: templ.Attributes{"colspan": colspan}}) {
+			<span class="text-muted-foreground">{ message }</span>
+		}
+	}
 }
 
 func statusDotClass(status string) string {

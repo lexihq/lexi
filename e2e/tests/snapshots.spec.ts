@@ -11,6 +11,9 @@ test("snapshot create, restore, and delete on the detail page", async ({ page })
   const snap = "e2e-snap";
   const snapshots = page.locator("#snapshots");
   await expect(snapshots).toBeVisible();
+  // The seeded demo has no snapshots; the table says so instead of rendering
+  // bare headers.
+  await expect(snapshots.getByText("No snapshots yet")).toBeVisible();
 
   await snapshots.locator("input[name=snapshot]").fill(snap);
   await page.getByRole("button", { name: "Create snapshot" }).click();

@@ -695,3 +695,20 @@ func TestInstanceHeaderHidesRestartWhenFrozen(t *testing.T) {
 	frozen := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Frozen"}, nil, nil, "summary"))
 	assertNotContains(t, frozen, `hx-post="/instances/demo/restart?from=header"`)
 }
+
+func TestEmbeddedTablesRenderEmptyStates(t *testing.T) {
+	cases := []struct {
+		name string
+		page templ.Component
+		want string
+	}{
+		{"instance snapshots", SnapshotTable("demo", nil), "No snapshots yet"},
+		{"pool volumes", StoragePoolPage(testCaps(), backend.StoragePool{Name: "default", Driver: "dir"}, nil), "No volumes yet"},
+		{"volume snapshots", StorageVolumePage(testCaps(), backend.StorageVolume{Pool: "default", Name: "vol0"}, nil), "No snapshots yet"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertContains(t, render(t, tc.page), tc.want)
+		})
+	}
+}

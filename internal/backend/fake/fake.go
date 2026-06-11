@@ -109,6 +109,12 @@ type Fake struct {
 	serverConfigVersion int // bumped per update; the Get/Update version token
 	certificates        []backend.Certificate
 	warnings            []backend.Warning
+
+	// opWatchers receive a coalesced tick whenever an operation is recorded
+	// or changed; keyed by a registration sequence so cancellation can
+	// unregister exactly its own channel.
+	opWatchers  map[int]chan struct{}
+	opWatcherID int
 }
 
 // projectOf normalizes the request's project; unset means default.
@@ -273,6 +279,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		NetworkACLs:     true,
 		VolumeBackups:   true,
 		Projects:        true,
+		Events:          true,
 	}
 }
 

@@ -70,6 +70,10 @@ type Capabilities struct {
 	// Projects is multi-tenancy support (Incus extension "projects"): the
 	// project CRUD methods plus per-request scoping via WithProject.
 	Projects bool
+	// Events is push notification of operation changes (the daemon events
+	// API): WatchOperations plus the SSE-driven Tasks panel. Without it the
+	// panel falls back to polling.
+	Events bool
 }
 
 // Instance is a system container or virtual machine.
@@ -610,6 +614,10 @@ type Backend interface {
 	// CancelOperation cancels a running, cancelable operation. An unknown id is
 	// ErrNotFound; an operation the daemon won't cancel is ErrInvalid.
 	CancelOperation(ctx context.Context, id string) error
+	// WatchOperations reports daemon operation changes as coalesced ticks.
+	// The channel is closed when ctx ends. Callers re-list on each tick; no
+	// event payload crosses the seam.
+	WatchOperations(ctx context.Context) (<-chan struct{}, error)
 
 	// ListFiles lists the instance directory at path (absolute), directories
 	// first. Listing a file is ErrInvalid.

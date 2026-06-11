@@ -83,6 +83,7 @@ func New() (*incusBackend, error) {
 			NetworkACLs:     srv.HasExtension("network_acl"),
 			VolumeBackups:   srv.HasExtension("custom_volume_backup") && srv.HasExtension("backup_override_name"),
 			Projects:        srv.HasExtension("projects"),
+			Events:          true, // the events API is core, no extension to probe
 		},
 		cpuSamples: make(map[string]cpuSample),
 	}, nil

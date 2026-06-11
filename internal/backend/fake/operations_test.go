@@ -1,9 +1,11 @@
 package fake
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -119,5 +121,45 @@ func TestCancelOperationNotCancelableIsInvalid(t *testing.T) {
 	err = b.CancelOperation(ctx(), ops[0].ID)
 	if !errors.Is(err, backend.ErrInvalid) {
 		t.Fatalf("want ErrInvalid for a finished operation, got %v", err)
+	}
+}
+
+func TestWatchOperationsTicksOnMutationAndClosesOnCancel(t *testing.T) {
+	f := New()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ch, err := f.WatchOperations(ctx)
+	if err != nil {
+		t.Fatalf("WatchOperations: %v", err)
+	}
+
+	select {
+	case <-ch:
+		t.Fatal("unexpected tick before any mutation")
+	default:
+	}
+
+	f.SeedRunningOperation("e2e seed")
+	select {
+	case _, ok := <-ch:
+		if !ok {
+			t.Fatal("channel closed before cancel")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no tick after operation was recorded")
+	}
+
+	cancel()
+	deadline := time.After(time.Second)
+	for {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return // closed, as required
+			}
+		case <-deadline:
+			t.Fatal("channel not closed after ctx cancel")
+		}
 	}
 }

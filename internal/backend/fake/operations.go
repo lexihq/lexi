@@ -7,6 +7,43 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 )
 
+// WatchOperations registers a watcher that receives a tick whenever any
+// operation is recorded or changed (all projects — re-rendering is scoped by
+// the caller). The channel is buffered size 1 so bursts coalesce, and is
+// closed once ctx ends.
+func (f *Fake) WatchOperations(ctx context.Context) (<-chan struct{}, error) {
+	ch := make(chan struct{}, 1)
+	f.mu.Lock()
+	if f.opWatchers == nil {
+		f.opWatchers = map[int]chan struct{}{}
+	}
+	f.opWatcherID++
+	id := f.opWatcherID
+	f.opWatchers[id] = ch
+	f.mu.Unlock()
+
+	go func() {
+		<-ctx.Done()
+		f.mu.Lock()
+		delete(f.opWatchers, id)
+		f.mu.Unlock()
+		close(ch)
+	}()
+	return ch, nil
+}
+
+// notifyOpWatchers ticks every registered watcher without blocking; callers
+// must hold the mutex (sends never race the close because unregistration also
+// holds it).
+func (f *Fake) notifyOpWatchers() {
+	for _, ch := range f.opWatchers {
+		select {
+		case ch <- struct{}{}:
+		default:
+		}
+	}
+}
+
 // maxOps caps the fake's operation log so long-lived dev servers stay bounded.
 const maxOps = 50
 
@@ -33,6 +70,7 @@ func (f *Fake) CancelOperation(ctx context.Context, id string) error {
 			}
 			sp.ops[i].Status = "Cancelled"
 			sp.ops[i].Cancelable = false
+			f.notifyOpWatchers()
 			return nil
 		}
 	}
@@ -57,6 +95,7 @@ func (f *Fake) SeedRunningOperation(description string) string {
 		Cancelable:  true,
 		CreatedAt:   f.now(),
 	}}, sp.ops...)
+	f.notifyOpWatchers()
 	return id
 }
 
@@ -76,4 +115,5 @@ func (f *Fake) logOp(sp *space, description string) {
 	if len(sp.ops) > maxOps {
 		sp.ops = sp.ops[:maxOps]
 	}
+	f.notifyOpWatchers()
 }

@@ -94,6 +94,7 @@ func probeCaps(srv incusclient.InstanceServer) (backend.Capabilities, error) {
 		ServerAdmin:     true,
 		NetworkACLs:     srv.HasExtension("network_acl"),
 		NetworkForwards: srv.HasExtension("network_forward"),
+		StoredBackups:   srv.HasExtension("container_backup"),
 		VolumeBackups:   srv.HasExtension("custom_volume_backup") && srv.HasExtension("backup_override_name"),
 		Projects:        srv.HasExtension("projects"),
 		Events:          true, // the events API is core, no extension to probe

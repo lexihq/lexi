@@ -83,6 +83,10 @@ type Capabilities struct {
 	// NetworkForwards is port-forward management on managed networks (Incus
 	// extension "network_forward").
 	NetworkForwards bool
+	// StoredBackups is server-side named instance backups (Incus extension
+	// "container_backup"): list/create/download/restore/delete without
+	// streaming through the browser.
+	StoredBackups bool
 }
 
 // Instance is a system container or virtual machine.
@@ -362,6 +366,15 @@ type Project struct {
 	// Version is an opaque concurrency token for UpdateProject, populated
 	// by GetProject (empty on list entries).
 	Version string
+}
+
+// InstanceBackup is a named backup the daemon stores server-side, as opposed
+// to the streamed export/import tarballs.
+type InstanceBackup struct {
+	Name         string
+	CreatedAt    time.Time
+	ExpiresAt    time.Time // zero means never auto-deleted
+	InstanceOnly bool      // snapshots excluded
 }
 
 // NetworkForward is a port forward on a managed network: traffic to the
@@ -670,6 +683,22 @@ type Backend interface {
 	// ImportInstance creates an instance named name from a backup tarball read
 	// from r (as produced by ExportInstance).
 	ImportInstance(ctx context.Context, name string, r io.Reader) error
+
+	// ListInstanceBackups lists the named backups stored on the server for
+	// an instance, oldest first.
+	ListInstanceBackups(ctx context.Context, instance string) ([]InstanceBackup, error)
+	// CreateInstanceBackup stores a server-side backup. An empty name gets
+	// the daemon-style backupN default; a zero expiresAt never auto-deletes;
+	// instanceOnly skips snapshots. A non-zero expiry on a daemon without
+	// the backup_expiry extension is ErrUnsupported.
+	CreateInstanceBackup(ctx context.Context, instance, name string, expiresAt time.Time, instanceOnly bool) error
+	// DeleteInstanceBackup removes a stored backup.
+	DeleteInstanceBackup(ctx context.Context, instance, backup string) error
+	// ExportInstanceBackup streams a stored backup's tarball to w.
+	ExportInstanceBackup(ctx context.Context, instance, backup string, w io.Writer) error
+	// RestoreInstanceBackup creates a new instance from a stored backup,
+	// entirely server-side. A taken newName is ErrConflict.
+	RestoreInstanceBackup(ctx context.Context, instance, backup, newName string) error
 
 	// ConsoleLog returns the instance's console log output.
 	ConsoleLog(ctx context.Context, name string) (string, error)

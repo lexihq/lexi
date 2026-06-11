@@ -24,6 +24,7 @@ type instance struct {
 	backend.Instance
 
 	snapshots []backend.Snapshot
+	backups   map[string]*storedBackup // server-side named backups, by name
 	config    map[string]string
 	devices   map[string]map[string]string
 	files     map[string]*fakeFile // clean absolute path → node; dirs are explicit entries
@@ -382,6 +383,7 @@ func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 		Remotes:         true,
 		Migrate:         true,
 		NetworkForwards: true,
+		StoredBackups:   true,
 	}
 }
 

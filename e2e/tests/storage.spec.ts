@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 // Storage: custom volumes, volume snapshots, and pool create/delete.
 // All tests run against the shared fake-backed server (instance "demo" seeded).
@@ -125,4 +126,53 @@ test("storage: create and delete a pool; in-use pool can't be deleted", async ({
   await page.getByRole("link", { name: "default", exact: true }).click();
   await expect(page).toHaveURL(/\/storage\/default$/);
   await expect(page.getByRole("button", { name: "Delete", exact: true })).toBeDisabled();
+});
+
+test("export a volume and re-import it under a new name", async ({ page }) => {
+  // Create a volume with a config key so the round-trip is observable.
+  await page.goto("/storage/default");
+  const volumes = page.locator("#volumes");
+  await volumes.locator('input[name="name"]').fill("e2e-exp-vol");
+  await page.getByRole("button", { name: "Create volume" }).click();
+  await expect(volumes.getByText("e2e-exp-vol")).toBeVisible();
+
+  await volumes.getByRole("link", { name: "e2e-exp-vol" }).click();
+  const editor = page.locator('form[action="/storage/default/volumes/e2e-exp-vol/config"]');
+  await editor.locator('input[name="description"]').fill("exported by e2e");
+  await editor.getByRole("button", { name: "Apply config" }).click();
+  await expect(editor.locator('input[name="description"]')).toHaveValue("exported by e2e");
+
+  // Export downloads a tarball named pool-volume.tar.gz.
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Export" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("default-e2e-exp-vol.tar.gz");
+
+  // Re-import the downloaded blob as a new volume from the pool page.
+  const path = await download.path();
+  await page.goto("/storage/default");
+  const importForm = page.locator('form[action="/storage/default/volumes/import"]');
+  await importForm.locator('input[name="backup"]').setInputFiles({
+    name: "volume.tar.gz",
+    mimeType: "application/octet-stream",
+    buffer: readFileSync(path!),
+  });
+  await importForm.locator('input[name="name"]').fill("e2e-imp-vol");
+  await importForm.getByRole("button", { name: "Import" }).click();
+
+  await expect(page).toHaveURL(/\/storage\/default$/);
+  await expect(page.locator("#volumes").getByText("e2e-imp-vol")).toBeVisible();
+
+  // The imported volume carries the exported description.
+  await page.locator("#volumes").getByRole("link", { name: "e2e-imp-vol" }).click();
+  await expect(page.locator('input[name="description"]')).toHaveValue("exported by e2e");
+
+  // Cleanup both volumes (idempotent for reused servers).
+  await page.goto("/storage/default");
+  for (const name of ["e2e-exp-vol", "e2e-imp-vol"]) {
+    await expect(async () => {
+      await page.locator("#volumes").getByRole("row", { name }).getByRole("button", { name: "Delete" }).click();
+      await expect(page.locator("#volumes").getByText(name)).toHaveCount(0, { timeout: 1000 });
+    }).toPass({ timeout: 10000 });
+  }
 });

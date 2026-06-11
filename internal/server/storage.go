@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -291,4 +292,58 @@ func (h handlers) renderVolumeSnapshotsOrRedirect(w http.ResponseWriter, r *http
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.StorageVolumeSnapshotsTable(pool, volume, snaps))
+}
+
+// exportVolume streams a volume backup tarball as a file download. The volume
+// is validated up front so a missing pool/volume 404s cleanly before the
+// response body is committed (the driver spools the daemon download, so later
+// failures also arrive before any body bytes).
+func (h handlers) exportVolume(w http.ResponseWriter, r *http.Request) {
+	pool, volume := r.PathValue("pool"), r.PathValue("volume")
+	if _, err := h.backend.GetVolume(r.Context(), pool, volume); err != nil {
+		h.fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, pool+"-"+volume+".tar.gz"))
+	if err := h.backend.ExportVolume(r.Context(), pool, volume, w); err != nil {
+		w.Header().Del("Content-Disposition")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		http.Error(w, err.Error(), statusFor(err))
+		return
+	}
+}
+
+// importVolume creates a custom volume from an uploaded backup tarball. The
+// file upload uses a plain multipart form, so success redirects to the pool.
+func (h handlers) importVolume(w http.ResponseWriter, r *http.Request) {
+	pool := r.PathValue("pool")
+	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
+	// The request body is bounded by MaxBytesReader immediately above.
+	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			h.renderError(w, http.StatusRequestEntityTooLarge, "backup file is too large")
+			return
+		}
+		h.renderError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	volume := strings.TrimSpace(r.FormValue("name"))
+	if volume == "" {
+		h.fail(w, fmt.Errorf("volume name is required: %w", backend.ErrInvalid))
+		return
+	}
+	file, _, err := r.FormFile("backup")
+	if err != nil {
+		h.renderError(w, http.StatusBadRequest, "backup file is required")
+		return
+	}
+	defer closeAndLog("uploaded volume backup", file)
+
+	if err := h.backend.ImportVolume(r.Context(), pool, volume, file); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/storage/"+url.PathEscape(pool), http.StatusSeeOther)
 }

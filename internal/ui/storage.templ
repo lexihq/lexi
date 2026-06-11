@@ -100,6 +100,20 @@ templ StoragePoolPage(caps backend.Capabilities, pool backend.StoragePool, volum
 			</form>
 		</section>
 		@StorageVolumesTable(pool.Name, volumes)
+		if caps.VolumeBackups {
+			<form method="post" action={ templ.URL("/storage/" + url.PathEscape(pool.Name) + "/volumes/import") } enctype="multipart/form-data" hx-boost="false" class="mt-8 rounded-lg border bg-card p-4">
+				<h2 class="mb-2 text-lg font-medium">Import volume from file</h2>
+				<p class="mb-3 text-sm text-muted-foreground">Upload a volume backup tarball (as produced by Export).</p>
+				<div class="flex gap-2">
+					<input name="backup" type="file" required accept=".tar,.tar.gz,.tar.xz,.gz,.xz,application/octet-stream" class="w-1/2 rounded-md border bg-background px-3 py-1.5 text-sm"/>
+					<input name="name" placeholder="volume name" required class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						@icon.Icon("upload")(icon.Props{Class: "size-4"})
+						Import
+					}
+				</div>
+			</form>
+		}
 	}
 }
 
@@ -218,12 +232,20 @@ templ StorageVolumePage(caps backend.Capabilities, v backend.StorageVolume, snap
 				<h1 class="mt-2 text-2xl font-semibold">{ v.Name }</h1>
 				<p class="text-muted-foreground">{ v.ContentType }</p>
 			</div>
-			<form method="post" action={ templ.URL(volBase + "/rename") } class="flex items-center gap-1">
-				<input name="new_name" placeholder="new name" class="h-9 w-32 rounded-md border bg-background px-3 text-sm"/>
-				@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
-					Rename
+			<div class="flex items-center gap-2">
+				if caps.VolumeBackups {
+					@button.Button(button.Props{Variant: button.VariantOutline, Href: volBase + "/export", Attributes: templ.Attributes{"hx-boost": "false", "download": ""}}) {
+						@icon.Icon("download")(icon.Props{Class: "size-4"})
+						Export
+					}
 				}
-			</form>
+				<form method="post" action={ templ.URL(volBase + "/rename") } class="flex items-center gap-1">
+					<input name="new_name" placeholder="new name" class="h-9 w-32 rounded-md border bg-background px-3 text-sm"/>
+					@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+						Rename
+					}
+				</form>
+			</div>
 		</div>
 		<section class="mb-8 rounded-lg border bg-card p-4">
 			<h2 class="mb-1 text-lg font-medium">Config</h2>

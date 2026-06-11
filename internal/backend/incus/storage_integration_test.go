@@ -3,6 +3,7 @@
 package incus
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"maps"
@@ -169,4 +170,44 @@ func TestStoragePoolCreateDeleteRoundTrip(t *testing.T) {
 	require.NoError(t, b.DeleteStoragePool(ctx, name))
 	_, err = b.GetStoragePool(ctx, name)
 	require.ErrorIs(t, err, backend.ErrNotFound)
+}
+
+// TestVolumeExportImportRoundTrip exports a custom volume to a buffer (a gzip
+// backup tarball), deletes the volume, and re-imports it under a new name.
+func TestVolumeExportImportRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	if !b.Capabilities().VolumeBackups {
+		t.Skip("daemon lacks the custom_volume_backup/backup_override_name extensions")
+	}
+	// Deadline so a daemon death mid-backup fails in minutes (the instance
+	// export test precedent).
+	ctx, cancelCtx := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancelCtx()
+	pool := pickPool(t, b, ctx)
+	name := fmt.Sprintf("lxvb%d", time.Now().UnixNano()%100000)
+	restored := name + "r"
+	t.Cleanup(func() {
+		_ = b.DeleteVolume(ctx, pool.Name, name)
+		_ = b.DeleteVolume(ctx, pool.Name, restored)
+	})
+
+	require.NoError(t, b.CreateVolume(ctx, pool.Name, backend.StorageVolume{
+		Name: name, ContentType: "filesystem", Config: map[string]string{"size": "32MiB"},
+	}))
+
+	var buf bytes.Buffer
+	require.NoError(t, b.ExportVolume(ctx, pool.Name, name, &buf))
+	assert.Greater(t, buf.Len(), 2)
+	assert.Equal(t, []byte{0x1f, 0x8b}, buf.Bytes()[:2], "export should be a gzip stream")
+
+	// Ghost volumes are not found.
+	require.ErrorIs(t, b.ExportVolume(ctx, pool.Name, "lx-ghost", &bytes.Buffer{}), backend.ErrNotFound)
+
+	// Importing over an existing name conflicts; a fresh name restores.
+	require.ErrorIs(t, b.ImportVolume(ctx, pool.Name, name, bytes.NewReader(buf.Bytes())), backend.ErrConflict)
+	require.NoError(t, b.ImportVolume(ctx, pool.Name, restored, bytes.NewReader(buf.Bytes())))
+
+	got, err := b.GetVolume(ctx, pool.Name, restored)
+	require.NoError(t, err)
+	assert.Equal(t, "32MiB", got.Config["size"], "config survives the round-trip")
 }

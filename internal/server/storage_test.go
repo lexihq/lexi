@@ -1,7 +1,10 @@
 package server
 
 import (
+	"bytes"
+	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -278,4 +281,73 @@ func TestUpdateVolumeSnapshotExpiryReturnsTable(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, snaps, 1)
 	assert.Equal(t, "2031-01-02 03:04", snaps[0].ExpiresAt.UTC().Format("2006-01-02 15:04"))
+}
+
+func TestExportVolumeDownloads(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateVolume(t.Context(), "default", backend.StorageVolume{
+		Name: "vol1", Description: "scratch", Config: map[string]string{"size": "1GiB"},
+	}))
+
+	res := request(t, New(b), "GET", "/storage/default/volumes/vol1/export", "", false)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Header().Get("Content-Disposition"), "default-vol1.tar.gz")
+	assert.Contains(t, res.Body.String(), "scratch", "fake export blob carries the description")
+}
+
+func TestExportVolumeGhostIs404(t *testing.T) {
+	res := request(t, New(fake.New()), "GET", "/storage/default/volumes/ghost/export", "", false)
+	assertStatus(t, res, http.StatusNotFound)
+	assert.Empty(t, res.Header().Get("Content-Disposition"), "no attachment headers on error")
+}
+
+// importVolumeRequest posts a multipart volume backup upload.
+func importVolumeRequest(t *testing.T, srv *http.Server, pool, name, content string) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if name != "" {
+		require.NoError(t, mw.WriteField("name", name))
+	}
+	fw, err := mw.CreateFormFile("backup", "volume.tar.gz")
+	require.NoError(t, err)
+	_, err = fw.Write([]byte(content))
+	require.NoError(t, err)
+	require.NoError(t, mw.Close())
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/storage/"+pool+"/volumes/import", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	res := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(res, req)
+	return res
+}
+
+func TestImportVolumeRoundTrip(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateVolume(t.Context(), "default", backend.StorageVolume{
+		Name: "vol1", Description: "scratch", Config: map[string]string{"size": "1GiB"},
+	}))
+	srv := New(b)
+
+	export := request(t, srv, "GET", "/storage/default/volumes/vol1/export", "", false)
+	assertStatus(t, export, http.StatusOK)
+
+	res := importVolumeRequest(t, srv, "default", "restored", export.Body.String())
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/storage/default", res.Header().Get("Location"))
+
+	got, err := b.GetVolume(t.Context(), "default", "restored")
+	require.NoError(t, err)
+	assert.Equal(t, "scratch", got.Description)
+	assert.Equal(t, "1GiB", got.Config["size"])
+}
+
+func TestImportVolumeForeignBlobIs400(t *testing.T) {
+	res := importVolumeRequest(t, New(fake.New()), "default", "v", "garbage")
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestImportVolumeMissingNameIs400(t *testing.T) {
+	res := importVolumeRequest(t, New(fake.New()), "default", "", "whatever")
+	assertStatus(t, res, http.StatusBadRequest)
 }

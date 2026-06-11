@@ -34,6 +34,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /projects/{name}/delete", h.deleteProject)
 	mux.HandleFunc("GET /partials/images", h.imagePicker)
 	mux.HandleFunc("GET /partials/operations", h.operationsPanel)
+	mux.HandleFunc("GET /events/operations", h.operationsEvents)
 	mux.HandleFunc("POST /operations/{id}/cancel", h.cancelOperation)
 	mux.HandleFunc("GET /images", h.imagesPage)
 	mux.HandleFunc("POST /images/copy", h.copyImage)

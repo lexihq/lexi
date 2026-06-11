@@ -104,6 +104,15 @@ type instanceServerStub struct {
 	operations    []api.Operation // returned by GetOperations
 	operationsErr error           // error for GetOperations
 
+	projectsList   []api.Project         // returned by GetProjects
+	project        *api.Project          // returned by GetProject
+	createdProject *api.ProjectsPost     // captured by CreateProject
+	updatedProject *api.ProjectPut       // captured by UpdateProject
+	projectEtag    string                // etag captured by UpdateProject
+	renamedProject [2]string             // name/newName captured by RenameProject
+	renameProjOp   incusclient.Operation // operation returned by RenameProject
+	deletedProject string                // captured by DeleteProject
+
 	files       map[string]*fileStub          // keyed by path, served by GetInstanceFile
 	createdFile *incusclient.InstanceFileArgs // captured by CreateInstanceFile
 	createdPath string                        // path captured by CreateInstanceFile
@@ -144,6 +153,41 @@ func (s *instanceServerStub) GetWarnings() ([]api.Warning, error) {
 func (s *instanceServerStub) DeleteWarning(uuid string) error {
 	s.deletedWarning = uuid
 	return s.serverErr
+}
+
+func (s *instanceServerStub) GetProjects() ([]api.Project, error) {
+	return s.projectsList, nil
+}
+
+func (s *instanceServerStub) GetProject(string) (*api.Project, string, error) {
+	if s.project == nil {
+		return nil, "", errNotFoundStatus()
+	}
+	return s.project, "project-etag", nil
+}
+
+func (s *instanceServerStub) CreateProject(project api.ProjectsPost) error {
+	s.createdProject = &project
+	return nil
+}
+
+func (s *instanceServerStub) UpdateProject(_ string, put api.ProjectPut, etag string) error {
+	s.updatedProject = &put
+	s.projectEtag = etag
+	return nil
+}
+
+func (s *instanceServerStub) RenameProject(name string, post api.ProjectPost) (incusclient.Operation, error) {
+	s.renamedProject = [2]string{name, post.Name}
+	if s.renameProjOp != nil {
+		return s.renameProjOp, nil
+	}
+	return &operationStub{}, nil
+}
+
+func (s *instanceServerStub) DeleteProject(name string) error {
+	s.deletedProject = name
+	return nil
 }
 
 // fileStub is one GetInstanceFile result: a file with content, or a directory

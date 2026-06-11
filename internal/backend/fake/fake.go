@@ -64,11 +64,15 @@ type Fake struct {
 	// aclVersions are per-ACL counters bumped on update; the Get/Update
 	// version token (missing key reads as 0).
 	aclVersions map[string]int
-	pools       map[string]*storagePool
-	images      map[string]*backend.LocalImage // keyed by fingerprint
-	ops         []backend.Operation            // newest first, capped at maxOps
-	opSeq       int
-	clock       time.Time
+	projects    map[string]backend.Project
+	// projectVersions are per-project counters bumped on update; the
+	// Get/Update version token (missing key reads as 0).
+	projectVersions map[string]int
+	pools           map[string]*storagePool
+	images          map[string]*backend.LocalImage // keyed by fingerprint
+	ops             []backend.Operation            // newest first, capped at maxOps
+	opSeq           int
+	clock           time.Time
 
 	serverConfig        map[string]string
 	serverConfigVersion int // bumped per update; the Get/Update version token
@@ -105,6 +109,13 @@ func New() *Fake {
 		networkVersions: map[string]int{},
 		acls:            map[string]backend.NetworkACL{},
 		aclVersions:     map[string]int{},
+		projects: map[string]backend.Project{
+			"default": {Name: "default", Description: "Default Incus project", Config: map[string]string{
+				"features.images": "true", "features.networks": "true",
+				"features.profiles": "true", "features.storage.volumes": "true",
+			}},
+		},
+		projectVersions: map[string]int{},
 		pools: map[string]*storagePool{
 			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
 			"zfs0":    {StoragePool: backend.StoragePool{Name: "zfs0", Driver: "zfs", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
@@ -176,6 +187,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		ServerAdmin:     true,
 		NetworkACLs:     true,
 		VolumeBackups:   true,
+		Projects:        true,
 	}
 }
 

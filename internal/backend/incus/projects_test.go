@@ -1,0 +1,66 @@
+package incus
+
+import (
+	"testing"
+
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/lxc/incus/v6/shared/api"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestGetProjectCarriesEtagAsVersion(t *testing.T) {
+	p := &api.Project{Name: "dev"}
+	p.Description = "dev project"
+	p.Config = map[string]string{"features.profiles": "true"}
+	b := &incusBackend{srv: &instanceServerStub{project: p}}
+
+	got, err := b.GetProject(t.Context(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, "project-etag", got.Version)
+	assert.Equal(t, "dev project", got.Description)
+	assert.Equal(t, "true", got.Config["features.profiles"])
+}
+
+func TestCreateProjectSendsPost(t *testing.T) {
+	s := &instanceServerStub{}
+	b := &incusBackend{srv: s}
+	require.NoError(t, b.CreateProject(t.Context(), "dev", "d", map[string]string{"features.images": "false"}))
+	require.NotNil(t, s.createdProject)
+	assert.Equal(t, "dev", s.createdProject.Name)
+	assert.Equal(t, "d", s.createdProject.Description)
+	assert.Equal(t, "false", s.createdProject.Config["features.images"])
+}
+
+func TestUpdateProjectSendsEtag(t *testing.T) {
+	s := &instanceServerStub{}
+	b := &incusBackend{srv: s}
+	require.NoError(t, b.UpdateProject(t.Context(), "dev", "edited", map[string]string{"k": "v"}, "etag-1"))
+	require.NotNil(t, s.updatedProject)
+	assert.Equal(t, "edited", s.updatedProject.Description)
+	assert.Equal(t, "etag-1", s.projectEtag)
+}
+
+func TestRenameProjectWaitsOperation(t *testing.T) {
+	op := &operationStub{}
+	s := &instanceServerStub{renameProjOp: op}
+	b := &incusBackend{srv: s}
+	require.NoError(t, b.RenameProject(t.Context(), "dev", "dev2"))
+	assert.Equal(t, [2]string{"dev", "dev2"}, s.renamedProject)
+	assert.True(t, op.waitContextUsed, "rename is async; the operation must be awaited")
+}
+
+func TestDefaultProjectGuards(t *testing.T) {
+	s := &instanceServerStub{}
+	b := &incusBackend{srv: s}
+	require.ErrorIs(t, b.RenameProject(t.Context(), "default", "x"), backend.ErrInvalid)
+	require.ErrorIs(t, b.DeleteProject(t.Context(), "default"), backend.ErrInvalid)
+	assert.Empty(t, s.deletedProject, "the guard must fire before the daemon call")
+}
+
+func TestDeleteProjectCallsThrough(t *testing.T) {
+	s := &instanceServerStub{}
+	b := &incusBackend{srv: s}
+	require.NoError(t, b.DeleteProject(t.Context(), "dev"))
+	assert.Equal(t, "dev", s.deletedProject)
+}

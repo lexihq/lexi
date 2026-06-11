@@ -67,6 +67,9 @@ type Capabilities struct {
 	// "custom_volume_backup" + "backup_override_name" — the import names the
 	// new volume, which needs the override).
 	VolumeBackups bool
+	// Projects is multi-tenancy support (Incus extension "projects"): the
+	// project CRUD methods plus per-request scoping via WithProject.
+	Projects bool
 }
 
 // Instance is a system container or virtual machine.
@@ -335,6 +338,37 @@ type Operation struct {
 
 // LocalImage is an image in the host's local image store (as opposed to Image,
 // which is a per-alias entry of the remote catalog backing the create picker).
+// Project is a multi-tenancy namespace. Config carries the daemon's
+// project keys — notably the features.* booleans deciding which resource
+// kinds are scoped to the project rather than shared from default.
+type Project struct {
+	Name        string
+	Description string
+	Config      map[string]string
+	UsedBy      []string
+	// Version is an opaque concurrency token for UpdateProject, populated
+	// by GetProject (empty on list entries).
+	Version string
+}
+
+// projectKey is the context key WithProject stores the selection under.
+type projectKey struct{}
+
+// WithProject returns a context whose backend calls are scoped to the named
+// project, when the driver supports projects (Capabilities.Projects).
+func WithProject(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, projectKey{}, name)
+}
+
+// ProjectFromContext reports the project a request is scoped to; "" means
+// the default project (also for contexts that never saw WithProject).
+func ProjectFromContext(ctx context.Context) string {
+	if name, ok := ctx.Value(projectKey{}).(string); ok {
+		return name
+	}
+	return ""
+}
+
 type LocalImage struct {
 	Fingerprint string
 	Aliases     []string
@@ -369,6 +403,11 @@ type CreateOptions struct {
 }
 
 // Backend is the single seam between the HTTP layer and a container driver.
+//
+// Project scoping: when Capabilities.Projects is set, drivers honor the
+// project carried by the request context (WithProject/ProjectFromContext) on
+// every project-scoped method; an unset project means the default project.
+// Drivers without project support ignore it.
 type Backend interface {
 	Capabilities() Capabilities
 
@@ -458,6 +497,23 @@ type Backend interface {
 	RenameNetworkACL(ctx context.Context, name, newName string) error
 	// DeleteNetworkACL refuses ACLs that are in use (ErrConflict).
 	DeleteNetworkACL(ctx context.Context, name string) error
+
+	ListProjects(ctx context.Context) ([]Project, error)
+	// GetProject returns the project with a populated Version token.
+	GetProject(ctx context.Context, name string) (Project, error)
+	// CreateProject creates a project; config carries the features.* keys
+	// (the daemon defaults unset features for new projects).
+	CreateProject(ctx context.Context, name, description string, config map[string]string) error
+	// UpdateProject replaces the project's description and config,
+	// conditionally on version (ErrConflict when stale; empty version is
+	// unconditional).
+	UpdateProject(ctx context.Context, name, description string, config map[string]string, version string) error
+	// RenameProject renames a project; the default project is refused
+	// (ErrInvalid) and the target name must be free (ErrConflict).
+	RenameProject(ctx context.Context, name, newName string) error
+	// DeleteProject refuses the default project (ErrInvalid) and non-empty
+	// projects (ErrConflict).
+	DeleteProject(ctx context.Context, name string) error
 
 	ListStoragePools(ctx context.Context) ([]StoragePool, error)
 	GetStoragePool(ctx context.Context, pool string) (StoragePool, error)

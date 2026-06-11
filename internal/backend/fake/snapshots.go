@@ -8,22 +8,24 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 )
 
-func (f *Fake) ListSnapshots(_ context.Context, name string) ([]backend.Snapshot, error) {
+func (f *Fake) ListSnapshots(ctx context.Context, name string) ([]backend.Snapshot, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return nil, notFound(name)
 	}
 	return append([]backend.Snapshot(nil), in.snapshots...), nil
 }
 
-func (f *Fake) CreateSnapshot(_ context.Context, name, snapshot string, opts backend.SnapshotOptions) error {
+func (f *Fake) CreateSnapshot(ctx context.Context, name, snapshot string, opts backend.SnapshotOptions) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -35,15 +37,16 @@ func (f *Fake) CreateSnapshot(_ context.Context, name, snapshot string, opts bac
 	in.snapshots = append(in.snapshots, backend.Snapshot{
 		Name: snapshot, CreatedAt: f.now(), Stateful: opts.Stateful, ExpiresAt: opts.ExpiresAt,
 	})
-	f.logOp(fmt.Sprintf("Creating snapshot %q of %q", snapshot, name))
+	f.logOp(sp, fmt.Sprintf("Creating snapshot %q of %q", snapshot, name))
 	return nil
 }
 
-func (f *Fake) RenameSnapshot(_ context.Context, name, snapshot, newName string) error {
+func (f *Fake) RenameSnapshot(ctx context.Context, name, snapshot, newName string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -63,11 +66,12 @@ func (f *Fake) RenameSnapshot(_ context.Context, name, snapshot, newName string)
 	return nil
 }
 
-func (f *Fake) UpdateSnapshotExpiry(_ context.Context, name, snapshot string, expiresAt time.Time) error {
+func (f *Fake) UpdateSnapshotExpiry(ctx context.Context, name, snapshot string, expiresAt time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -80,11 +84,12 @@ func (f *Fake) UpdateSnapshotExpiry(_ context.Context, name, snapshot string, ex
 	return notFoundf("snapshot %q not found on %q", snapshot, name)
 }
 
-func (f *Fake) GetSnapshotSchedule(_ context.Context, name string) (backend.SnapshotSchedule, error) {
+func (f *Fake) GetSnapshotSchedule(ctx context.Context, name string) (backend.SnapshotSchedule, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return backend.SnapshotSchedule{}, notFound(name)
 	}
@@ -95,11 +100,12 @@ func (f *Fake) GetSnapshotSchedule(_ context.Context, name string) (backend.Snap
 	}, nil
 }
 
-func (f *Fake) SetSnapshotSchedule(_ context.Context, name string, s backend.SnapshotSchedule) error {
+func (f *Fake) SetSnapshotSchedule(ctx context.Context, name string, s backend.SnapshotSchedule) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -121,35 +127,37 @@ func setOrDeleteKey(m map[string]string, key, val string) {
 	m[key] = val
 }
 
-func (f *Fake) RestoreSnapshot(_ context.Context, name, snapshot string) error {
+func (f *Fake) RestoreSnapshot(ctx context.Context, name, snapshot string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
 	for _, s := range in.snapshots {
 		if s.Name == snapshot {
-			f.logOp(fmt.Sprintf("Restoring snapshot %q of %q", snapshot, name))
+			f.logOp(sp, fmt.Sprintf("Restoring snapshot %q of %q", snapshot, name))
 			return nil
 		}
 	}
 	return notFoundf("snapshot %q not found on %q", snapshot, name)
 }
 
-func (f *Fake) DeleteSnapshot(_ context.Context, name, snapshot string) error {
+func (f *Fake) DeleteSnapshot(ctx context.Context, name, snapshot string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
 	for i, s := range in.snapshots {
 		if s.Name == snapshot {
 			in.snapshots = append(in.snapshots[:i], in.snapshots[i+1:]...)
-			f.logOp(fmt.Sprintf("Deleting snapshot %q of %q", snapshot, name))
+			f.logOp(sp, fmt.Sprintf("Deleting snapshot %q of %q", snapshot, name))
 			return nil
 		}
 	}

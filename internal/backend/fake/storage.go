@@ -15,7 +15,7 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 )
 
-func (f *Fake) ListStoragePools(_ context.Context) ([]backend.StoragePool, error) {
+func (f *Fake) ListStoragePools(ctx context.Context) ([]backend.StoragePool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -27,7 +27,7 @@ func (f *Fake) ListStoragePools(_ context.Context) ([]backend.StoragePool, error
 	return out, nil
 }
 
-func (f *Fake) GetStoragePool(_ context.Context, pool string) (backend.StoragePool, error) {
+func (f *Fake) GetStoragePool(ctx context.Context, pool string) (backend.StoragePool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -40,7 +40,7 @@ func (f *Fake) GetStoragePool(_ context.Context, pool string) (backend.StoragePo
 	return out, nil
 }
 
-func (f *Fake) UpdateStoragePool(_ context.Context, name, description string, config map[string]string, version string) error {
+func (f *Fake) UpdateStoragePool(ctx context.Context, name, description string, config map[string]string, version string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -62,7 +62,7 @@ func (f *Fake) UpdateStoragePool(_ context.Context, name, description string, co
 	return nil
 }
 
-func (f *Fake) CreateStoragePool(_ context.Context, p backend.StoragePool) error {
+func (f *Fake) CreateStoragePool(ctx context.Context, p backend.StoragePool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -82,12 +82,12 @@ func (f *Fake) CreateStoragePool(_ context.Context, p backend.StoragePool) error
 	}
 	f.pools[p.Name] = &storagePool{
 		StoragePool: backend.StoragePool{Name: p.Name, Driver: p.Driver, Description: p.Description, Config: maps.Clone(p.Config)},
-		volumes:     map[string]*storageVolume{},
+		volumes:     map[string]map[string]*storageVolume{},
 	}
 	return nil
 }
 
-func (f *Fake) DeleteStoragePool(_ context.Context, name string) error {
+func (f *Fake) DeleteStoragePool(ctx context.Context, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -107,30 +107,36 @@ func (f *Fake) DeleteStoragePool(_ context.Context, name string) error {
 // mutex.
 func (f *Fake) poolUsedBy(p *storagePool) []string {
 	var used []string
-	for name, prof := range f.profiles {
-		for _, dev := range prof.Devices {
-			if dev["pool"] == p.Name {
-				used = append(used, "/1.0/profiles/"+name)
-				break
+	for _, spc := range f.spaces {
+		for name, prof := range spc.profiles {
+			for _, dev := range prof.Devices {
+				if dev["pool"] == p.Name {
+					used = append(used, "/1.0/profiles/"+name)
+					break
+				}
 			}
 		}
 	}
-	for name, in := range f.instances {
-		for _, dev := range in.devices {
-			if dev["pool"] == p.Name {
-				used = append(used, "/1.0/instances/"+name)
-				break
+	for _, spc := range f.spaces {
+		for name, in := range spc.instances {
+			for _, dev := range in.devices {
+				if dev["pool"] == p.Name {
+					used = append(used, "/1.0/instances/"+name)
+					break
+				}
 			}
 		}
 	}
-	for name := range p.volumes {
-		used = append(used, "/1.0/storage-pools/"+p.Name+"/volumes/custom/"+name)
+	for project := range p.volumes {
+		for name := range p.volumes[project] {
+			used = append(used, "/1.0/storage-pools/"+p.Name+"/volumes/custom/"+name)
+		}
 	}
 	sort.Strings(used)
 	return used
 }
 
-func (f *Fake) ListVolumes(_ context.Context, pool string) ([]backend.StorageVolume, error) {
+func (f *Fake) ListVolumes(ctx context.Context, pool string) ([]backend.StorageVolume, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -138,19 +144,19 @@ func (f *Fake) ListVolumes(_ context.Context, pool string) ([]backend.StorageVol
 	if !ok {
 		return nil, notFoundf("storage pool %q", pool)
 	}
-	out := make([]backend.StorageVolume, 0, len(p.volumes))
-	for _, v := range p.volumes {
+	out := make([]backend.StorageVolume, 0, len(p.vols(f.featureProject(ctx, "features.storage.volumes"))))
+	for _, v := range p.vols(f.featureProject(ctx, "features.storage.volumes")) {
 		out = append(out, volumeView(v))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
-func (f *Fake) GetVolume(_ context.Context, pool, name string) (backend.StorageVolume, error) {
+func (f *Fake) GetVolume(ctx context.Context, pool, name string) (backend.StorageVolume, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	v, err := f.lookupVolume(pool, name)
+	v, err := f.lookupVolume(ctx, pool, name)
 	if err != nil {
 		return backend.StorageVolume{}, err
 	}
@@ -159,11 +165,11 @@ func (f *Fake) GetVolume(_ context.Context, pool, name string) (backend.StorageV
 	return out, nil
 }
 
-func (f *Fake) UpdateVolume(_ context.Context, pool, name, description string, config map[string]string, version string) error {
+func (f *Fake) UpdateVolume(ctx context.Context, pool, name, description string, config map[string]string, version string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	v, err := f.lookupVolume(pool, name)
+	v, err := f.lookupVolume(ctx, pool, name)
 	if err != nil {
 		return err
 	}
@@ -181,7 +187,7 @@ func (f *Fake) UpdateVolume(_ context.Context, pool, name, description string, c
 	return nil
 }
 
-func (f *Fake) RenameVolume(_ context.Context, pool, name, newName string) error {
+func (f *Fake) RenameVolume(ctx context.Context, pool, name, newName string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -189,7 +195,7 @@ func (f *Fake) RenameVolume(_ context.Context, pool, name, newName string) error
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
-	v, ok := p.volumes[name]
+	v, ok := p.vols(f.featureProject(ctx, "features.storage.volumes"))[name]
 	if !ok {
 		return notFoundf("volume %q", name)
 	}
@@ -197,35 +203,39 @@ func (f *Fake) RenameVolume(_ context.Context, pool, name, newName string) error
 	if !validAPIName(newName) {
 		return invalid("invalid volume name %q", newName)
 	}
-	if _, exists := p.volumes[newName]; exists {
+	if _, exists := p.vols(f.featureProject(ctx, "features.storage.volumes"))[newName]; exists {
 		return conflict("volume %q already exists", newName)
 	}
 	// Incus parity: the daemon refuses renaming a volume a running instance
 	// has attached; stopped instances' disk-device references follow the
 	// rename.
-	for instName, in := range f.instances {
-		for _, dev := range in.devices {
-			if dev["pool"] == pool && dev["source"] == name {
-				if in.Status == "Running" {
-					return invalid("volume %q is in use by running instance %q", name, instName)
+	for _, spc := range f.spaces {
+		for instName, in := range spc.instances {
+			for _, dev := range in.devices {
+				if dev["pool"] == pool && dev["source"] == name {
+					if in.Status == "Running" {
+						return invalid("volume %q is in use by running instance %q", name, instName)
+					}
 				}
 			}
 		}
 	}
-	for _, in := range f.instances {
-		for _, dev := range in.devices {
-			if dev["pool"] == pool && dev["source"] == name {
-				dev["source"] = newName
+	for _, spc := range f.spaces {
+		for _, in := range spc.instances {
+			for _, dev := range in.devices {
+				if dev["pool"] == pool && dev["source"] == name {
+					dev["source"] = newName
+				}
 			}
 		}
 	}
 	v.Name = newName
-	p.volumes[newName] = v
-	delete(p.volumes, name)
+	p.vols(f.featureProject(ctx, "features.storage.volumes"))[newName] = v
+	delete(p.vols(f.featureProject(ctx, "features.storage.volumes")), name)
 	return nil
 }
 
-func (f *Fake) CreateVolume(_ context.Context, pool string, v backend.StorageVolume) error {
+func (f *Fake) CreateVolume(ctx context.Context, pool string, v backend.StorageVolume) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -233,14 +243,14 @@ func (f *Fake) CreateVolume(_ context.Context, pool string, v backend.StorageVol
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
-	if _, ok := p.volumes[v.Name]; ok {
+	if _, ok := p.vols(f.featureProject(ctx, "features.storage.volumes"))[v.Name]; ok {
 		return conflict("volume %q already exists", v.Name)
 	}
 	contentType := v.ContentType
 	if contentType == "" {
 		contentType = "filesystem"
 	}
-	p.volumes[v.Name] = &storageVolume{
+	p.vols(f.featureProject(ctx, "features.storage.volumes"))[v.Name] = &storageVolume{
 		StorageVolume: backend.StorageVolume{
 			Name: v.Name, Type: "custom", ContentType: contentType,
 			Pool: pool, Description: v.Description, Config: maps.Clone(v.Config),
@@ -249,7 +259,7 @@ func (f *Fake) CreateVolume(_ context.Context, pool string, v backend.StorageVol
 	return nil
 }
 
-func (f *Fake) DeleteVolume(_ context.Context, pool, name string) error {
+func (f *Fake) DeleteVolume(ctx context.Context, pool, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -257,10 +267,10 @@ func (f *Fake) DeleteVolume(_ context.Context, pool, name string) error {
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
-	if _, ok := p.volumes[name]; !ok {
+	if _, ok := p.vols(f.featureProject(ctx, "features.storage.volumes"))[name]; !ok {
 		return notFoundf("volume %q", name)
 	}
-	delete(p.volumes, name)
+	delete(p.vols(f.featureProject(ctx, "features.storage.volumes")), name)
 	return nil
 }
 
@@ -275,7 +285,7 @@ type volumeBackupBlob struct {
 	Config      map[string]string `json:"config"`
 }
 
-func (f *Fake) ExportVolume(_ context.Context, pool, volume string, w io.Writer) error {
+func (f *Fake) ExportVolume(ctx context.Context, pool, volume string, w io.Writer) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -283,7 +293,7 @@ func (f *Fake) ExportVolume(_ context.Context, pool, volume string, w io.Writer)
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
-	v, ok := p.volumes[volume]
+	v, ok := p.vols(f.featureProject(ctx, "features.storage.volumes"))[volume]
 	if !ok {
 		return notFoundf("volume %q", volume)
 	}
@@ -295,7 +305,7 @@ func (f *Fake) ExportVolume(_ context.Context, pool, volume string, w io.Writer)
 	return err
 }
 
-func (f *Fake) ImportVolume(_ context.Context, pool, volume string, r io.Reader) error {
+func (f *Fake) ImportVolume(ctx context.Context, pool, volume string, r io.Reader) error {
 	blob, err := io.ReadAll(r)
 	if err != nil {
 		return err
@@ -316,10 +326,10 @@ func (f *Fake) ImportVolume(_ context.Context, pool, volume string, r io.Reader)
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
-	if _, ok := p.volumes[volume]; ok {
+	if _, ok := p.vols(f.featureProject(ctx, "features.storage.volumes"))[volume]; ok {
 		return conflict("volume %q already exists", volume)
 	}
-	p.volumes[volume] = &storageVolume{
+	p.vols(f.featureProject(ctx, "features.storage.volumes"))[volume] = &storageVolume{
 		StorageVolume: backend.StorageVolume{
 			Name: volume, Type: "custom", ContentType: "filesystem",
 			Pool: pool, Description: vb.Description, Config: maps.Clone(vb.Config),
@@ -346,23 +356,23 @@ func volumeView(v *storageVolume) backend.StorageVolume {
 
 // lookupVolume resolves a pool+volume, returning a not-found error at the right
 // level. Callers must hold the mutex.
-func (f *Fake) lookupVolume(pool, name string) (*storageVolume, error) {
+func (f *Fake) lookupVolume(ctx context.Context, pool, name string) (*storageVolume, error) {
 	p, ok := f.pools[pool]
 	if !ok {
 		return nil, notFoundf("storage pool %q", pool)
 	}
-	v, ok := p.volumes[name]
+	v, ok := p.vols(f.featureProject(ctx, "features.storage.volumes"))[name]
 	if !ok {
 		return nil, notFoundf("volume %q", name)
 	}
 	return v, nil
 }
 
-func (f *Fake) ListVolumeSnapshots(_ context.Context, pool, volume string) ([]backend.StorageVolumeSnapshot, error) {
+func (f *Fake) ListVolumeSnapshots(ctx context.Context, pool, volume string) ([]backend.StorageVolumeSnapshot, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	v, err := f.lookupVolume(pool, volume)
+	v, err := f.lookupVolume(ctx, pool, volume)
 	if err != nil {
 		return nil, err
 	}
@@ -371,11 +381,11 @@ func (f *Fake) ListVolumeSnapshots(_ context.Context, pool, volume string) ([]ba
 	return out, nil
 }
 
-func (f *Fake) CreateVolumeSnapshot(_ context.Context, pool, volume, snapshot string) error {
+func (f *Fake) CreateVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	v, err := f.lookupVolume(pool, volume)
+	v, err := f.lookupVolume(ctx, pool, volume)
 	if err != nil {
 		return err
 	}
@@ -388,11 +398,11 @@ func (f *Fake) CreateVolumeSnapshot(_ context.Context, pool, volume, snapshot st
 	return nil
 }
 
-func (f *Fake) RestoreVolumeSnapshot(_ context.Context, pool, volume, snapshot string) error {
+func (f *Fake) RestoreVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	v, err := f.lookupVolume(pool, volume)
+	v, err := f.lookupVolume(ctx, pool, volume)
 	if err != nil {
 		return err
 	}
@@ -402,11 +412,11 @@ func (f *Fake) RestoreVolumeSnapshot(_ context.Context, pool, volume, snapshot s
 	return nil
 }
 
-func (f *Fake) RenameVolumeSnapshot(_ context.Context, pool, volume, snapshot, newName string) error {
+func (f *Fake) RenameVolumeSnapshot(ctx context.Context, pool, volume, snapshot, newName string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	v, err := f.lookupVolume(pool, volume)
+	v, err := f.lookupVolume(ctx, pool, volume)
 	if err != nil {
 		return err
 	}
@@ -426,11 +436,11 @@ func (f *Fake) RenameVolumeSnapshot(_ context.Context, pool, volume, snapshot, n
 	return notFoundf("snapshot %q", snapshot)
 }
 
-func (f *Fake) UpdateVolumeSnapshotExpiry(_ context.Context, pool, volume, snapshot string, expiresAt time.Time) error {
+func (f *Fake) UpdateVolumeSnapshotExpiry(ctx context.Context, pool, volume, snapshot string, expiresAt time.Time) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	v, err := f.lookupVolume(pool, volume)
+	v, err := f.lookupVolume(ctx, pool, volume)
 	if err != nil {
 		return err
 	}
@@ -443,11 +453,11 @@ func (f *Fake) UpdateVolumeSnapshotExpiry(_ context.Context, pool, volume, snaps
 	return notFoundf("snapshot %q", snapshot)
 }
 
-func (f *Fake) DeleteVolumeSnapshot(_ context.Context, pool, volume, snapshot string) error {
+func (f *Fake) DeleteVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	v, err := f.lookupVolume(pool, volume)
+	v, err := f.lookupVolume(ctx, pool, volume)
 	if err != nil {
 		return err
 	}

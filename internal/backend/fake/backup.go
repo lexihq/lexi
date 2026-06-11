@@ -12,11 +12,12 @@ import (
 // ExportInstance writes a deterministic backup blob for an existing instance so
 // handler tests can exercise the download path (and the C2 import round-trip)
 // without a daemon.
-func (f *Fake) ExportInstance(_ context.Context, name string, w io.Writer) error {
+func (f *Fake) ExportInstance(ctx context.Context, name string, w io.Writer) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -27,7 +28,7 @@ func (f *Fake) ExportInstance(_ context.Context, name string, w io.Writer) error
 // ImportInstance recreates an instance from a blob ExportInstance wrote. It
 // validates the magic header (rejecting foreign data with ErrInvalid) and
 // recovers the original image so the export→import round-trip is observable.
-func (f *Fake) ImportInstance(_ context.Context, name string, r io.Reader) error {
+func (f *Fake) ImportInstance(ctx context.Context, name string, r io.Reader) error {
 	blob, err := io.ReadAll(r)
 	if err != nil {
 		return err
@@ -39,11 +40,12 @@ func (f *Fake) ImportInstance(_ context.Context, name string, r io.Reader) error
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	if _, ok := f.instances[name]; ok {
+	if _, ok := sp.instances[name]; ok {
 		return conflict("instance %q already exists", name)
 	}
-	f.instances[name] = &instance{
+	sp.instances[name] = &instance{
 		Instance: backend.Instance{
 			Name:      name,
 			Status:    "Stopped",

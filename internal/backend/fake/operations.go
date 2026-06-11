@@ -10,27 +10,29 @@ import (
 // maxOps caps the fake's operation log so long-lived dev servers stay bounded.
 const maxOps = 50
 
-func (f *Fake) ListOperations(_ context.Context) ([]backend.Operation, error) {
+func (f *Fake) ListOperations(ctx context.Context) ([]backend.Operation, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	return append([]backend.Operation(nil), f.ops...), nil
+	return append([]backend.Operation(nil), sp.ops...), nil
 }
 
 // CancelOperation cancels a running, cancelable operation, flipping it to a
 // terminal "Cancelled" state. Unknown id → ErrNotFound; an operation the daemon
 // would not cancel (already finished) → ErrInvalid, matching the real driver.
-func (f *Fake) CancelOperation(_ context.Context, id string) error {
+func (f *Fake) CancelOperation(ctx context.Context, id string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	for i := range f.ops {
-		if f.ops[i].ID == id {
-			if !f.ops[i].Cancelable {
+	for i := range sp.ops {
+		if sp.ops[i].ID == id {
+			if !sp.ops[i].Cancelable {
 				return invalid("operation %q is not cancelable", id)
 			}
-			f.ops[i].Status = "Cancelled"
-			f.ops[i].Cancelable = false
+			sp.ops[i].Status = "Cancelled"
+			sp.ops[i].Cancelable = false
 			return nil
 		}
 	}
@@ -43,17 +45,18 @@ func (f *Fake) CancelOperation(_ context.Context, id string) error {
 func (f *Fake) SeedRunningOperation(description string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.spaceFor("default")
 
-	f.opSeq++
-	id := fmt.Sprintf("op-%d", f.opSeq)
-	f.ops = append([]backend.Operation{{
+	sp.opSeq++
+	id := fmt.Sprintf("op-%d", sp.opSeq)
+	sp.ops = append([]backend.Operation{{
 		ID:          id,
 		Description: description,
 		Class:       "task",
 		Status:      "Running",
 		Cancelable:  true,
 		CreatedAt:   f.now(),
-	}}, f.ops...)
+	}}, sp.ops...)
 	return id
 }
 
@@ -61,16 +64,16 @@ func (f *Fake) SeedRunningOperation(description string) string {
 // "mutations produce operations" — every entry is an already-succeeded task,
 // unlike Incus where running ops appear and completed ones are pruned.
 // Callers must hold the mutex and only log from success paths.
-func (f *Fake) logOp(description string) {
-	f.opSeq++
-	f.ops = append([]backend.Operation{{
-		ID:          fmt.Sprintf("op-%d", f.opSeq),
+func (f *Fake) logOp(sp *space, description string) {
+	sp.opSeq++
+	sp.ops = append([]backend.Operation{{
+		ID:          fmt.Sprintf("op-%d", sp.opSeq),
 		Description: description,
 		Class:       "task",
 		Status:      "Success",
 		CreatedAt:   f.now(),
-	}}, f.ops...)
-	if len(f.ops) > maxOps {
-		f.ops = f.ops[:maxOps]
+	}}, sp.ops...)
+	if len(sp.ops) > maxOps {
+		sp.ops = sp.ops[:maxOps]
 	}
 }

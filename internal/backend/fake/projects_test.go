@@ -56,3 +56,67 @@ func TestProjectCRUDRoundTrip(t *testing.T) {
 	require.ErrorIs(t, f.DeleteProject(ctx(), "dev2"), backend.ErrNotFound)
 	require.ErrorIs(t, f.RenameProject(ctx(), "ghost", "x"), backend.ErrNotFound)
 }
+
+// The scoping contract on the fake: a ctx-tagged project namespaces its
+// instances/profiles/images/volumes; networks follow features.networks
+// (shared from default unless the project owns them).
+func TestProjectScopingIsolatesResources(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "c-default", Image: "alpine/edge"}))
+	require.NoError(t, f.CreateProject(ctx(), "dev", "", nil))
+	dev := backend.WithProject(ctx(), "dev")
+
+	// Instances are isolated; the new project starts empty and owns its
+	// (empty) default profile.
+	got, err := f.ListInstances(dev)
+	require.NoError(t, err)
+	assert.Empty(t, got, "new project must not see default's instances")
+	profs, err := f.ListProfiles(dev)
+	require.NoError(t, err)
+	require.Len(t, profs, 1)
+	assert.Equal(t, "default", profs[0].Name)
+	assert.Empty(t, profs[0].Devices)
+
+	require.NoError(t, f.CreateInstance(dev, backend.CreateOptions{Name: "c-dev", Image: "alpine/edge"}))
+	devList, err := f.ListInstances(dev)
+	require.NoError(t, err)
+	require.Len(t, devList, 1)
+	defList, err := f.ListInstances(ctx())
+	require.NoError(t, err)
+	require.Len(t, defList, 1)
+	assert.Equal(t, "c-default", defList[0].Name, "default project must not see dev's instances")
+
+	// Same instance name in both projects is fine.
+	require.NoError(t, f.CreateInstance(dev, backend.CreateOptions{Name: "c-default", Image: "alpine/edge"}))
+
+	// Images are isolated too (features.images defaults true).
+	imgs, err := f.ListLocalImages(dev)
+	require.NoError(t, err)
+	assert.Empty(t, imgs, "default's image store is not shared into dev")
+
+	// Networks are shared from default (features.networks unset): the dev
+	// project sees and uses incusbr0.
+	nets, err := f.ListNetworks(dev)
+	require.NoError(t, err)
+	require.NotEmpty(t, nets)
+
+	// Volumes are per project.
+	require.NoError(t, f.CreateVolume(dev, "default", backend.StorageVolume{Name: "v1"}))
+	vols, err := f.ListVolumes(ctx(), "default")
+	require.NoError(t, err)
+	assert.Empty(t, vols, "dev's volumes are invisible to the default project")
+
+	// A project owning its networks gets an isolated namespace.
+	require.NoError(t, f.CreateProject(ctx(), "netty", "", map[string]string{"features.networks": "true"}))
+	netty := backend.WithProject(ctx(), "netty")
+	nets, err = f.ListNetworks(netty)
+	require.NoError(t, err)
+	assert.Empty(t, nets, "features.networks=true projects own an empty network namespace")
+
+	// The non-empty guard sees project resources; cleanup frees it.
+	require.ErrorIs(t, f.DeleteProject(ctx(), "dev"), backend.ErrConflict)
+	require.NoError(t, f.DeleteInstance(dev, "c-dev"))
+	require.NoError(t, f.DeleteInstance(dev, "c-default"))
+	require.NoError(t, f.DeleteVolume(dev, "default", "v1"))
+	require.NoError(t, f.DeleteProject(ctx(), "dev"))
+}

@@ -11,42 +11,45 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 )
 
-func (f *Fake) ListProfiles(_ context.Context) ([]backend.Profile, error) {
+func (f *Fake) ListProfiles(ctx context.Context) ([]backend.Profile, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.profiles")
 
-	out := make([]backend.Profile, 0, len(f.profiles))
-	for name := range f.profiles {
-		out = append(out, f.profileView(name))
+	out := make([]backend.Profile, 0, len(sp.profiles))
+	for name := range sp.profiles {
+		out = append(out, profileView(sp, name))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
-func (f *Fake) GetProfile(_ context.Context, name string) (backend.Profile, error) {
+func (f *Fake) GetProfile(ctx context.Context, name string) (backend.Profile, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.profiles")
 
-	if _, ok := f.profiles[name]; !ok {
+	if _, ok := sp.profiles[name]; !ok {
 		return backend.Profile{}, notFoundf("profile %q", name)
 	}
-	p := f.profileView(name)
-	p.Version = strconv.Itoa(f.profileVersions[name])
+	p := profileView(sp, name)
+	p.Version = strconv.Itoa(sp.profileVersions[name])
 	return p, nil
 }
 
-func (f *Fake) CreateProfile(_ context.Context, name, description string) error {
+func (f *Fake) CreateProfile(ctx context.Context, name, description string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.profiles")
 
 	// Incus parity: API object names exclude whitespace and path separators.
 	if strings.ContainsAny(name, " \t\n/") {
 		return invalid("invalid profile name %q", name)
 	}
-	if _, ok := f.profiles[name]; ok {
+	if _, ok := sp.profiles[name]; ok {
 		return conflict("profile %q already exists", name)
 	}
-	f.profiles[name] = backend.Profile{
+	sp.profiles[name] = backend.Profile{
 		Name: name, Description: description,
 		Config:  map[string]string{},
 		Devices: map[string]map[string]string{},
@@ -54,17 +57,18 @@ func (f *Fake) CreateProfile(_ context.Context, name, description string) error 
 	return nil
 }
 
-func (f *Fake) UpdateProfile(_ context.Context, name, description string, config map[string]string, version string) error {
+func (f *Fake) UpdateProfile(ctx context.Context, name, description string, config map[string]string, version string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.profiles")
 
-	p, ok := f.profiles[name]
+	p, ok := sp.profiles[name]
 	if !ok {
 		return notFoundf("profile %q", name)
 	}
 	// Empty version = unconditional, mirroring UpdateServerConfig; a stale
 	// version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(f.profileVersions[name]) {
+	if version != "" && version != strconv.Itoa(sp.profileVersions[name]) {
 		return conflict("profile %q version %s", name, version)
 	}
 	p.Description = description
@@ -72,36 +76,38 @@ func (f *Fake) UpdateProfile(_ context.Context, name, description string, config
 	if p.Config == nil {
 		p.Config = map[string]string{}
 	}
-	f.profiles[name] = p // devices untouched
-	f.profileVersions[name]++
+	sp.profiles[name] = p // devices untouched
+	sp.profileVersions[name]++
 	return nil
 }
 
-func (f *Fake) DeleteProfile(_ context.Context, name string) error {
+func (f *Fake) DeleteProfile(ctx context.Context, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.profiles")
 
-	if _, ok := f.profiles[name]; !ok {
+	if _, ok := sp.profiles[name]; !ok {
 		return notFoundf("profile %q", name)
 	}
 	if name == "default" {
 		return invalid("the default profile cannot be deleted")
 	}
-	for instName, in := range f.instances {
+	for instName, in := range sp.instances {
 		if slices.Contains(in.Profiles, name) {
 			return conflict("profile %q is in use by %q", name, instName)
 		}
 	}
-	delete(f.profiles, name)
-	delete(f.profileVersions, name)
+	delete(sp.profiles, name)
+	delete(sp.profileVersions, name)
 	return nil
 }
 
-func (f *Fake) RenameProfile(_ context.Context, name, newName string) error {
+func (f *Fake) RenameProfile(ctx context.Context, name, newName string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.profiles")
 
-	p, ok := f.profiles[name]
+	p, ok := sp.profiles[name]
 	if !ok {
 		return notFoundf("profile %q", name)
 	}
@@ -111,17 +117,17 @@ func (f *Fake) RenameProfile(_ context.Context, name, newName string) error {
 	if !validAPIName(newName) {
 		return invalid("invalid profile name %q", newName)
 	}
-	if _, exists := f.profiles[newName]; exists {
+	if _, exists := sp.profiles[newName]; exists {
 		return conflict("profile %q already exists", newName)
 	}
 	p.Name = newName
-	f.profiles[newName] = p
-	f.profileVersions[newName] = f.profileVersions[name] + 1
-	delete(f.profiles, name)
-	delete(f.profileVersions, name)
+	sp.profiles[newName] = p
+	sp.profileVersions[newName] = sp.profileVersions[name] + 1
+	delete(sp.profiles, name)
+	delete(sp.profileVersions, name)
 	// Assigned instances follow the rename, as the daemon's DB-level rename
 	// does (instances reference profiles by ID there).
-	for _, in := range f.instances {
+	for _, in := range sp.instances {
 		for i, pn := range in.Profiles {
 			if pn == name {
 				in.Profiles[i] = newName
@@ -131,11 +137,12 @@ func (f *Fake) RenameProfile(_ context.Context, name, newName string) error {
 	return nil
 }
 
-func (f *Fake) AddProfileDevice(_ context.Context, profile, device string, config map[string]string) error {
+func (f *Fake) AddProfileDevice(ctx context.Context, profile, device string, config map[string]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.profiles")
 
-	p, ok := f.profiles[profile]
+	p, ok := sp.profiles[profile]
 	if !ok {
 		return notFoundf("profile %q", profile)
 	}
@@ -143,36 +150,38 @@ func (f *Fake) AddProfileDevice(_ context.Context, profile, device string, confi
 		p.Devices = map[string]map[string]string{}
 	}
 	p.Devices[device] = maps.Clone(config)
-	f.profiles[profile] = p
-	f.profileVersions[profile]++
+	sp.profiles[profile] = p
+	sp.profileVersions[profile]++
 	return nil
 }
 
-func (f *Fake) UpdateProfileDevice(_ context.Context, profile, device string, config map[string]string, version string) error {
+func (f *Fake) UpdateProfileDevice(ctx context.Context, profile, device string, config map[string]string, version string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.profiles")
 
-	p, ok := f.profiles[profile]
+	p, ok := sp.profiles[profile]
 	if !ok {
 		return notFoundf("profile %q", profile)
 	}
 	if _, ok := p.Devices[device]; !ok {
 		return notFoundf("device %q on profile %q", device, profile)
 	}
-	if version != "" && version != strconv.Itoa(f.profileVersions[profile]) {
+	if version != "" && version != strconv.Itoa(sp.profileVersions[profile]) {
 		return conflict("profile %q version %s", profile, version)
 	}
 	p.Devices[device] = maps.Clone(config)
-	f.profiles[profile] = p
-	f.profileVersions[profile]++
+	sp.profiles[profile] = p
+	sp.profileVersions[profile]++
 	return nil
 }
 
-func (f *Fake) RemoveProfileDevice(_ context.Context, profile, device string) error {
+func (f *Fake) RemoveProfileDevice(ctx context.Context, profile, device string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.profiles")
 
-	p, ok := f.profiles[profile]
+	p, ok := sp.profiles[profile]
 	if !ok {
 		return notFoundf("profile %q", profile)
 	}
@@ -180,21 +189,22 @@ func (f *Fake) RemoveProfileDevice(_ context.Context, profile, device string) er
 		return notFoundf("device %q on profile %q", device, profile)
 	}
 	delete(p.Devices, device)
-	f.profiles[profile] = p
-	f.profileVersions[profile]++
+	sp.profiles[profile] = p
+	sp.profileVersions[profile]++
 	return nil
 }
 
-func (f *Fake) SetInstanceProfiles(_ context.Context, name string, profiles []string) error {
+func (f *Fake) SetInstanceProfiles(ctx context.Context, name string, profiles []string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.profiles")
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
 	for _, p := range profiles {
-		if _, ok := f.profiles[p]; !ok {
+		if _, ok := sp.profiles[p]; !ok {
 			return invalid("unknown profile %q", p)
 		}
 	}
@@ -204,10 +214,10 @@ func (f *Fake) SetInstanceProfiles(_ context.Context, name string, profiles []st
 
 // profileView materializes a profile with a fresh UsedBy from current instances.
 // Callers must hold the mutex.
-func (f *Fake) profileView(name string) backend.Profile {
-	p := f.profiles[name]
+func profileView(sp *space, name string) backend.Profile {
+	p := sp.profiles[name]
 	var usedBy []string
-	for instName, in := range f.instances {
+	for instName, in := range sp.instances {
 		for _, pn := range in.Profiles {
 			if pn == name {
 				usedBy = append(usedBy, instName)

@@ -58,11 +58,12 @@ func cloneFiles(src map[string]*fakeFile) map[string]*fakeFile {
 	return out
 }
 
-func (f *Fake) ListFiles(_ context.Context, instance, p string) ([]backend.FileEntry, error) {
+func (f *Fake) ListFiles(ctx context.Context, instance, p string) ([]backend.FileEntry, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[instance]
+	in, ok := sp.instances[instance]
 	if !ok {
 		return nil, notFound(instance)
 	}
@@ -99,11 +100,12 @@ func (f *Fake) ListFiles(_ context.Context, instance, p string) ([]backend.FileE
 	return entries, nil
 }
 
-func (f *Fake) PullFile(_ context.Context, instance, p string, w io.Writer) error {
+func (f *Fake) PullFile(ctx context.Context, instance, p string, w io.Writer) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[instance]
+	in, ok := sp.instances[instance]
 	if !ok {
 		return notFound(instance)
 	}
@@ -122,11 +124,12 @@ func (f *Fake) PullFile(_ context.Context, instance, p string, w io.Writer) erro
 	return err
 }
 
-func (f *Fake) PushFile(_ context.Context, instance, p string, r io.Reader, opts backend.FileWriteOptions) error {
+func (f *Fake) PushFile(ctx context.Context, instance, p string, r io.Reader, opts backend.FileWriteOptions) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[instance]
+	in, ok := sp.instances[instance]
 	if !ok {
 		return notFound(instance)
 	}
@@ -163,11 +166,12 @@ func (f *Fake) PushFile(_ context.Context, instance, p string, r io.Reader, opts
 	return nil
 }
 
-func (f *Fake) PullFileInfo(_ context.Context, instance, p string, w io.Writer, limit int64) (backend.FileInfo, error) {
+func (f *Fake) PullFileInfo(ctx context.Context, instance, p string, w io.Writer, limit int64) (backend.FileInfo, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[instance]
+	in, ok := sp.instances[instance]
 	if !ok {
 		return backend.FileInfo{}, notFound(instance)
 	}
@@ -192,11 +196,12 @@ func (f *Fake) PullFileInfo(_ context.Context, instance, p string, w io.Writer, 
 	return info, nil
 }
 
-func (f *Fake) PullFileHead(_ context.Context, instance, p string, w io.Writer, limit int64) (backend.FileInfo, bool, error) {
+func (f *Fake) PullFileHead(ctx context.Context, instance, p string, w io.Writer, limit int64) (backend.FileInfo, bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[instance]
+	in, ok := sp.instances[instance]
 	if !ok {
 		return backend.FileInfo{}, false, notFound(instance)
 	}
@@ -228,17 +233,19 @@ func (f *Fake) PullFileHead(_ context.Context, instance, p string, w io.Writer, 
 func (f *Fake) SeedSymlink(instance, p string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.spaceFor("default")
 
-	if in, ok := f.instances[instance]; ok {
+	if in, ok := sp.instances[instance]; ok {
 		in.files[p] = &fakeFile{symlink: true, mode: "0777"}
 	}
 }
 
-func (f *Fake) DeleteFile(_ context.Context, instance, p string) error {
+func (f *Fake) DeleteFile(ctx context.Context, instance, p string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[instance]
+	in, ok := sp.instances[instance]
 	if !ok {
 		return notFound(instance)
 	}
@@ -265,11 +272,12 @@ func (f *Fake) DeleteFile(_ context.Context, instance, p string) error {
 	return nil
 }
 
-func (f *Fake) MakeDirectory(_ context.Context, instance, p string) error {
+func (f *Fake) MakeDirectory(ctx context.Context, instance, p string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[instance]
+	in, ok := sp.instances[instance]
 	if !ok {
 		return notFound(instance)
 	}

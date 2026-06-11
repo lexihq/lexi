@@ -1,6 +1,7 @@
 package fake
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"slices"
@@ -34,10 +35,20 @@ type instance struct {
 type storagePool struct {
 	backend.StoragePool
 
-	volumes map[string]*storageVolume
+	volumes map[string]map[string]*storageVolume // project → volume name → volume
 	// version is the counter behind the Get/Update concurrency token, bumped
 	// on every pool config update.
 	version int
+}
+
+// vols returns the pool's volume namespace for a project, creating it lazily.
+func (p *storagePool) vols(project string) map[string]*storageVolume {
+	m, ok := p.volumes[project]
+	if !ok {
+		m = map[string]*storageVolume{}
+		p.volumes[project] = m
+	}
+	return m
 }
 
 type storageVolume struct {
@@ -49,30 +60,49 @@ type storageVolume struct {
 	version int
 }
 
-// Fake is a mutex-guarded, in-memory Backend with a deterministic clock.
-type Fake struct {
-	mu        sync.Mutex
-	instances map[string]*instance
-	profiles  map[string]backend.Profile
-	// profileVersions are per-profile counters bumped on update; the
-	// Get/Update version token (missing key reads as 0).
+// space is the project-scoped slice of the fake's state. The *Versions maps
+// are per-object counters bumped on update — the Get/Update version tokens
+// (missing keys read as 0). networks/acls are populated only for projects
+// with features.networks=true; everyone else shares the default space's (see
+// networkSpace).
+type space struct {
+	instances       map[string]*instance
+	profiles        map[string]backend.Profile
 	profileVersions map[string]int
 	networks        map[string]backend.Network
-	// networkVersions are per-network counters bumped on update; the
-	// Get/Update version token (missing key reads as 0).
 	networkVersions map[string]int
 	acls            map[string]backend.NetworkACL
-	// aclVersions are per-ACL counters bumped on update; the Get/Update
-	// version token (missing key reads as 0).
-	aclVersions map[string]int
-	projects    map[string]backend.Project
+	aclVersions     map[string]int
+	images          map[string]*backend.LocalImage // keyed by fingerprint
+	ops             []backend.Operation            // newest first, capped at maxOps
+	opSeq           int
+}
+
+// newSpace returns an empty project space.
+func newSpace() *space {
+	return &space{
+		instances:       map[string]*instance{},
+		profiles:        map[string]backend.Profile{},
+		profileVersions: map[string]int{},
+		networks:        map[string]backend.Network{},
+		networkVersions: map[string]int{},
+		acls:            map[string]backend.NetworkACL{},
+		aclVersions:     map[string]int{},
+		images:          map[string]*backend.LocalImage{},
+	}
+}
+
+// Fake is a mutex-guarded, in-memory Backend with a deterministic clock.
+// Project-scoped state lives in spaces; pools, certificates, and server
+// config are daemon-global, like Incus.
+type Fake struct {
+	mu       sync.Mutex
+	spaces   map[string]*space // keyed by project; "default" always exists
+	projects map[string]backend.Project
 	// projectVersions are per-project counters bumped on update; the
 	// Get/Update version token (missing key reads as 0).
 	projectVersions map[string]int
 	pools           map[string]*storagePool
-	images          map[string]*backend.LocalImage // keyed by fingerprint
-	ops             []backend.Operation            // newest first, capped at maxOps
-	opSeq           int
 	clock           time.Time
 
 	serverConfig        map[string]string
@@ -81,35 +111,93 @@ type Fake struct {
 	warnings            []backend.Warning
 }
 
+// projectOf normalizes the request's project; unset means default.
+func projectOf(ctx context.Context) string {
+	if name := backend.ProjectFromContext(ctx); name != "" {
+		return name
+	}
+	return "default"
+}
+
+// space returns the request's project space, creating it lazily (a ghost
+// project's space is empty and invisible — the HTTP layer validates project
+// existence). Callers must hold the mutex.
+func (f *Fake) space(ctx context.Context) *space {
+	return f.spaceFor(projectOf(ctx))
+}
+
+// spaceFor returns the named project's space, creating it lazily. Callers
+// must hold the mutex.
+func (f *Fake) spaceFor(project string) *space {
+	sp, ok := f.spaces[project]
+	if !ok {
+		sp = newSpace()
+		f.spaces[project] = sp
+	}
+	return sp
+}
+
+// featureSpace returns the space owning a feature-routed resource kind: the
+// project's own when it enables the feature, else the default project's
+// (Incus shares such resources from default otherwise). Callers must hold
+// the mutex.
+func (f *Fake) featureSpace(ctx context.Context, feature string) *space {
+	return f.spaceFor(f.featureProject(ctx, feature))
+}
+
+// featureProject names the project owning a feature-routed resource kind for
+// this request. Callers must hold the mutex.
+func (f *Fake) featureProject(ctx context.Context, feature string) string {
+	project := projectOf(ctx)
+	if project == "default" || f.projects[project].Config[feature] == "true" {
+		return project
+	}
+	return "default"
+}
+
+// networkSpace returns the space owning the request project's networks and
+// ACLs. Callers must hold the mutex.
+func (f *Fake) networkSpace(ctx context.Context) *space {
+	return f.featureSpace(ctx, "features.networks")
+}
+
 // New returns an empty fake backend.
 func New() *Fake {
+	defaultSpace := newSpace()
+	defaultSpace.profiles = map[string]backend.Profile{
+		"default": {
+			Name: "default", Description: "Default Incus profile",
+			Config: map[string]string{},
+			Devices: map[string]map[string]string{
+				"eth0": {"type": "nic", "network": "incusbr0"},
+				"root": {"type": "disk", "path": "/", "pool": "default"},
+			},
+		},
+		"gpu": {
+			Name: "gpu", Description: "GPU passthrough",
+			Config:  map[string]string{},
+			Devices: map[string]map[string]string{"gpu0": {"type": "gpu"}},
+		},
+	}
+	defaultSpace.networks = map[string]backend.Network{
+		"incusbr0": {
+			Name: "incusbr0", Type: "bridge", Managed: true, Description: "Default bridge",
+			Config: map[string]string{"ipv4.address": "10.0.3.1/24", "ipv4.nat": "true"},
+		},
+		"eth0": {Name: "eth0", Type: "physical", Managed: false},
+	}
+	defaultSpace.images = map[string]*backend.LocalImage{
+		"fake-debian-12-aarch64": {
+			Fingerprint: "fake-debian-12-aarch64",
+			Aliases:     []string{"debian/12"},
+			Description: "Debian 12 (bookworm) arm64",
+			Arch:        "aarch64",
+			Type:        "container",
+			CreatedAt:   time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
 	return &Fake{
-		profiles: map[string]backend.Profile{
-			"default": {
-				Name: "default", Description: "Default Incus profile",
-				Config: map[string]string{},
-				Devices: map[string]map[string]string{
-					"eth0": {"type": "nic", "network": "incusbr0"},
-					"root": {"type": "disk", "path": "/", "pool": "default"},
-				},
-			},
-			"gpu": {
-				Name: "gpu", Description: "GPU passthrough",
-				Config:  map[string]string{},
-				Devices: map[string]map[string]string{"gpu0": {"type": "gpu"}},
-			},
-		},
-		networks: map[string]backend.Network{
-			"incusbr0": {
-				Name: "incusbr0", Type: "bridge", Managed: true, Description: "Default bridge",
-				Config: map[string]string{"ipv4.address": "10.0.3.1/24", "ipv4.nat": "true"},
-			},
-			"eth0": {Name: "eth0", Type: "physical", Managed: false},
-		},
-		profileVersions: map[string]int{},
-		networkVersions: map[string]int{},
-		acls:            map[string]backend.NetworkACL{},
-		aclVersions:     map[string]int{},
+		spaces: map[string]*space{"default": defaultSpace},
 		projects: map[string]backend.Project{
 			"default": {Name: "default", Description: "Default Incus project", Config: map[string]string{
 				"features.images": "true", "features.networks": "true",
@@ -119,18 +207,8 @@ func New() *Fake {
 		},
 		projectVersions: map[string]int{},
 		pools: map[string]*storagePool{
-			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
-			"zfs0":    {StoragePool: backend.StoragePool{Name: "zfs0", Driver: "zfs", Config: map[string]string{}}, volumes: map[string]*storageVolume{}},
-		},
-		images: map[string]*backend.LocalImage{
-			"fake-debian-12-aarch64": {
-				Fingerprint: "fake-debian-12-aarch64",
-				Aliases:     []string{"debian/12"},
-				Description: "Debian 12 (bookworm) arm64",
-				Arch:        "aarch64",
-				Type:        "container",
-				CreatedAt:   time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC),
-			},
+			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]map[string]*storageVolume{}},
+			"zfs0":    {StoragePool: backend.StoragePool{Name: "zfs0", Driver: "zfs", Config: map[string]string{}}, volumes: map[string]map[string]*storageVolume{}},
 		},
 		serverConfig:        map[string]string{"core.https_address": ":8443"},
 		serverConfigVersion: 1,
@@ -151,8 +229,7 @@ func New() *Fake {
 				LastSeenAt:  time.Date(2025, time.December, 30, 9, 0, 0, 0, time.UTC),
 			},
 		},
-		instances: make(map[string]*instance),
-		clock:     time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
+		clock: time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
 	}
 }
 
@@ -197,25 +274,25 @@ func (f *Fake) Capabilities() backend.Capabilities {
 // driver, which reads them from the daemon's expanded config: an instance-local
 // limit wins, else the last assigned profile that sets the key (later profiles
 // override earlier ones). Callers must hold the mutex.
-func (f *Fake) view(in *instance) backend.Instance {
+func (f *Fake) view(sp *space, in *instance) backend.Instance {
 	out := in.Instance
 	out.Snapshots = len(in.snapshots)
 	out.IPv4 = append([]string(nil), in.IPv4...)
 	out.Profiles = append([]string(nil), in.Profiles...)
 	if out.LimitsCPU == "" {
-		out.LimitsCPU = f.profileConfigValue(in.Profiles, "limits.cpu")
+		out.LimitsCPU = profileConfigValue(sp, in.Profiles, "limits.cpu")
 	}
 	if out.LimitsMemory == "" {
-		out.LimitsMemory = f.profileConfigValue(in.Profiles, "limits.memory")
+		out.LimitsMemory = profileConfigValue(sp, in.Profiles, "limits.memory")
 	}
 	return out
 }
 
 // profileConfigValue returns key's value from the last profile in override
 // order that sets it, or "". Callers must hold the mutex.
-func (f *Fake) profileConfigValue(profiles []string, key string) string {
+func profileConfigValue(sp *space, profiles []string, key string) string {
 	for _, name := range slices.Backward(profiles) {
-		if v, ok := f.profiles[name].Config[key]; ok {
+		if v, ok := sp.profiles[name].Config[key]; ok {
 			return v
 		}
 	}

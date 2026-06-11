@@ -11,112 +11,118 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 )
 
-func (f *Fake) ListNetworkACLs(_ context.Context) ([]backend.NetworkACL, error) {
+func (f *Fake) ListNetworkACLs(ctx context.Context) ([]backend.NetworkACL, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.networkSpace(ctx)
 
-	out := make([]backend.NetworkACL, 0, len(f.acls))
-	for name := range f.acls {
-		out = append(out, f.aclView(name))
+	out := make([]backend.NetworkACL, 0, len(sp.acls))
+	for name := range sp.acls {
+		out = append(out, f.aclView(sp, name))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
-func (f *Fake) GetNetworkACL(_ context.Context, name string) (backend.NetworkACL, error) {
+func (f *Fake) GetNetworkACL(ctx context.Context, name string) (backend.NetworkACL, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.networkSpace(ctx)
 
-	if _, ok := f.acls[name]; !ok {
+	if _, ok := sp.acls[name]; !ok {
 		return backend.NetworkACL{}, notFoundf("network ACL %q", name)
 	}
-	acl := f.aclView(name)
-	acl.Version = strconv.Itoa(f.aclVersions[name])
+	acl := f.aclView(sp, name)
+	acl.Version = strconv.Itoa(sp.aclVersions[name])
 	return acl, nil
 }
 
-func (f *Fake) CreateNetworkACL(_ context.Context, name, description string) error {
+func (f *Fake) CreateNetworkACL(ctx context.Context, name, description string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.networkSpace(ctx)
 
 	if !validACLName(name) {
 		return invalid("invalid network ACL name %q", name)
 	}
-	if _, ok := f.acls[name]; ok {
+	if _, ok := sp.acls[name]; ok {
 		return conflict("network ACL %q already exists", name)
 	}
-	f.acls[name] = backend.NetworkACL{Name: name, Description: description}
+	sp.acls[name] = backend.NetworkACL{Name: name, Description: description}
 	return nil
 }
 
-func (f *Fake) UpdateNetworkACL(_ context.Context, name, description string, ingress, egress []backend.NetworkACLRule, version string) error {
+func (f *Fake) UpdateNetworkACL(ctx context.Context, name, description string, ingress, egress []backend.NetworkACLRule, version string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.networkSpace(ctx)
 
-	acl, ok := f.acls[name]
+	acl, ok := sp.acls[name]
 	if !ok {
 		return notFoundf("network ACL %q", name)
 	}
 	// Empty version = unconditional, mirroring the Incus client's If-Match
 	// semantics; a stale version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(f.aclVersions[name]) {
+	if version != "" && version != strconv.Itoa(sp.aclVersions[name]) {
 		return conflict("network ACL %q version %s", name, version)
 	}
 	acl.Description = description
 	acl.Ingress = append([]backend.NetworkACLRule(nil), ingress...)
 	acl.Egress = append([]backend.NetworkACLRule(nil), egress...)
-	f.acls[name] = acl
-	f.aclVersions[name]++
+	sp.acls[name] = acl
+	sp.aclVersions[name]++
 	return nil
 }
 
-func (f *Fake) RenameNetworkACL(_ context.Context, name, newName string) error {
+func (f *Fake) RenameNetworkACL(ctx context.Context, name, newName string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.networkSpace(ctx)
 
-	acl, ok := f.acls[name]
+	acl, ok := sp.acls[name]
 	if !ok {
 		return notFoundf("network ACL %q", name)
 	}
 	// Incus parity: the daemon refuses renaming an attached ACL.
-	if used := f.aclUsedBy(name); len(used) > 0 {
+	if used := f.aclUsedBy(sp, name); len(used) > 0 {
 		return conflict("network ACL %q is in use", name)
 	}
 	if !validACLName(newName) {
 		return invalid("invalid network ACL name %q", newName)
 	}
-	if _, exists := f.acls[newName]; exists {
+	if _, exists := sp.acls[newName]; exists {
 		return conflict("network ACL %q already exists", newName)
 	}
 	acl.Name = newName
-	f.acls[newName] = acl
-	f.aclVersions[newName] = f.aclVersions[name] + 1
-	delete(f.acls, name)
-	delete(f.aclVersions, name)
+	sp.acls[newName] = acl
+	sp.aclVersions[newName] = sp.aclVersions[name] + 1
+	delete(sp.acls, name)
+	delete(sp.aclVersions, name)
 	return nil
 }
 
-func (f *Fake) DeleteNetworkACL(_ context.Context, name string) error {
+func (f *Fake) DeleteNetworkACL(ctx context.Context, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.networkSpace(ctx)
 
-	if _, ok := f.acls[name]; !ok {
+	if _, ok := sp.acls[name]; !ok {
 		return notFoundf("network ACL %q", name)
 	}
-	if used := f.aclUsedBy(name); len(used) > 0 {
+	if used := f.aclUsedBy(sp, name); len(used) > 0 {
 		return conflict("network ACL %q is in use", name)
 	}
-	delete(f.acls, name)
-	delete(f.aclVersions, name)
+	delete(sp.acls, name)
+	delete(sp.aclVersions, name)
 	return nil
 }
 
 // aclView materializes an ACL with a fresh UsedBy. Callers must hold the mutex.
-func (f *Fake) aclView(name string) backend.NetworkACL {
-	acl := f.acls[name]
+func (f *Fake) aclView(sp *space, name string) backend.NetworkACL {
+	acl := sp.acls[name]
 	acl.Ingress = append([]backend.NetworkACLRule(nil), acl.Ingress...)
 	acl.Egress = append([]backend.NetworkACLRule(nil), acl.Egress...)
-	acl.UsedBy = f.aclUsedBy(name)
+	acl.UsedBy = f.aclUsedBy(sp, name)
 	return acl
 }
 
@@ -125,21 +131,26 @@ func (f *Fake) aclView(name string) backend.NetworkACL {
 // the daemon's UsedBy: instances are scanned with profile-expanded devices,
 // only nics bound to a network count, and every matching NIC appends its
 // owner's path (no dedup). Callers must hold the mutex.
-func (f *Fake) aclUsedBy(name string) []string {
+func (f *Fake) aclUsedBy(owner *space, name string) []string {
 	var used []string
-	for netName, n := range f.networks {
+	for netName, n := range owner.networks {
 		if slices.Contains(splitCommaList(n.Config["security.acls"]), name) {
 			used = append(used, "/1.0/networks/"+netName)
 		}
 	}
-	for instName, inst := range f.instances {
-		for range aclNICMatches(f.expandedDevices(inst), name) {
-			used = append(used, "/1.0/instances/"+instName)
+	// NIC references can come from any project sharing this network space;
+	// scan all spaces (a shared ACL must not be deletable while any project
+	// references it).
+	for _, sp := range f.spaces {
+		for instName, inst := range sp.instances {
+			for range aclNICMatches(expandedDevices(sp, inst), name) {
+				used = append(used, "/1.0/instances/"+instName)
+			}
 		}
-	}
-	for profName, p := range f.profiles {
-		for range aclNICMatches(p.Devices, name) {
-			used = append(used, "/1.0/profiles/"+profName)
+		for profName, p := range sp.profiles {
+			for range aclNICMatches(p.Devices, name) {
+				used = append(used, "/1.0/profiles/"+profName)
+			}
 		}
 	}
 	sort.Strings(used)
@@ -149,10 +160,10 @@ func (f *Fake) aclUsedBy(name string) []string {
 // expandedDevices merges the instance's profile devices (in profile order)
 // under its local devices (locals shadow by device name), mirroring the
 // daemon's ExpandInstanceDevices. Callers must hold the mutex.
-func (f *Fake) expandedDevices(inst *instance) map[string]map[string]string {
+func expandedDevices(sp *space, inst *instance) map[string]map[string]string {
 	out := map[string]map[string]string{}
 	for _, profName := range inst.Profiles {
-		maps.Copy(out, f.profiles[profName].Devices)
+		maps.Copy(out, sp.profiles[profName].Devices)
 	}
 	maps.Copy(out, inst.devices)
 	return out

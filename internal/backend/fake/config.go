@@ -8,18 +8,19 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 )
 
-func (f *Fake) GetInstanceConfig(_ context.Context, name string) (backend.InstanceConfig, error) {
+func (f *Fake) GetInstanceConfig(ctx context.Context, name string) (backend.InstanceConfig, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return backend.InstanceConfig{}, notFound(name)
 	}
 	// Expanded = profile devices, then local devices win on name collision.
 	expanded := map[string]map[string]string{}
 	for _, pn := range in.Profiles {
-		p, ok := f.profiles[pn]
+		p, ok := sp.profiles[pn]
 		if !ok {
 			continue
 		}
@@ -38,11 +39,12 @@ func (f *Fake) GetInstanceConfig(_ context.Context, name string) (backend.Instan
 	}, nil
 }
 
-func (f *Fake) UpdateInstanceConfig(_ context.Context, name string, config map[string]string) error {
+func (f *Fake) UpdateInstanceConfig(ctx context.Context, name string, config map[string]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -51,11 +53,12 @@ func (f *Fake) UpdateInstanceConfig(_ context.Context, name string, config map[s
 	return nil
 }
 
-func (f *Fake) AddDevice(_ context.Context, name, device string, config map[string]string) error {
+func (f *Fake) AddDevice(ctx context.Context, name, device string, config map[string]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -67,11 +70,12 @@ func (f *Fake) AddDevice(_ context.Context, name, device string, config map[stri
 	return nil
 }
 
-func (f *Fake) UpdateDevice(_ context.Context, name, device string, config map[string]string, version string) error {
+func (f *Fake) UpdateDevice(ctx context.Context, name, device string, config map[string]string, version string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -88,11 +92,12 @@ func (f *Fake) UpdateDevice(_ context.Context, name, device string, config map[s
 	return nil
 }
 
-func (f *Fake) RemoveDevice(_ context.Context, name, device string) error {
+func (f *Fake) RemoveDevice(ctx context.Context, name, device string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -104,11 +109,12 @@ func (f *Fake) RemoveDevice(_ context.Context, name, device string) error {
 	return nil
 }
 
-func (f *Fake) UpdateLimits(_ context.Context, name string, l backend.Limits) error {
+func (f *Fake) UpdateLimits(ctx context.Context, name string, l backend.Limits) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}

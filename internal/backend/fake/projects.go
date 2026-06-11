@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"maps"
+	"slices"
 	"sort"
 	"strconv"
 
@@ -56,6 +57,16 @@ func (f *Fake) CreateProject(_ context.Context, name, description string, config
 		}
 	}
 	f.projects[name] = backend.Project{Name: name, Description: description, Config: cfg}
+	// A project owning its profiles starts with an empty default profile,
+	// like the daemon (no root disk — instances need one configured).
+	sp := f.spaceFor(name)
+	if cfg["features.profiles"] == "true" {
+		sp.profiles["default"] = backend.Profile{
+			Name: "default", Description: "Default Incus profile",
+			Config:  map[string]string{},
+			Devices: map[string]map[string]string{},
+		}
+	}
 	return nil
 }
 
@@ -102,6 +113,17 @@ func (f *Fake) RenameProject(_ context.Context, name, newName string) error {
 	f.projectVersions[newName] = f.projectVersions[name] + 1
 	delete(f.projects, name)
 	delete(f.projectVersions, name)
+	// The space and per-pool volume namespaces follow the rename.
+	if sp, ok := f.spaces[name]; ok {
+		f.spaces[newName] = sp
+		delete(f.spaces, name)
+	}
+	for _, pool := range f.pools {
+		if vols, ok := pool.volumes[name]; ok {
+			pool.volumes[newName] = vols
+			delete(pool.volumes, name)
+		}
+	}
 	return nil
 }
 
@@ -117,11 +139,18 @@ func (f *Fake) DeleteProject(_ context.Context, name string) error {
 	if name == "default" {
 		return invalid("the default project cannot be deleted")
 	}
-	if used := f.projectUsedBy(name); len(used) > 0 {
+	// The project's own (seeded) default profile does not count against
+	// emptiness, matching the daemon's projectIsEmpty.
+	used := slices.DeleteFunc(f.projectUsedBy(name), func(u string) bool { return u == "/1.0/profiles/default" })
+	if len(used) > 0 {
 		return conflict("project %q is not empty", name)
 	}
 	delete(f.projects, name)
 	delete(f.projectVersions, name)
+	delete(f.spaces, name)
+	for _, pool := range f.pools {
+		delete(pool.volumes, name)
+	}
 	return nil
 }
 
@@ -140,31 +169,34 @@ func (f *Fake) projectView(name string) backend.Project {
 	return p
 }
 
-// projectUsedBy lists API paths of resources living in the project. Until
-// per-project scoping lands, all fake resources implicitly live in the
-// default project. Callers must hold the mutex.
+// projectUsedBy lists API paths of resources living in the project's space
+// (networks and ACLs only when the project owns them via features.networks).
+// Callers must hold the mutex.
 func (f *Fake) projectUsedBy(name string) []string {
-	if name != "default" {
+	sp, ok := f.spaces[name]
+	if !ok {
 		return nil
 	}
 	var used []string
-	for instName := range f.instances {
+	for instName := range sp.instances {
 		used = append(used, "/1.0/instances/"+instName)
 	}
-	for profName := range f.profiles {
+	for profName := range sp.profiles {
 		used = append(used, "/1.0/profiles/"+profName)
 	}
-	for fp := range f.images {
+	for fp := range sp.images {
 		used = append(used, "/1.0/images/"+fp)
 	}
-	for netName := range f.networks {
-		used = append(used, "/1.0/networks/"+netName)
-	}
-	for aclName := range f.acls {
-		used = append(used, "/1.0/network-acls/"+aclName)
+	if name == "default" || f.projects[name].Config["features.networks"] == "true" {
+		for netName := range sp.networks {
+			used = append(used, "/1.0/networks/"+netName)
+		}
+		for aclName := range sp.acls {
+			used = append(used, "/1.0/network-acls/"+aclName)
+		}
 	}
 	for poolName, pool := range f.pools {
-		for volName := range pool.volumes {
+		for volName := range pool.volumes[name] {
 			used = append(used, "/1.0/storage-pools/"+poolName+"/volumes/custom/"+volName)
 		}
 	}

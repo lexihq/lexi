@@ -25,16 +25,17 @@ var catalogImages = []backend.Image{
 	{Alias: "fedora/40", Fingerprint: "fake-fedora-40-x86-64", Description: "Fedora 40 amd64", Arch: "x86_64", Distribution: "fedora", Release: "40", Variant: "default", Type: "container"},
 }
 
-func (f *Fake) ListImages(_ context.Context) ([]backend.Image, error) {
+func (f *Fake) ListImages(ctx context.Context) ([]backend.Image, error) {
 	return append([]backend.Image(nil), catalogImages...), nil
 }
 
-func (f *Fake) ListLocalImages(_ context.Context) ([]backend.LocalImage, error) {
+func (f *Fake) ListLocalImages(ctx context.Context) ([]backend.LocalImage, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.images")
 
-	out := make([]backend.LocalImage, 0, len(f.images))
-	for _, img := range f.images {
+	out := make([]backend.LocalImage, 0, len(sp.images))
+	for _, img := range sp.images {
 		cp := *img
 		cp.Aliases = append([]string(nil), img.Aliases...)
 		out = append(out, cp)
@@ -43,15 +44,16 @@ func (f *Fake) ListLocalImages(_ context.Context) ([]backend.LocalImage, error) 
 	return out, nil
 }
 
-func (f *Fake) PublishImage(_ context.Context, instance, alias string) error {
+func (f *Fake) PublishImage(ctx context.Context, instance, alias string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.images")
 
-	if _, ok := f.instances[instance]; !ok {
+	if _, ok := sp.instances[instance]; !ok {
 		return notFound(instance)
 	}
 	if alias != "" {
-		if owner := f.aliasOwner(alias); owner != nil {
+		if owner := aliasOwner(sp, alias); owner != nil {
 			return conflict("image alias %q", alias)
 		}
 	}
@@ -66,23 +68,24 @@ func (f *Fake) PublishImage(_ context.Context, instance, alias string) error {
 	if alias != "" {
 		img.Aliases = []string{alias}
 	}
-	f.images[img.Fingerprint] = img
-	f.logOp(fmt.Sprintf("Publishing image from instance %q", instance))
+	sp.images[img.Fingerprint] = img
+	f.logOp(sp, fmt.Sprintf("Publishing image from instance %q", instance))
 	return nil
 }
 
-func (f *Fake) CopyImage(_ context.Context, alias string) error {
+func (f *Fake) CopyImage(ctx context.Context, alias string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.images")
 
 	for _, c := range catalogImages {
 		if c.Alias != alias {
 			continue
 		}
-		if _, ok := f.images[c.Fingerprint]; ok {
+		if _, ok := sp.images[c.Fingerprint]; ok {
 			return conflict("image %q", c.Fingerprint)
 		}
-		f.images[c.Fingerprint] = &backend.LocalImage{
+		sp.images[c.Fingerprint] = &backend.LocalImage{
 			Fingerprint: c.Fingerprint,
 			Aliases:     []string{c.Alias},
 			Description: c.Description,
@@ -91,44 +94,47 @@ func (f *Fake) CopyImage(_ context.Context, alias string) error {
 			Type:        c.Type,
 			CreatedAt:   f.now(),
 		}
-		f.logOp(fmt.Sprintf("Copying image %q", alias))
+		f.logOp(sp, fmt.Sprintf("Copying image %q", alias))
 		return nil
 	}
 	return notFoundf("image alias %q", alias)
 }
 
-func (f *Fake) DeleteImage(_ context.Context, fingerprint string) error {
+func (f *Fake) DeleteImage(ctx context.Context, fingerprint string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.images")
 
-	if _, ok := f.images[fingerprint]; !ok {
+	if _, ok := sp.images[fingerprint]; !ok {
 		return notFoundf("image %q", fingerprint)
 	}
-	delete(f.images, fingerprint)
-	f.logOp(fmt.Sprintf("Deleting image %q", fingerprint))
+	delete(sp.images, fingerprint)
+	f.logOp(sp, fmt.Sprintf("Deleting image %q", fingerprint))
 	return nil
 }
 
-func (f *Fake) AddImageAlias(_ context.Context, fingerprint, alias string) error {
+func (f *Fake) AddImageAlias(ctx context.Context, fingerprint, alias string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.images")
 
-	img, ok := f.images[fingerprint]
+	img, ok := sp.images[fingerprint]
 	if !ok {
 		return notFoundf("image %q", fingerprint)
 	}
-	if owner := f.aliasOwner(alias); owner != nil {
+	if owner := aliasOwner(sp, alias); owner != nil {
 		return conflict("image alias %q", alias)
 	}
 	img.Aliases = append(img.Aliases, alias)
 	return nil
 }
 
-func (f *Fake) RemoveImageAlias(_ context.Context, alias string) error {
+func (f *Fake) RemoveImageAlias(ctx context.Context, alias string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.images")
 
-	img := f.aliasOwner(alias)
+	img := aliasOwner(sp, alias)
 	if img == nil {
 		return notFoundf("image alias %q", alias)
 	}
@@ -150,8 +156,9 @@ const fakeRootfsMagic = "lxcon-fake-rootfs\n"
 func (f *Fake) SeedSplitImage(fingerprint, description string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.spaceFor("default")
 
-	f.images[fingerprint] = &backend.LocalImage{
+	sp.images[fingerprint] = &backend.LocalImage{
 		Fingerprint: fingerprint,
 		Description: description,
 		Arch:        "aarch64",
@@ -165,11 +172,12 @@ func (f *Fake) SeedSplitImage(fingerprint, description string) {
 // images, a metadata+rootfs.img zip for VM (split) images. The filename
 // mirrors the incus driver's naming (daemon-suggested name vs fingerprint
 // zip).
-func (f *Fake) ExportImage(_ context.Context, fingerprint string) (string, io.ReadCloser, error) {
+func (f *Fake) ExportImage(ctx context.Context, fingerprint string) (string, io.ReadCloser, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.images")
 
-	img, ok := f.images[fingerprint]
+	img, ok := sp.images[fingerprint]
 	if !ok {
 		return "", nil, notFoundf("image %q", fingerprint)
 	}
@@ -202,7 +210,7 @@ func (f *Fake) ExportImage(_ context.Context, fingerprint string) (string, io.Re
 // ImportImage recreates an image from a blob ExportImage wrote — unified
 // magic blob or split zip — rejecting foreign data with ErrInvalid and
 // prefixing the recovered fingerprint so the original can coexist.
-func (f *Fake) ImportImage(_ context.Context, r io.Reader, alias string) error {
+func (f *Fake) ImportImage(ctx context.Context, r io.Reader, alias string) error {
 	blob, err := io.ReadAll(r)
 	if err != nil {
 		return err
@@ -214,13 +222,14 @@ func (f *Fake) ImportImage(_ context.Context, r io.Reader, alias string) error {
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.images")
 
 	fingerprint := "imported-" + orig
-	if _, exists := f.images[fingerprint]; exists {
+	if _, exists := sp.images[fingerprint]; exists {
 		return conflict("image %q already exists", fingerprint)
 	}
 	if alias != "" {
-		if owner := f.aliasOwner(alias); owner != nil {
+		if owner := aliasOwner(sp, alias); owner != nil {
 			return conflict("image alias %q", alias)
 		}
 	}
@@ -234,8 +243,8 @@ func (f *Fake) ImportImage(_ context.Context, r io.Reader, alias string) error {
 	if alias != "" {
 		img.Aliases = []string{alias}
 	}
-	f.images[fingerprint] = img
-	f.logOp(fmt.Sprintf("Importing image %q", fingerprint))
+	sp.images[fingerprint] = img
+	f.logOp(sp, fmt.Sprintf("Importing image %q", fingerprint))
 	return nil
 }
 
@@ -300,11 +309,12 @@ func parseFakeImageBlob(blob []byte) (fingerprint, imgType string, err error) {
 }
 
 // UpdateImage sets the image's description and public flag.
-func (f *Fake) UpdateImage(_ context.Context, fingerprint, description string, public bool) error {
+func (f *Fake) UpdateImage(ctx context.Context, fingerprint, description string, public bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.images")
 
-	img, ok := f.images[fingerprint]
+	img, ok := sp.images[fingerprint]
 	if !ok {
 		return notFoundf("image %q", fingerprint)
 	}
@@ -315,8 +325,8 @@ func (f *Fake) UpdateImage(_ context.Context, fingerprint, description string, p
 
 // aliasOwner returns the local image carrying alias, or nil. Callers must hold
 // the mutex.
-func (f *Fake) aliasOwner(alias string) *backend.LocalImage {
-	for _, img := range f.images {
+func aliasOwner(sp *space, alias string) *backend.LocalImage {
+	for _, img := range sp.images {
 		if slices.Contains(img.Aliases, alias) {
 			return img
 		}

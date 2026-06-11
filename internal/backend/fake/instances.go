@@ -8,39 +8,42 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 )
 
-func (f *Fake) ListInstances(_ context.Context) ([]backend.Instance, error) {
+func (f *Fake) ListInstances(ctx context.Context) ([]backend.Instance, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	out := make([]backend.Instance, 0, len(f.instances))
-	for _, in := range f.instances {
-		out = append(out, f.view(in))
+	out := make([]backend.Instance, 0, len(sp.instances))
+	for _, in := range sp.instances {
+		out = append(out, f.view(f.featureSpace(ctx, "features.profiles"), in))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
-func (f *Fake) GetInstance(_ context.Context, name string) (backend.Instance, error) {
+func (f *Fake) GetInstance(ctx context.Context, name string) (backend.Instance, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return backend.Instance{}, notFound(name)
 	}
-	return f.view(in), nil
+	return f.view(f.featureSpace(ctx, "features.profiles"), in), nil
 }
 
-func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) error {
+func (f *Fake) CreateInstance(ctx context.Context, opt backend.CreateOptions) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	if _, ok := f.instances[opt.Name]; ok {
+	if _, ok := sp.instances[opt.Name]; ok {
 		return conflict("instance %q already exists", opt.Name)
 	}
 	// Validate references up front so a failed create leaves nothing behind.
 	for _, p := range opt.Profiles {
-		if _, ok := f.profiles[p]; !ok {
+		if _, ok := sp.profiles[p]; !ok {
 			return invalid("unknown profile %q", p)
 		}
 	}
@@ -50,7 +53,7 @@ func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) erro
 		}
 	}
 	if opt.Network != "" {
-		n, ok := f.networks[opt.Network]
+		n, ok := f.networkSpace(ctx).networks[opt.Network]
 		if !ok {
 			return notFoundf("network %q", opt.Network)
 		}
@@ -87,7 +90,7 @@ func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) erro
 	if opt.Network != "" {
 		devices["eth0"] = map[string]string{"type": "nic", "name": "eth0", "network": opt.Network}
 	}
-	f.instances[opt.Name] = &instance{
+	sp.instances[opt.Name] = &instance{
 		Instance: backend.Instance{
 			Name:         opt.Name,
 			Status:       status,
@@ -101,35 +104,36 @@ func (f *Fake) CreateInstance(_ context.Context, opt backend.CreateOptions) erro
 		devices: devices,
 		files:   seedFiles(opt.Name),
 	}
-	f.logOp(fmt.Sprintf("Creating instance %q", opt.Name))
+	f.logOp(sp, fmt.Sprintf("Creating instance %q", opt.Name))
 	return nil
 }
 
-func (f *Fake) StartInstance(_ context.Context, name string) error {
-	return f.setStatus(name, "Running", "Starting")
+func (f *Fake) StartInstance(ctx context.Context, name string) error {
+	return f.setStatus(ctx, name, "Running", "Starting")
 }
 
-func (f *Fake) StopInstance(_ context.Context, name string) error {
-	return f.setStatus(name, "Stopped", "Stopping")
+func (f *Fake) StopInstance(ctx context.Context, name string) error {
+	return f.setStatus(ctx, name, "Stopped", "Stopping")
 }
 
-func (f *Fake) RestartInstance(_ context.Context, name string) error {
-	return f.setStatus(name, "Running", "Restarting")
+func (f *Fake) RestartInstance(ctx context.Context, name string) error {
+	return f.setStatus(ctx, name, "Running", "Restarting")
 }
 
-func (f *Fake) PauseInstance(_ context.Context, name string) error {
-	return f.setStatus(name, "Frozen", "Pausing")
+func (f *Fake) PauseInstance(ctx context.Context, name string) error {
+	return f.setStatus(ctx, name, "Frozen", "Pausing")
 }
 
-func (f *Fake) ResumeInstance(_ context.Context, name string) error {
-	return f.setStatus(name, "Running", "Resuming")
+func (f *Fake) ResumeInstance(ctx context.Context, name string) error {
+	return f.setStatus(ctx, name, "Running", "Resuming")
 }
 
-func (f *Fake) setStatus(name, status, verb string) error {
+func (f *Fake) setStatus(ctx context.Context, name, status, verb string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	in, ok := f.instances[name]
+	in, ok := sp.instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -137,34 +141,36 @@ func (f *Fake) setStatus(name, status, verb string) error {
 	// Incus parity: the instance etag covers the whole object, so lifecycle
 	// changes invalidate config/device edit forms too.
 	in.configVersion++
-	f.logOp(fmt.Sprintf("%s instance %q", verb, name))
+	f.logOp(sp, fmt.Sprintf("%s instance %q", verb, name))
 	return nil
 }
 
-func (f *Fake) DeleteInstance(_ context.Context, name string) error {
+func (f *Fake) DeleteInstance(ctx context.Context, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	if _, ok := f.instances[name]; !ok {
+	if _, ok := sp.instances[name]; !ok {
 		return notFound(name)
 	}
-	delete(f.instances, name)
-	f.logOp(fmt.Sprintf("Deleting instance %q", name))
+	delete(sp.instances, name)
+	f.logOp(sp, fmt.Sprintf("Deleting instance %q", name))
 	return nil
 }
 
-func (f *Fake) CloneInstance(_ context.Context, src, dst string) error {
+func (f *Fake) CloneInstance(ctx context.Context, src, dst string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	from, ok := f.instances[src]
+	from, ok := sp.instances[src]
 	if !ok {
 		return notFound(src)
 	}
-	if _, ok := f.instances[dst]; ok {
+	if _, ok := sp.instances[dst]; ok {
 		return conflict("instance %q already exists", dst)
 	}
-	f.instances[dst] = &instance{
+	sp.instances[dst] = &instance{
 		Instance: backend.Instance{
 			Name:      dst,
 			Status:    "Stopped",
@@ -173,6 +179,6 @@ func (f *Fake) CloneInstance(_ context.Context, src, dst string) error {
 		},
 		files: cloneFiles(from.files),
 	}
-	f.logOp(fmt.Sprintf("Cloning instance %q to %q", src, dst))
+	f.logOp(sp, fmt.Sprintf("Cloning instance %q to %q", src, dst))
 	return nil
 }

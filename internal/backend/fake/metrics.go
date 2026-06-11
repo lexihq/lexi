@@ -8,11 +8,12 @@ import (
 
 // Metrics returns deterministic canned counters for any existing instance, so
 // handler and UI tests can assert the panel without a live daemon.
-func (f *Fake) Metrics(_ context.Context, name string) (backend.Metrics, error) {
+func (f *Fake) Metrics(ctx context.Context, name string) (backend.Metrics, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	sp := f.space(ctx)
 
-	if _, ok := f.instances[name]; !ok {
+	if _, ok := sp.instances[name]; !ok {
 		return backend.Metrics{}, notFound(name)
 	}
 	return backend.Metrics{

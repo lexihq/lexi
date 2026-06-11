@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
@@ -26,11 +27,12 @@ var projectFeatures = []struct {
 
 // projectBlockers counts the UsedBy entries that block deletion: everything
 // except the project's own seeded default profile, mirroring the daemon's
-// emptiness rule.
+// emptiness rule. The daemon qualifies non-default entries with ?project=,
+// so only the path is compared.
 func projectBlockers(p backend.Project) int {
 	n := 0
 	for _, u := range p.UsedBy {
-		if u != "/1.0/profiles/default" {
+		if path, _, _ := strings.Cut(u, "?"); path != "/1.0/profiles/default" {
 			n++
 		}
 	}

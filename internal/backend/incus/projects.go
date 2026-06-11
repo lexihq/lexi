@@ -56,8 +56,16 @@ func (b *incusBackend) RenameProject(ctx context.Context, name, newName string) 
 	if name == "default" {
 		return fmt.Errorf("the default project cannot be renamed: %w", backend.ErrInvalid)
 	}
+	// Rename failures arrive as plain operation errors with no HTTP status,
+	// so the daemon's name validation can't be mapped after the fact.
+	if !validAPIName(newName) || !apiNameEnds.MatchString(newName) {
+		return fmt.Errorf("invalid project name %q: %w", newName, backend.ErrInvalid)
+	}
 	op, err := b.srv.RenameProject(name, api.ProjectPost{Name: newName})
 	if err := waitOp(ctx, op, err, "rename project %q", name); err != nil {
+		if strings.Contains(err.Error(), "Only empty projects can be renamed") {
+			return fmt.Errorf("%w: %w", backend.ErrConflict, err)
+		}
 		return err
 	}
 	return nil

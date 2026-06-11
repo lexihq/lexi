@@ -87,7 +87,7 @@ func (f *Fake) UpdateProject(_ context.Context, name, description string, config
 	// Incus parity: features cannot change once the project holds resources
 	// (flipping one would re-route existing resources to another namespace).
 	if f.projectFeatureChanged(p.Config, config) {
-		used := slices.DeleteFunc(f.projectUsedBy(name), func(u string) bool { return u == "/1.0/profiles/default" })
+		used := slices.DeleteFunc(f.projectUsedBy(name), isSeededDefaultProfile)
 		if len(used) > 0 {
 			return invalid("features can only be changed on empty projects")
 		}
@@ -150,7 +150,7 @@ func (f *Fake) DeleteProject(_ context.Context, name string) error {
 	}
 	// The project's own (seeded) default profile does not count against
 	// emptiness, matching the daemon's projectIsEmpty.
-	used := slices.DeleteFunc(f.projectUsedBy(name), func(u string) bool { return u == "/1.0/profiles/default" })
+	used := slices.DeleteFunc(f.projectUsedBy(name), isSeededDefaultProfile)
 	if len(used) > 0 {
 		return conflict("project %q is not empty", name)
 	}
@@ -161,6 +161,14 @@ func (f *Fake) DeleteProject(_ context.Context, name string) error {
 		delete(pool.volumes, name)
 	}
 	return nil
+}
+
+// isSeededDefaultProfile matches a project's own default profile in UsedBy
+// regardless of the daemon's ?project= qualification — it never counts
+// against emptiness.
+func isSeededDefaultProfile(u string) bool {
+	path, _, _ := strings.Cut(u, "?")
+	return path == "/1.0/profiles/default"
 }
 
 // projectFeatureChanged reports whether any features.* key differs between
@@ -179,9 +187,16 @@ func (f *Fake) projectFeatureChanged(oldCfg, newCfg map[string]string) bool {
 		}
 	}
 	for k := range keys {
-		if (oldCfg[k] == "true") != (newCfg[k] == "true") {
-			return true
+		oldOn, newOn := oldCfg[k] == "true", newCfg[k] == "true"
+		if oldOn == newOn {
+			continue
 		}
+		// The daemon allows enabling features.networks.zones on non-empty
+		// projects (CanEnableNonEmpty); every other transition is frozen.
+		if k == "features.networks.zones" && !oldOn {
+			continue
+		}
+		return true
 	}
 	return false
 }
@@ -209,27 +224,33 @@ func (f *Fake) projectUsedBy(name string) []string {
 	if !ok {
 		return nil
 	}
+	// Daemon parity: UsedBy entries of non-default projects carry the
+	// project query suffix (api.URL.Project).
+	suffix := ""
+	if name != "default" {
+		suffix = "?project=" + name
+	}
 	var used []string
 	for instName := range sp.instances {
-		used = append(used, "/1.0/instances/"+instName)
+		used = append(used, "/1.0/instances/"+instName+suffix)
 	}
 	for profName := range sp.profiles {
-		used = append(used, "/1.0/profiles/"+profName)
+		used = append(used, "/1.0/profiles/"+profName+suffix)
 	}
 	for fp := range sp.images {
-		used = append(used, "/1.0/images/"+fp)
+		used = append(used, "/1.0/images/"+fp+suffix)
 	}
 	if name == "default" || f.projects[name].Config["features.networks"] == "true" {
 		for netName := range sp.networks {
-			used = append(used, "/1.0/networks/"+netName)
+			used = append(used, "/1.0/networks/"+netName+suffix)
 		}
 		for aclName := range sp.acls {
-			used = append(used, "/1.0/network-acls/"+aclName)
+			used = append(used, "/1.0/network-acls/"+aclName+suffix)
 		}
 	}
 	for poolName, pool := range f.pools {
 		for volName := range pool.volumes[name] {
-			used = append(used, "/1.0/storage-pools/"+poolName+"/volumes/custom/"+volName)
+			used = append(used, "/1.0/storage-pools/"+poolName+"/volumes/custom/"+volName+suffix)
 		}
 	}
 	sort.Strings(used)

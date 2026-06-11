@@ -140,3 +140,23 @@ func TestProjectDetailGuardsDefault(t *testing.T) {
 	assert.NotContains(t, body, `action="/projects/default/rename"`, "default project must not offer rename")
 	assert.NotContains(t, body, `action="/projects/default/delete"`, "default project must not offer delete")
 }
+
+// The daemon allows characters in project names that Go strips from raw
+// cookie values (";" notably); selection must survive the escape round-trip.
+func TestProjectCookieSurvivesSpecialCharacters(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateProject(t.Context(), "a;b", "", nil))
+	require.NoError(t, b.CreateInstance(backend.WithProject(t.Context(), "a;b"), backend.CreateOptions{Name: "odd-inst", Image: "alpine/edge"}))
+	srv := New(b)
+
+	res := projectRequest(t, srv, "POST", "/project", url.Values{"project": {"a;b"}}.Encode(), "")
+	assertStatus(t, res, http.StatusSeeOther)
+	cookies := res.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.NotContains(t, cookies[0].Value, ";", "the raw name would be truncated by cookie rules")
+
+	// Replaying the cookie exactly as issued scopes to the right project.
+	res = projectRequest(t, srv, "GET", "/", "", cookies[0].Value)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "odd-inst")
+}

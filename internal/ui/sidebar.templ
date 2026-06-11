@@ -13,6 +13,9 @@ import (
 templ Sidebar(caps backend.Capabilities, nav Nav) {
 	if caps.Projects {
 		@projectSwitcherSelect(projectSwitcherFrom(ctx))
+		<a href="/projects" class={ "mb-3 block px-3 text-xs underline-offset-4 hover:underline",
+			templ.KV("text-accent-foreground", nav.Section == NavProjects),
+			templ.KV("text-muted-foreground", nav.Section != NavProjects) }>Manage projects</a>
 	}
 	<nav class="space-y-1">
 		<a
@@ -124,7 +127,7 @@ func statusDot(status string) string {
 // didn't preload projects (degraded listing) or only default exists.
 templ projectSwitcherSelect(ps projectSwitcher) {
 	if len(ps.Projects) > 1 {
-		<form method="post" action="/project" class="mb-3">
+		<form method="post" action="/project" hx-boost="false" class="mb-3">
 			<label class="px-3 pb-1 text-xs font-medium uppercase text-muted-foreground">Project</label>
 			<select
 				name="project"

@@ -85,3 +85,58 @@ func TestSelectProjectSetsCookie(t *testing.T) {
 	res = projectRequest(t, srv, "POST", "/project", url.Values{"project": {"ghost"}}.Encode(), "")
 	assertStatus(t, res, http.StatusNotFound)
 }
+
+func TestProjectsPageAndLifecycle(t *testing.T) {
+	b := fake.New()
+	srv := New(b)
+
+	// Create with networks unchecked → explicit false; others checked.
+	form := url.Values{"name": {"dev"}, "description": {"made by test"},
+		"features.images": {"on"}, "features.profiles": {"on"}, "features.storage.volumes": {"on"}}
+	res := projectRequest(t, srv, "POST", "/projects", form.Encode(), "")
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/projects/dev", res.Header().Get("Location"))
+
+	p, err := b.GetProject(t.Context(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, "true", p.Config["features.profiles"])
+	assert.Equal(t, "false", p.Config["features.networks"])
+
+	// List page shows both projects and marks the current one.
+	res = projectRequest(t, srv, "GET", "/projects", "", "dev")
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, "made by test")
+	assert.Contains(t, body, "current")
+
+	// Detail: versioned config update.
+	res = projectRequest(t, srv, "POST", "/projects/dev/config",
+		url.Values{"description": {"edited"}, "version": {p.Version}, "key": {"features.profiles"}, "value": {"true"}}.Encode(), "")
+	assertStatus(t, res, http.StatusSeeOther)
+	p2, err := b.GetProject(t.Context(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, "edited", p2.Description)
+
+	// Renaming the currently-selected project rewrites the cookie.
+	res = projectRequest(t, srv, "POST", "/projects/dev/rename", url.Values{"new_name": {"dev2"}}.Encode(), "dev")
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/projects/dev2", res.Header().Get("Location"))
+	cookies := res.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Equal(t, "dev2", cookies[0].Value)
+
+	// Deleting the currently-selected project clears the cookie.
+	res = projectRequest(t, srv, "POST", "/projects/dev2/delete", "", "dev2")
+	assertStatus(t, res, http.StatusSeeOther)
+	cookies = res.Result().Cookies()
+	require.Len(t, cookies, 1)
+	assert.Negative(t, cookies[0].MaxAge)
+}
+
+func TestProjectDetailGuardsDefault(t *testing.T) {
+	res := projectRequest(t, New(fake.New()), "GET", "/projects/default", "", "")
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.NotContains(t, body, `action="/projects/default/rename"`, "default project must not offer rename")
+	assert.NotContains(t, body, `action="/projects/default/delete"`, "default project must not offer delete")
+}

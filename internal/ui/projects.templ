@@ -1,0 +1,175 @@
+package ui
+
+import (
+	"fmt"
+	"net/url"
+
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/icon"
+	"github.com/adam/lxcon/internal/components/table"
+)
+
+// projectFeatures are the scoping flags the create form offers, with the
+// daemon's create-time defaults. Buckets/zones exist daemon-side but lxcon
+// doesn't manage those resources.
+var projectFeatures = []struct {
+	Key     string
+	Label   string
+	Default bool
+}{
+	{"features.images", "Images", true},
+	{"features.profiles", "Profiles", true},
+	{"features.storage.volumes", "Storage volumes", true},
+	{"features.networks", "Networks", false},
+}
+
+// projectBlockers counts the UsedBy entries that block deletion: everything
+// except the project's own seeded default profile, mirroring the daemon's
+// emptiness rule.
+func projectBlockers(p backend.Project) int {
+	n := 0
+	for _, u := range p.UsedBy {
+		if u != "/1.0/profiles/default" {
+			n++
+		}
+	}
+	return n
+}
+
+// ProjectsPage lists projects with a create form. Switching the active
+// project happens in the sidebar dropdown; this page manages their lifecycle.
+templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, current string) {
+	@Layout("Projects", caps, Nav{Section: NavProjects}) {
+		<div class="mb-6">
+			<h1 class="text-2xl font-semibold">Projects</h1>
+			<p class="text-muted-foreground">Isolated tenancy namespaces. The features decide which resource kinds a project owns; everything else is shared from default.</p>
+		</div>
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() { Name }
+					@table.Head() { Description }
+					@table.Head() { Resources }
+				}
+			}
+			@table.Body() {
+				for _, p := range projects {
+					@table.Row() {
+						@table.Cell() {
+							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/projects/" + url.PathEscape(p.Name)) }>{ p.Name }</a>
+							if p.Name == current || (current == "" && p.Name == "default") {
+								<span class="ml-2 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">current</span>
+							}
+						}
+						@table.Cell() {
+							{ p.Description }
+						}
+						@table.Cell() {
+							{ fmt.Sprint(len(p.UsedBy)) }
+						}
+					}
+				}
+			}
+		}
+		<form method="post" action="/projects" class="mt-6 max-w-xl space-y-3">
+			<div class="flex gap-2">
+				<input name="name" required placeholder="name" class="h-9 w-1/3 rounded-md border bg-background px-3 text-sm"/>
+				<input name="description" placeholder="description" class="h-9 w-2/3 rounded-md border bg-background px-3 text-sm"/>
+			</div>
+			<div class="flex flex-wrap gap-4">
+				for _, f := range projectFeatures {
+					<label class="flex items-center gap-1.5 text-sm">
+						if f.Default {
+							<input type="checkbox" name={ f.Key } checked class="size-4 rounded border"/>
+						} else {
+							<input type="checkbox" name={ f.Key } class="size-4 rounded border"/>
+						}
+						{ f.Label }
+					</label>
+				}
+			</div>
+			@button.Button(button.Props{Type: button.TypeSubmit}) {
+				@icon.Icon("plus")(icon.Props{Class: "size-4"})
+				Create
+			}
+		</form>
+	}
+}
+
+// ProjectDetailPage shows one project: versioned description/config editor,
+// rename (hidden for default), and a delete guarded by the daemon's
+// emptiness rule (the seeded default profile doesn't count).
+templ ProjectDetailPage(caps backend.Capabilities, p backend.Project) {
+	{{ base := "/projects/" + url.PathEscape(p.Name) }}
+	{{ blockers := projectBlockers(p) }}
+	@Layout(p.Name, caps, Nav{Section: NavProjects}) {
+		<div class="mb-6 flex items-start justify-between gap-4">
+			<div>
+				<a href="/projects" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Projects</a>
+				<h1 class="mt-2 text-2xl font-semibold">{ p.Name }</h1>
+				if blockers > 0 {
+					<p class="text-sm text-muted-foreground">Contains { fmt.Sprint(blockers) } resource(s).</p>
+				}
+			</div>
+			<div class="flex items-center gap-2">
+				if p.Name != "default" {
+					<form method="post" action={ templ.URL(base + "/rename") } class="flex items-center gap-1">
+						<input name="new_name" placeholder="new name" class="h-9 w-32 rounded-md border bg-background px-3 text-sm"/>
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+							Rename
+						}
+					</form>
+					if blockers > 0 {
+						@button.Button(button.Props{Variant: button.VariantDestructive, Disabled: true, Attributes: templ.Attributes{"title": "not empty; delete its resources first"}}) {
+							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+							Delete
+						}
+					} else {
+						<form method="post" action={ templ.URL(base + "/delete") } hx-confirm={ "Delete project " + p.Name + "?" }>
+							@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantDestructive}) {
+								@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+								Delete
+							}
+						</form>
+					}
+				}
+			</div>
+		</div>
+		<section class="mb-8 rounded-lg border bg-card p-4">
+			<h2 class="mb-1 text-lg font-medium">Config</h2>
+			<p class="mb-3 text-sm text-muted-foreground">Clearing a key's name removes it on apply. Feature flags cannot change once the project holds resources.</p>
+			<form method="post" action={ templ.URL(base + "/config") } class="max-w-xl space-y-2">
+				<input type="hidden" name="version" value={ p.Version }/>
+				<div>
+					<label class="mb-1 block text-sm font-medium">Description</label>
+					<input name="description" value={ p.Description } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+				</div>
+				for _, k := range sortedKeys(p.Config) {
+					<div class="flex gap-2">
+						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+						<textarea name="value" rows="1" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm">{ p.Config[k] }</textarea>
+					</div>
+				}
+				<div class="flex gap-2">
+					<input name="key" placeholder="user.note" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+					<textarea name="value" rows="1" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm"></textarea>
+				</div>
+				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					@icon.Icon("check")(icon.Props{Class: "size-4"})
+					Apply config
+				}
+			</form>
+		</section>
+		if len(p.UsedBy) > 0 {
+			<section class="rounded-lg border bg-card p-4">
+				<h2 class="mb-3 text-lg font-medium">Resources</h2>
+				<ul class="space-y-1 text-sm font-mono text-muted-foreground">
+					for _, u := range p.UsedBy {
+						<li>{ u }</li>
+					}
+				</ul>
+			</section>
+		}
+	}
+}

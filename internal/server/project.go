@@ -62,11 +62,15 @@ func (h handlers) selectProject(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	// No Secure attribute: lxcon routinely serves plain HTTP (dev, LAN),
-	// where a Secure cookie silently breaks selection; the value is a
-	// non-secret UI preference.
-	http.SetCookie(w, &http.Cookie{Name: projectCookie, Value: name, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124: see above.
+	setProjectCookie(w, name)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// setProjectCookie pins the project selection. No Secure attribute: lxcon
+// routinely serves plain HTTP (dev, LAN), where a Secure cookie silently
+// breaks selection; the value is a non-secret UI preference.
+func setProjectCookie(w http.ResponseWriter, name string) {
+	http.SetCookie(w, &http.Cookie{Name: projectCookie, Value: name, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124: see above.
 }
 
 func expireProjectCookie(w http.ResponseWriter) {

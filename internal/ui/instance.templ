@@ -48,7 +48,7 @@ templ InstanceHeader(caps backend.Capabilities, inst backend.Instance) {
 					Stop
 				}
 			}
-			if inst.Status == "Running" || inst.Status == "Frozen" {
+			if inst.Status == "Running" {
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("restart"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
 					@icon.Icon("rotate-cw")(icon.Props{Class: "size-4"})
 					Restart

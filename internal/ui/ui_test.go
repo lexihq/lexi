@@ -690,3 +690,8 @@ func TestServerConfigRendersSingleBlankRow(t *testing.T) {
 		t.Fatalf("want 1 blank config row, got %d", n)
 	}
 }
+
+func TestInstanceHeaderHidesRestartWhenFrozen(t *testing.T) {
+	frozen := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Frozen"}, nil, nil, "summary"))
+	assertNotContains(t, frozen, `hx-post="/instances/demo/restart?from=header"`)
+}

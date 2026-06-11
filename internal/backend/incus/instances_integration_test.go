@@ -42,6 +42,35 @@ func TestRoundTripLifecycle(t *testing.T) {
 	}
 }
 
+// TestRebuildInstanceRoundTrip creates a stopped instance with a config key,
+// rebuilds it from the catalog image, and asserts the instance survives with
+// its config intact. A ghost instance is ErrNotFound.
+func TestRebuildInstanceRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx := context.Background()
+	if !b.Capabilities(ctx).InstanceRebuild {
+		t.Skip("daemon lacks instances_rebuild")
+	}
+	name := uniqueName("rebuild")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+
+	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{
+		Name: name, Image: testImage,
+		Config: map[string]string{"user.lxcon": "keep"},
+	}))
+
+	require.NoError(t, b.RebuildInstance(ctx, name, testImage, ""))
+
+	inst, err := b.GetInstance(ctx, name)
+	require.NoError(t, err)
+	require.Equal(t, "Stopped", inst.Status)
+	cfg, err := b.GetInstanceConfig(ctx, name)
+	require.NoError(t, err)
+	require.Equal(t, "keep", cfg.Config["user.lxcon"], "config must survive a rebuild")
+
+	require.ErrorIs(t, b.RebuildInstance(ctx, uniqueName("ghost"), testImage, ""), backend.ErrNotFound)
+}
+
 // TestCreateWithOptionsRoundTrip creates an instance with an explicit profile
 // list, root pool, network, and initial config, then asserts everything
 // applied (profiles on the instance, root/eth0 local devices, config keys).

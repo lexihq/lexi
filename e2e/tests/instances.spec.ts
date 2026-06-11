@@ -131,6 +131,46 @@ test("create from the image browser, then start/stop/clone/delete in the list", 
   }
 });
 
+test("rebuild a stopped instance from a new image", async ({ page }) => {
+  const name = "e2e-rebuild";
+
+  // Create a stopped instance from a debian image.
+  await page.goto("/instances/new");
+  await page.locator("#image-search").pressSequentially("debian");
+  const createImage = page.locator("#image-results input[type=radio][name=image]").first();
+  await expect(createImage).toBeVisible();
+  await createImage.check();
+  await page.locator("#name").fill(name);
+  await page.getByRole("button", { name: "Create instance" }).click();
+  await expect(page.locator(`#instance-${name}`)).toContainText("Stopped");
+
+  // Rebuild… in the kebab menu navigates to the rebuild page (stopped only).
+  const row = page.locator(`#instance-${name}`);
+  await row.getByRole("button", { name: `Actions for ${name}` }).click();
+  await row.getByRole("menuitem", { name: "Rebuild…", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/instances/${name}/rebuild$`));
+
+  // Pick an alpine image in the same HTMX picker and rebuild. Wait for the
+  // debounced search to actually swap the results before checking the radio:
+  // a too-early check would select the unfiltered first image and then be
+  // wiped by the swap.
+  await page.locator("#image-search").pressSequentially("alpine");
+  const rebuildImage = page.locator("#image-results input[type=radio][name=image]").first();
+  await expect(rebuildImage).toHaveValue("fake-alpine-edge-aarch64");
+  await rebuildImage.check();
+  await page.getByRole("button", { name: "Rebuild instance" }).click();
+
+  // Lands on the instance detail page showing the new image. Exact match:
+  // a "Copying image" operation from a parallel test can show the alias too.
+  await expect(page).toHaveURL(new RegExp(`/instances/${name}$`));
+  await expect(page.getByText("alpine/edge", { exact: true })).toBeVisible();
+
+  // Clean up the instance from the list.
+  await page.goto("/");
+  await menuAction(page, name, "Delete", { confirm: true });
+  await expect(page.locator(`#instance-${name}`)).toHaveCount(0);
+});
+
 test("create with profile, pool, network, and initial config", async ({ page }) => {
   const name = "e2e-wizard";
   await page.goto("/instances/new");

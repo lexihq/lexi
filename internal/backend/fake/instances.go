@@ -108,6 +108,26 @@ func (f *Fake) CreateInstance(ctx context.Context, opt backend.CreateOptions) er
 	return nil
 }
 
+func (f *Fake) RebuildInstance(ctx context.Context, name, image, fingerprint string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	sp := f.space(ctx)
+
+	if image == "" && fingerprint == "" {
+		return invalid("rebuild image is required")
+	}
+	in, ok := sp.instances[name]
+	if !ok {
+		return notFound(name)
+	}
+	if in.Status != "Stopped" {
+		return invalid("instance %q must be stopped to rebuild", name)
+	}
+	in.Image = image
+	f.logOp(sp, fmt.Sprintf("Rebuilding instance %q", name))
+	return nil
+}
+
 func (f *Fake) StartInstance(ctx context.Context, name string) error {
 	return f.setStatus(ctx, name, "Running", "Starting")
 }

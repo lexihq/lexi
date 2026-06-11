@@ -104,6 +104,8 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /instances/import", h.importInstance)
 	mux.HandleFunc("POST /instances", h.create)
 	mux.HandleFunc("GET /instances/{name}", h.detail)
+	mux.HandleFunc("GET /instances/{name}/rebuild", h.rebuildForm)
+	mux.HandleFunc("POST /instances/{name}/rebuild", h.rebuild)
 	mux.HandleFunc("GET /instances/{name}/metrics", h.metrics)
 	mux.HandleFunc("GET /instances/{name}/logs", h.logs)
 	mux.HandleFunc("GET /instances/{name}/backups", h.backupsPanel)

@@ -53,6 +53,28 @@ func (b *incusBackend) CreateInstance(ctx context.Context, opt backend.CreateOpt
 	return waitOp(ctx, op, err, "create instance %q", opt.Name)
 }
 
+// RebuildInstance reinstalls a stopped instance from a catalog image, keeping
+// its config, devices, and profiles. The image source mirrors create:
+// fingerprint wins when set, otherwise the alias resolves on the images
+// remote. The daemon rejects rebuilding a running instance.
+func (b *incusBackend) RebuildInstance(ctx context.Context, name, image, fingerprint string) error {
+	if image == "" && fingerprint == "" {
+		return fmt.Errorf("rebuild image is required: %w", backend.ErrInvalid)
+	}
+	source := api.InstanceSource{
+		Type:     "image",
+		Server:   imagesRemote,
+		Protocol: "simplestreams",
+	}
+	if fingerprint != "" {
+		source.Fingerprint = fingerprint
+	} else {
+		source.Alias = image
+	}
+	op, err := b.project(ctx).RebuildInstance(name, api.InstanceRebuildPost{Source: source})
+	return waitOp(ctx, op, err, "rebuild instance %q", name)
+}
+
 func (b *incusBackend) StartInstance(ctx context.Context, name string) error {
 	return b.changeState(ctx, name, "start", false)
 }

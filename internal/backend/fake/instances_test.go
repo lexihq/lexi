@@ -33,6 +33,42 @@ func TestRestartPauseResumeLifecycle(t *testing.T) {
 	require.ErrorIs(t, f.ResumeInstance(ctx(), "ghost"), backend.ErrNotFound)
 }
 
+func TestRebuildInstanceSwapsImage(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+
+	require.NoError(t, f.RebuildInstance(ctx(), "demo", "alpine/3.20", ""))
+
+	got, err := f.GetInstance(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "alpine/3.20", got.Image)
+	assert.Equal(t, "Stopped", got.Status)
+}
+
+func TestRebuildInstanceRunningIsInvalid(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo", Image: "debian/12", Start: true}))
+
+	err := f.RebuildInstance(ctx(), "demo", "alpine/3.20", "")
+	require.ErrorIs(t, err, backend.ErrInvalid)
+
+	got, err := f.GetInstance(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "debian/12", got.Image, "failed rebuild must not change the image")
+}
+
+func TestRebuildInstanceGhostIs404(t *testing.T) {
+	err := New().RebuildInstance(ctx(), "ghost", "alpine/3.20", "")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+}
+
+func TestRebuildInstanceNoImageIsInvalid(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+	err := f.RebuildInstance(ctx(), "demo", "", "")
+	require.ErrorIs(t, err, backend.ErrInvalid)
+}
+
 func TestCreateListGet(t *testing.T) {
 	b := New()
 

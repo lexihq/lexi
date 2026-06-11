@@ -169,6 +169,11 @@ templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 					@dropdown.Item() { Migrate… }
 				}
 			}
+			if caps.InstanceRebuild && inst.Status == "Stopped" {
+				@dropdown.Item(dropdown.ItemProps{Href: "/instances/" + url.PathEscape(inst.Name) + "/rebuild", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+					Rebuild…
+				}
+			}
 			@dropdown.Separator()
 			@dropdown.Item(dropdown.ItemProps{Class: "text-destructive", Attributes: deleteAttrs(inst.Name)}) {
 				Delete

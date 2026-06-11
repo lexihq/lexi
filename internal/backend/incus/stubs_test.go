@@ -36,18 +36,20 @@ type instanceServerStub struct {
 	consoleLog        string
 	consoleErr        error
 	consoleCloseErr   error
-	stateAction       string                // last UpdateInstanceState action
-	stateOp           incusclient.Operation // operation returned by UpdateInstanceState
-	profiles          []api.Profile         // returned by GetProfiles
-	profile           *api.Profile          // returned by GetProfile
-	profileErr        error                 // error for GetProfiles/GetProfile
-	updatedPut        *api.InstancePut      // captured by UpdateInstance
-	updateOp          incusclient.Operation // operation returned by UpdateInstance
-	networks          []api.Network         // returned by GetNetworks
-	network           *api.Network          // returned by GetNetwork
-	networkErr        error                 // error for network calls
-	createdNet        *api.NetworksPost     // captured by CreateNetwork
-	deletedNet        string                // captured by DeleteNetwork
+	stateAction       string                   // last UpdateInstanceState action
+	stateOp           incusclient.Operation    // operation returned by UpdateInstanceState
+	rebuildOp         incusclient.Operation    // operation returned by RebuildInstance
+	rebuildReq        *api.InstanceRebuildPost // captured by RebuildInstance
+	profiles          []api.Profile            // returned by GetProfiles
+	profile           *api.Profile             // returned by GetProfile
+	profileErr        error                    // error for GetProfiles/GetProfile
+	updatedPut        *api.InstancePut         // captured by UpdateInstance
+	updateOp          incusclient.Operation    // operation returned by UpdateInstance
+	networks          []api.Network            // returned by GetNetworks
+	network           *api.Network             // returned by GetNetwork
+	networkErr        error                    // error for network calls
+	createdNet        *api.NetworksPost        // captured by CreateNetwork
+	deletedNet        string                   // captured by DeleteNetwork
 
 	pools      []api.StoragePool       // returned by GetStoragePools
 	pool       *api.StoragePool        // returned by GetStoragePool
@@ -145,6 +147,11 @@ func (s *instanceServerStub) UpdateServer(put api.ServerPut, etag string) error 
 
 func (s *instanceServerStub) GetServerResources() (*api.Resources, error) {
 	return s.resources, s.serverErr
+}
+
+func (s *instanceServerStub) RebuildInstance(name string, req api.InstanceRebuildPost) (incusclient.Operation, error) {
+	s.rebuildReq = &req
+	return s.rebuildOp, s.serverErr
 }
 
 func (s *instanceServerStub) GetCertificates() ([]api.Certificate, error) {

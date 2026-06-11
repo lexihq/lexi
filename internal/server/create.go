@@ -3,6 +3,7 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -147,6 +148,53 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// rebuildForm renders the rebuild page for an existing instance: the create
+// form's image picker over the same catalog, posting back to rebuild.
+func (h handlers) rebuildForm(w http.ResponseWriter, r *http.Request) {
+	inst, err := h.backend.GetInstance(r.Context(), r.PathValue("name"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	images, err := h.backend.ListImages(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.renderShell(w, r, http.StatusOK, ui.RebuildPage(h.backend.Capabilities(r.Context()), inst, images))
+}
+
+// rebuild reinstalls the instance from the selected catalog image and lands
+// back on the instance page. Like create, the posted image is a fingerprint
+// resolved against the catalog so the driver gets both alias and identity.
+func (h handlers) rebuild(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	image := strings.TrimSpace(r.Form.Get("image"))
+	if image == "" {
+		h.renderError(w, http.StatusBadRequest, "image is required")
+		return
+	}
+	images, err := h.backend.ListImages(r.Context())
+	if err != nil {
+		h.renderError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	selected, ok := imageByFingerprint(images, image)
+	if !ok {
+		h.renderError(w, http.StatusBadRequest, "selected image is unavailable")
+		return
+	}
+	name := r.PathValue("name")
+	if err := h.backend.RebuildInstance(r.Context(), name, selected.Alias, selected.Fingerprint); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/instances/"+url.PathEscape(name), http.StatusSeeOther)
 }
 
 // nilIfEmpty keeps CreateOptions.Config nil for a plain create so the zero

@@ -11,6 +11,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestRebuildInstancePrefersFingerprint(t *testing.T) {
+	srv := &instanceServerStub{rebuildOp: &operationStub{}}
+	b := &incusBackend{srv: srv}
+
+	require.NoError(t, b.RebuildInstance(t.Context(), "demo", "alpine/3.20", "fp123"))
+
+	require.NotNil(t, srv.rebuildReq)
+	assert.Equal(t, "image", srv.rebuildReq.Source.Type)
+	assert.Equal(t, imagesRemote, srv.rebuildReq.Source.Server)
+	assert.Equal(t, "simplestreams", srv.rebuildReq.Source.Protocol)
+	assert.Equal(t, "fp123", srv.rebuildReq.Source.Fingerprint)
+	assert.Empty(t, srv.rebuildReq.Source.Alias)
+}
+
+func TestRebuildInstanceFallsBackToAlias(t *testing.T) {
+	srv := &instanceServerStub{rebuildOp: &operationStub{}}
+	b := &incusBackend{srv: srv}
+
+	require.NoError(t, b.RebuildInstance(t.Context(), "demo", "alpine/3.20", ""))
+
+	require.NotNil(t, srv.rebuildReq)
+	assert.Equal(t, "alpine/3.20", srv.rebuildReq.Source.Alias)
+	assert.Empty(t, srv.rebuildReq.Source.Fingerprint)
+}
+
+func TestRebuildInstanceNoImageIsInvalid(t *testing.T) {
+	b := &incusBackend{srv: &instanceServerStub{}}
+	err := b.RebuildInstance(t.Context(), "demo", "", "")
+	require.ErrorIs(t, err, backend.ErrInvalid)
+}
+
 func TestListInstancesIncludesContainersAndVMs(t *testing.T) {
 	srv := &instanceServerStub{}
 	b := &incusBackend{srv: srv}

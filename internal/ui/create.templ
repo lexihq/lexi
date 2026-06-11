@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"net/url"
+
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
 	"github.com/adam/lxcon/internal/components/icon"
@@ -106,6 +108,61 @@ templ CreatePage(caps backend.Capabilities, images []backend.Image, profiles []b
 			@button.Button(button.Props{Type: button.TypeSubmit}) {
 				@icon.Icon("plus")(icon.Props{Class: "size-4"})
 				Create instance
+			}
+		</form>
+	}
+}
+
+// RebuildPage reinstalls a stopped instance from a catalog image. It reuses
+// the create form's HTMX image picker and posts a normal form (redirect on
+// success), since the instance page is a full navigation away anyway.
+templ RebuildPage(caps backend.Capabilities, inst backend.Instance, images []backend.Image) {
+	@Layout("Rebuild "+inst.Name, caps, Nav{Section: NavInstances}) {
+		<div class="mb-6">
+			<a href={ templ.URL("/instances/" + url.PathEscape(inst.Name)) } class="text-sm text-muted-foreground underline-offset-4 hover:underline">← { inst.Name }</a>
+			<h1 class="mt-2 text-2xl font-semibold">Rebuild { inst.Name }</h1>
+			<p class="text-muted-foreground">
+				Reinstall from a new image, keeping config, devices, and profiles.
+				<span class="text-destructive">The instance's disk is wiped.</span>
+				if inst.Image != "" {
+					Current image: { inst.Image }.
+				}
+			</p>
+		</div>
+		<form method="post" action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/rebuild") } hx-boost="false" class="max-w-xl space-y-5 rounded-lg border bg-card p-6">
+			<div class="space-y-2">
+				<label class="text-sm font-medium" for="image-search">Image</label>
+				<div class="flex gap-2">
+					<input
+						id="image-search"
+						type="search"
+						name="q"
+						placeholder="Search images…"
+						autocomplete="off"
+						class="h-10 w-full rounded-md border bg-background px-3 text-sm"
+						hx-get="/partials/images"
+						hx-trigger="keyup changed delay:300ms, search"
+						hx-target="#image-results"
+						hx-include="closest form"
+					/>
+					<select name="arch" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/partials/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
+						<option value="">Any arch</option>
+						<option value="aarch64">aarch64</option>
+						<option value="x86_64">x86_64</option>
+					</select>
+					<select name="type" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/partials/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
+						<option value="">Any type</option>
+						<option value="container">container</option>
+						<option value="virtual-machine">virtual-machine</option>
+					</select>
+				</div>
+				<div id="image-results">
+					@ImageResults(images)
+				</div>
+			</div>
+			@button.Button(button.Props{Type: button.TypeSubmit}) {
+				@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
+				Rebuild instance
 			}
 		</form>
 	}

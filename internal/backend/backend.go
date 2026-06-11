@@ -93,6 +93,10 @@ type Capabilities struct {
 	// CertificateEdit is rename + project restriction on trusted certificates
 	// (Incus extensions "certificate_update" + "certificate_project").
 	CertificateEdit bool
+	// InstanceRebuild is reinstalling a stopped instance from a new image
+	// while keeping its config and devices (Incus extension
+	// "instances_rebuild").
+	InstanceRebuild bool
 }
 
 // Instance is a system container or virtual machine.
@@ -533,6 +537,11 @@ type Backend interface {
 	PauseInstance(ctx context.Context, name string) error  // freeze
 	ResumeInstance(ctx context.Context, name string) error // unfreeze
 	DeleteInstance(ctx context.Context, name string) error // stop-then-delete
+	// RebuildInstance reinstalls a stopped instance from the catalog image
+	// behind image/fingerprint (fingerprint wins when set, like create),
+	// keeping the instance's config, devices, and profiles. A running
+	// instance or empty image is ErrInvalid.
+	RebuildInstance(ctx context.Context, name, image, fingerprint string) error
 
 	ListSnapshots(ctx context.Context, name string) ([]Snapshot, error)
 	CreateSnapshot(ctx context.Context, name, snapshot string, opts SnapshotOptions) error

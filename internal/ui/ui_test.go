@@ -758,3 +758,30 @@ func TestSidebarRendersRemoteSwitcher(t *testing.T) {
 	html = render(t, InstancesPage(caps, nil, nil))
 	assertNotContains(t, html, `action="/remote"`)
 }
+
+func TestInstanceRowOffersMigrateForStoppedWithTargets(t *testing.T) {
+	caps := testCaps()
+	caps.Migrate = true
+	remotes := []backend.Remote{{Name: "local", Current: true}, {Name: "secondary"}}
+	renderWith := func(status string) string {
+		ctx := WithRemoteSwitcher(context.Background(), remotes)
+		var buf bytes.Buffer
+		if err := InstancesPage(caps, []backend.Instance{{Name: "demo", Status: status}}, nil).Render(ctx, &buf); err != nil {
+			t.Fatal(err)
+		}
+		return buf.String()
+	}
+
+	stopped := renderWith("Stopped")
+	assertContains(t, stopped, "Migrate…")
+	assertContains(t, stopped, `action="/instances/demo/migrate"`)
+	assertContains(t, stopped, `<option value="secondary">`)
+	assertNotContains(t, stopped, `<option value="local"`)
+
+	running := renderWith("Running")
+	assertNotContains(t, running, "Migrate…")
+
+	caps.Migrate = false
+	html := render(t, InstancesPage(caps, []backend.Instance{{Name: "demo", Status: "Stopped"}}, nil))
+	assertNotContains(t, html, "Migrate…")
+}

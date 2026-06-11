@@ -27,6 +27,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("GET /partials/sidebar", h.sidebar)
 	mux.HandleFunc("POST /project", h.selectProject)
 	mux.HandleFunc("POST /remote", h.selectRemote)
+	mux.HandleFunc("POST /instances/{name}/migrate", h.migrateInstance)
 	mux.HandleFunc("GET /projects", h.projectsPage)
 	mux.HandleFunc("POST /projects", h.createProject)
 	mux.HandleFunc("GET /projects/{name}", h.projectDetail)

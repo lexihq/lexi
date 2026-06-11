@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -163,6 +164,11 @@ templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 					@dropdown.Item() { Move… }
 				}
 			}
+			if caps.Migrate && inst.Status == "Stopped" && len(migrateTargets(ctx)) > 0 {
+				@dialog.Trigger(dialog.TriggerProps{For: "migrate-" + inst.Name}) {
+					@dropdown.Item() { Migrate… }
+				}
+			}
 			@dropdown.Separator()
 			@dropdown.Item(dropdown.ItemProps{Class: "text-destructive", Attributes: deleteAttrs(inst.Name)}) {
 				Delete
@@ -181,6 +187,54 @@ templ instanceDialogs(caps backend.Capabilities, inst backend.Instance) {
 	if caps.Move {
 		@instanceActionDialog("rename-"+inst.Name, "Rename "+inst.Name, "/instances/"+url.PathEscape(inst.Name)+"/rename", "new_name", "New name", "Rename", nil)
 		@instanceActionDialog("move-"+inst.Name, "Move "+inst.Name, "/instances/"+url.PathEscape(inst.Name)+"/move", "pool", "Target storage pool", "Move", templ.Attributes{"list": "pool-options"})
+	}
+	if caps.Migrate && inst.Status == "Stopped" && len(migrateTargets(ctx)) > 0 {
+		@instanceMigrateDialog(inst)
+	}
+}
+
+// migrateTargets are the remotes an instance can move to: every reachable
+// remote except the one the request is scoped to.
+func migrateTargets(ctx context.Context) []backend.Remote {
+	var out []backend.Remote
+	for _, r := range remoteSwitcherFrom(ctx) {
+		if !r.Current {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// instanceMigrateDialog is the cross-remote move form: a target-remote select
+// plus an optional new name. Stopped instances only (the menu item already
+// gates on it; the driver enforces it).
+templ instanceMigrateDialog(inst backend.Instance) {
+	@dialog.Dialog(dialog.Props{ID: "migrate-" + inst.Name}) {
+		@dialog.Content() {
+			@dialog.Header() {
+				@dialog.Title() { Migrate { inst.Name } }
+			}
+			<form method="post" action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/migrate") } hx-boost="false" class="flex flex-col gap-4">
+				<label class="flex flex-col gap-2 text-sm font-medium">
+					Target remote
+					<select name="target" class="h-9 rounded-md border bg-background px-3 text-sm font-normal">
+						for _, r := range migrateTargets(ctx) {
+							<option value={ r.Name }>{ r.Name }</option>
+						}
+					</select>
+				</label>
+				<label class="flex flex-col gap-2 text-sm font-medium">
+					New name (optional)
+					<input class="h-9 rounded-md border bg-background px-3 text-sm font-normal" name="new_name" placeholder={ inst.Name }/>
+				</label>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+					}
+					@button.Button(button.Props{Type: button.TypeSubmit}) { Migrate }
+				}
+			</form>
+		}
 	}
 }
 

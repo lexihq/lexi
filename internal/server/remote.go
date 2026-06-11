@@ -89,6 +89,52 @@ func (h handlers) selectRemote(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+// migrateInstance moves a stopped instance to another remote and lands on
+// the instance list — the instance no longer exists on this daemon. The
+// target must differ from the request's remote: a same-remote "migration" is
+// a rename, which has its own action.
+func (h handlers) migrateInstance(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	target := strings.TrimSpace(r.Form.Get("target"))
+	if target == "" {
+		h.fail(w, fmt.Errorf("target remote is required: %w", backend.ErrInvalid))
+		return
+	}
+	current, err := h.currentRemote(r)
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	if target == current {
+		h.fail(w, fmt.Errorf("instance is already on %q: %w", target, backend.ErrInvalid))
+		return
+	}
+	name := r.PathValue("name")
+	if err := h.backend.MigrateInstance(r.Context(), name, target, strings.TrimSpace(r.Form.Get("new_name"))); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// currentRemote names the remote the request is scoped to (the ListRemotes
+// entry marked Current honors the default-remote fallback).
+func (h handlers) currentRemote(r *http.Request) (string, error) {
+	remotes, err := h.backend.ListRemotes(r.Context())
+	if err != nil {
+		return "", err
+	}
+	for _, rem := range remotes {
+		if rem.Current {
+			return rem.Name, nil
+		}
+	}
+	return "", nil
+}
+
 // setRemoteCookie pins the remote selection; query-escaped and without the
 // Secure attribute for the same reasons as the project cookie (see
 // setProjectCookie).

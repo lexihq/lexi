@@ -71,3 +71,25 @@ func TestSelectRemoteSetsCookieAndClearsProject(t *testing.T) {
 	res = formRequest(t, srv, "/remote", url.Values{"remote": {"ghost"}}, false)
 	assertStatus(t, res, http.StatusNotFound)
 }
+
+func TestMigrateInstanceHandler(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(context.Background(), backend.CreateOptions{Name: "mig-h", Image: "debian/12"}))
+	srv := New(b)
+
+	// Same-remote target is rejected: migration needs another daemon.
+	res := formRequest(t, srv, "/instances/mig-h/migrate", url.Values{"target": {"local"}}, false)
+	assertStatus(t, res, http.StatusBadRequest)
+
+	// Missing target.
+	res = formRequest(t, srv, "/instances/mig-h/migrate", url.Values{}, false)
+	assertStatus(t, res, http.StatusBadRequest)
+
+	// Happy path: redirect to the list; the instance now lives on secondary.
+	res = formRequest(t, srv, "/instances/mig-h/migrate", url.Values{"target": {"secondary"}, "new_name": {"mig-h2"}}, false)
+	assertStatus(t, res, http.StatusSeeOther)
+	_, err := b.GetInstance(context.Background(), "mig-h")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+	_, err = b.GetInstance(backend.WithRemote(context.Background(), "secondary"), "mig-h2")
+	require.NoError(t, err)
+}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -68,7 +67,7 @@ func (f *Fake) instanceOnNetwork(sp *space, in *instance, network string) bool {
 // fakeMAC derives a stable fake hardware address from the instance name.
 func fakeMAC(name string) string {
 	var sum byte
-	for i := 0; i < len(name); i++ {
+	for i := range len(name) {
 		sum += name[i]
 	}
 	return fmt.Sprintf("10:66:6a:00:%02x:%02x", len(name)%256, sum)
@@ -100,8 +99,7 @@ func (f *Fake) ListNetworkForwards(ctx context.Context, network string) ([]backe
 		return nil, notFoundf("network %q", network)
 	}
 	var out []backend.NetworkForward
-	for addr, fw := range nsp.forwards[network] {
-		fw.Version = strconv.Itoa(nsp.forwardVersions[network+"/"+addr])
+	for _, fw := range nsp.forwards[network] {
 		fw.Ports = append([]backend.ForwardPort(nil), fw.Ports...)
 		out = append(out, fw)
 	}
@@ -126,9 +124,7 @@ func (f *Fake) CreateNetworkForward(ctx context.Context, network string, fw back
 	if nsp.forwards[network] == nil {
 		nsp.forwards[network] = map[string]backend.NetworkForward{}
 	}
-	fw.Version = ""
 	nsp.forwards[network][fw.ListenAddress] = fw
-	nsp.forwardVersions[network+"/"+fw.ListenAddress] = 1
 	f.logOp(f.space(ctx), fmt.Sprintf("Creating network forward %q on %q", fw.ListenAddress, network))
 	return nil
 }
@@ -141,13 +137,7 @@ func (f *Fake) UpdateNetworkForward(ctx context.Context, network string, fw back
 	if _, ok := nsp.forwards[network][fw.ListenAddress]; !ok {
 		return notFoundf("forward %q", fw.ListenAddress)
 	}
-	key := network + "/" + fw.ListenAddress
-	if fw.Version != strconv.Itoa(nsp.forwardVersions[key]) {
-		return conflict("forward %q was modified concurrently", fw.ListenAddress)
-	}
-	fw.Version = ""
 	nsp.forwards[network][fw.ListenAddress] = fw
-	nsp.forwardVersions[key]++
 	f.logOp(f.space(ctx), fmt.Sprintf("Updating network forward %q on %q", fw.ListenAddress, network))
 	return nil
 }
@@ -161,7 +151,6 @@ func (f *Fake) DeleteNetworkForward(ctx context.Context, network, listenAddress 
 		return notFoundf("forward %q", listenAddress)
 	}
 	delete(nsp.forwards[network], listenAddress)
-	delete(nsp.forwardVersions, network+"/"+listenAddress)
 	f.logOp(f.space(ctx), fmt.Sprintf("Deleting network forward %q on %q", listenAddress, network))
 	return nil
 }

@@ -47,23 +47,16 @@ func (b *incusBackend) ListNetworkForwards(ctx context.Context, network string) 
 	}
 	out := make([]backend.NetworkForward, 0, len(fws))
 	for i := range fws {
-		// The collection GET carries no etags; fetch each forward for its
-		// concurrency token. Forward counts are small.
-		fw, etag, err := b.project(ctx).GetNetworkForward(network, fws[i].ListenAddress)
-		if err != nil {
-			return nil, fmt.Errorf("get forward %q: %w", fws[i].ListenAddress, mapErr(err))
-		}
-		out = append(out, forwardView(*fw, etag))
+		out = append(out, forwardView(fws[i]))
 	}
 	return out, nil
 }
 
-func forwardView(fw api.NetworkForward, etag string) backend.NetworkForward {
+func forwardView(fw api.NetworkForward) backend.NetworkForward {
 	out := backend.NetworkForward{
 		ListenAddress: fw.ListenAddress,
 		Description:   fw.Description,
 		DefaultTarget: fw.Config["target_address"],
-		Version:       etag,
 	}
 	for _, p := range fw.Ports {
 		out.Ports = append(out.Ports, backend.ForwardPort{
@@ -109,7 +102,8 @@ func (b *incusBackend) CreateNetworkForward(ctx context.Context, network string,
 }
 
 func (b *incusBackend) UpdateNetworkForward(ctx context.Context, network string, fw backend.NetworkForward) error {
-	if err := b.project(ctx).UpdateNetworkForward(network, fw.ListenAddress, forwardPut(fw), fw.Version); err != nil {
+	// No etag: the daemon doesn't enforce one on forwards (last write wins).
+	if err := b.project(ctx).UpdateNetworkForward(network, fw.ListenAddress, forwardPut(fw), ""); err != nil {
 		return fmt.Errorf("update forward %q on %q: %w", fw.ListenAddress, network, mapErr(err))
 	}
 	return nil

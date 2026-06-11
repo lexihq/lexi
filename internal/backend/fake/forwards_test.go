@@ -27,12 +27,10 @@ func TestNetworkForwardLifecycle(t *testing.T) {
 	assert.Equal(t, "web", fws[0].Description)
 	assert.Equal(t, "10.0.3.2", fws[0].DefaultTarget)
 
-	// Versioned update: add a port; a stale version conflicts.
+	// Update replaces the port set (unversioned, like the daemon).
 	fw := fws[0]
 	fw.Ports = []backend.ForwardPort{{Protocol: "tcp", ListenPort: "80", TargetAddress: "10.0.3.2", TargetPort: "8080"}}
 	require.NoError(t, f.UpdateNetworkForward(ctx(), "incusbr0", fw))
-	err = f.UpdateNetworkForward(ctx(), "incusbr0", fw) // version not refreshed
-	require.ErrorIs(t, err, backend.ErrConflict)
 
 	fws, err = f.ListNetworkForwards(ctx(), "incusbr0")
 	require.NoError(t, err)

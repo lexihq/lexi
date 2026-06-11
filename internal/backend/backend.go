@@ -373,9 +373,6 @@ type NetworkForward struct {
 	// daemon's target_address config key).
 	DefaultTarget string
 	Ports         []ForwardPort
-	// Version is the concurrency token (daemon etag): Get and pass back on
-	// update; a stale token is ErrConflict.
-	Version string
 }
 
 // ForwardPort is one port mapping in a forward. Port fields carry the
@@ -590,7 +587,8 @@ type Backend interface {
 	// (a duplicate is ErrConflict).
 	CreateNetworkForward(ctx context.Context, network string, f NetworkForward) error
 	// UpdateNetworkForward replaces a forward's description, default target,
-	// and port set; f.Version is the concurrency token.
+	// and port set. Deliberately unversioned — the daemon enforces no etag
+	// on forwards, so last write wins (like UpdateImage).
 	UpdateNetworkForward(ctx context.Context, network string, f NetworkForward) error
 	// DeleteNetworkForward removes the forward at the listen address.
 	DeleteNetworkForward(ctx context.Context, network, listenAddress string) error

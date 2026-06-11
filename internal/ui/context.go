@@ -19,6 +19,30 @@ func WithSidebarInstances(ctx context.Context, instances []backend.Instance) con
 	return context.WithValue(ctx, sidebarCtxKey{}, instances)
 }
 
+// projectSwitcherCtxKey keys the project list + current selection the shell
+// preloads for the sidebar switcher — layout-wide data, like the sidebar
+// instance list.
+type projectSwitcherCtxKey struct{}
+
+type projectSwitcher struct {
+	Projects []backend.Project
+	Current  string
+}
+
+// WithProjectSwitcher returns a context carrying the switcher state.
+func WithProjectSwitcher(ctx context.Context, projects []backend.Project, current string) context.Context {
+	return context.WithValue(ctx, projectSwitcherCtxKey{}, projectSwitcher{Projects: projects, Current: current})
+}
+
+// projectSwitcherFrom returns the preloaded switcher state; an absent value
+// (render paths that didn't set one) hides the switcher.
+func projectSwitcherFrom(ctx context.Context) projectSwitcher {
+	if ps, ok := ctx.Value(projectSwitcherCtxKey{}).(projectSwitcher); ok {
+		return ps
+	}
+	return projectSwitcher{}
+}
+
 // sidebarInstancesFrom returns the preloaded sidebar instance list, or nil when
 // a render path (e.g. a unit test rendering a page directly) didn't set one —
 // in which case the sidebar's poll fills it in shortly after load.

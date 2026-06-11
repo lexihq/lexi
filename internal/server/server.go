@@ -25,6 +25,7 @@ func New(b backend.Backend) *http.Server {
 	})
 	mux.HandleFunc("GET /", h.list)
 	mux.HandleFunc("GET /partials/sidebar", h.sidebar)
+	mux.HandleFunc("POST /project", h.selectProject)
 	mux.HandleFunc("GET /partials/images", h.imagePicker)
 	mux.HandleFunc("GET /partials/operations", h.operationsPanel)
 	mux.HandleFunc("POST /operations/{id}/cancel", h.cancelOperation)
@@ -128,7 +129,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/delete", h.deleteSnapshot)
 
 	return &http.Server{
-		Handler:           csrfGuard(mux),
+		Handler:           csrfGuard(h.withProject(mux)),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 }

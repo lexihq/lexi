@@ -11,6 +11,9 @@ import (
 // flashes an empty sidebar) and refreshes every 10s via the /partials/sidebar
 // route; the active highlight is baked in from nav.Instance.
 templ Sidebar(caps backend.Capabilities, nav Nav) {
+	if caps.Projects {
+		@projectSwitcherSelect(projectSwitcherFrom(ctx))
+	}
 	<nav class="space-y-1">
 		<a
 			href="/"
@@ -113,4 +116,29 @@ func statusDot(status string) string {
 		return "bg-green-500"
 	}
 	return "bg-muted-foreground"
+}
+
+// projectSwitcherSelect is the project dropdown at the top of the sidebar.
+// Selecting an option submits the plain form; the server validates, sets the
+// selection cookie, and lands on the instance list. Hidden when the shell
+// didn't preload projects (degraded listing) or only default exists.
+templ projectSwitcherSelect(ps projectSwitcher) {
+	if len(ps.Projects) > 1 {
+		<form method="post" action="/project" class="mb-3">
+			<label class="px-3 pb-1 text-xs font-medium uppercase text-muted-foreground">Project</label>
+			<select
+				name="project"
+				onchange="this.form.requestSubmit()"
+				class="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+			>
+				for _, p := range ps.Projects {
+					if p.Name == ps.Current || (ps.Current == "" && p.Name == "default") {
+						<option value={ p.Name } selected>{ p.Name }</option>
+					} else {
+						<option value={ p.Name }>{ p.Name }</option>
+					}
+				}
+			</select>
+		</form>
+	}
 }

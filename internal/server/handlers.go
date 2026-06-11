@@ -89,6 +89,15 @@ func (h handlers) renderShell(w http.ResponseWriter, r *http.Request, code int, 
 func (h handlers) renderWithSidebar(w http.ResponseWriter, r *http.Request, code int, instances []backend.Instance, component templ.Component) {
 	writeHTML(w, code)
 	ctx := ui.WithSidebarInstances(r.Context(), instances)
+	// The project switcher is layout-wide like the instance list; a listing
+	// failure degrades to a hidden switcher rather than failing the page.
+	if h.backend.Capabilities().Projects {
+		if projects, err := h.backend.ListProjects(r.Context()); err == nil {
+			ctx = ui.WithProjectSwitcher(ctx, projects, backend.ProjectFromContext(r.Context()))
+		} else {
+			slog.Warn("list projects for switcher", "err", err)
+		}
+	}
 	if err := component.Render(ctx, w); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}

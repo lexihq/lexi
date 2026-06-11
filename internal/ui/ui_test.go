@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 
@@ -804,4 +805,29 @@ func TestNetworkDetailRendersLeasesAndForwards(t *testing.T) {
 	caps.NetworkForwards = false
 	html = render(t, NetworkDetailPage(caps, n, st, leases, nil))
 	assertNotContains(t, html, "Add forward")
+}
+
+func TestBackupsTabGatedOnStoredBackups(t *testing.T) {
+	caps := testCaps()
+	caps.StoredBackups = true
+	html := render(t, InstancePage(caps, backend.Instance{Name: "demo", Status: "Stopped"}, nil, nil, "backups"))
+	assertContains(t, html, `hx-get="/instances/demo/backups"`)
+
+	caps.StoredBackups = false
+	// A direct ?tab=backups URL without the capability falls back to Summary.
+	html = render(t, InstancePage(caps, backend.Instance{Name: "demo", Status: "Stopped"}, nil, nil, "backups"))
+	assertNotContains(t, html, `hx-get="/instances/demo/backups"`)
+	assertNotContains(t, html, ">Backups<")
+}
+
+func TestBackupsPanelRendersRows(t *testing.T) {
+	bks := []backend.InstanceBackup{{Name: "weekly", CreatedAt: time.Date(2026, time.January, 2, 3, 4, 0, 0, time.UTC), InstanceOnly: true}}
+	html := render(t, BackupsPanel("demo", bks))
+	assertContains(t, html, "weekly")
+	assertContains(t, html, "instance only")
+	assertContains(t, html, `href="/instances/demo/backups/weekly/download"`)
+	assertContains(t, html, `hx-confirm="Delete backup weekly?"`)
+
+	empty := render(t, BackupsPanel("demo", nil))
+	assertContains(t, empty, "No backups yet")
 }

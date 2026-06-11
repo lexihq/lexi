@@ -1,0 +1,119 @@
+package ui
+
+import (
+	"net/url"
+
+	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/dialog"
+	"github.com/adam/lxcon/internal/components/icon"
+	"github.com/adam/lxcon/internal/components/table"
+)
+
+// BackupsPanel is the lazy-loaded Backups tab body: the instance's
+// server-side named backups with create/download/restore-as/delete. HTMX
+// posts re-render the panel in place; plain posts redirect to the tab.
+templ BackupsPanel(name string, backups []backend.InstanceBackup) {
+	{{ en := url.PathEscape(name) }}
+	<section id="backups" class="rounded-lg border bg-card p-4">
+		<div class="mb-4 flex items-center justify-between gap-4">
+			<h2 class="text-lg font-medium">Backups</h2>
+			<form method="post" action={ templ.URL("/instances/" + en + "/backups") } hx-post={ "/instances/" + en + "/backups" } hx-target="#backups" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
+				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="name" placeholder="backup name (optional)"/>
+				<label class="flex items-center gap-1 text-sm text-muted-foreground">
+					<input type="datetime-local" name="expires_at" class="h-9 rounded-md border bg-background px-2 text-sm" title="Expiry in UTC (optional)"/> UTC
+				</label>
+				<label class="flex items-center gap-1 text-sm text-muted-foreground">
+					<input type="checkbox" name="instance_only"/> instance only
+				</label>
+				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					@icon.Icon("archive")(icon.Props{Class: "size-4"})
+					Create backup
+				}
+			</form>
+		</div>
+		<p class="mb-3 text-sm text-muted-foreground">Stored on the server — download, restore, or delete without re-uploading. "Instance only" skips snapshots.</p>
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() { Name }
+					@table.Head() { Created }
+					@table.Head() { Expires }
+					@table.Head() { Contents }
+					@table.Head() { Actions }
+				}
+			}
+			@table.Body() {
+				if len(backups) == 0 {
+					@emptyRow("5", "No backups yet.")
+				}
+				for _, bk := range backups {
+					{{ eb := url.PathEscape(bk.Name) }}
+					@table.Row() {
+						@table.Cell() { { bk.Name } }
+						@table.Cell() {
+							<span class="text-xs text-muted-foreground">{ bk.CreatedAt.UTC().Format("2006-01-02 15:04") } UTC</span>
+						}
+						@table.Cell() {
+							if bk.ExpiresAt.IsZero() {
+								<span class="text-xs text-muted-foreground">never</span>
+							} else {
+								<span class="text-xs text-muted-foreground">{ bk.ExpiresAt.UTC().Format("2006-01-02 15:04") } UTC</span>
+							}
+						}
+						@table.Cell() {
+							if bk.InstanceOnly {
+								<span class="rounded bg-accent px-1.5 py-0.5 text-xs">instance only</span>
+							} else {
+								<span class="text-xs text-muted-foreground">with snapshots</span>
+							}
+						}
+						@table.Cell() {
+							<div class="flex flex-wrap items-center gap-2">
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + en + "/backups/" + eb + "/download", Attributes: templ.Attributes{"hx-boost": "false", "download": ""}}) {
+									@icon.Icon("download")(icon.Props{Class: "size-4"})
+									Download
+								}
+								@dialog.Trigger(dialog.TriggerProps{For: "restore-bk-" + bk.Name}) {
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline}) {
+										@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
+										Restore…
+									}
+								}
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/backups/" + eb + "/delete", "hx-target": "#backups", "hx-swap": "outerHTML", "hx-confirm": "Delete backup " + bk.Name + "?"}}) {
+									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+									Delete
+								}
+							</div>
+							@backupRestoreDialog(name, bk.Name)
+						}
+					}
+				}
+			}
+		}
+	</section>
+}
+
+// backupRestoreDialog asks for the new instance name; restore lands on the
+// restored instance, so the form posts full-page.
+templ backupRestoreDialog(instance, backup string) {
+	@dialog.Dialog(dialog.Props{ID: "restore-bk-" + backup}) {
+		@dialog.Content() {
+			@dialog.Header() {
+				@dialog.Title() { Restore { backup } }
+			}
+			<form method="post" action={ templ.URL("/instances/" + url.PathEscape(instance) + "/backups/" + url.PathEscape(backup) + "/restore") } hx-boost="false" class="flex flex-col gap-4">
+				<label class="flex flex-col gap-2 text-sm font-medium">
+					New instance name
+					<input class="h-9 rounded-md border bg-background px-3 text-sm font-normal" name="new_name" required/>
+				</label>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+					}
+					@button.Button(button.Props{Type: button.TypeSubmit}) { Restore }
+				}
+			</form>
+		}
+	}
+}

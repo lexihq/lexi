@@ -5,6 +5,7 @@ import (
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/dialog"
 	"github.com/adam/lxcon/internal/components/icon"
 )
 
@@ -15,6 +16,10 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 	@Layout(inst.Name, caps, Nav{Section: NavInstances, Instance: inst.Name}) {
 		@InstanceHeader(caps, inst)
 		@InstanceBody(caps, inst, snapshots, profiles, tab)
+		// The Backups tab's restore dialog needs the dialog runtime; it is
+		// idempotent and cheap, so mount it with the page rather than racing
+		// the lazily-swapped panel.
+		@dialog.Script()
 	}
 }
 
@@ -81,6 +86,13 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 	<div id="instance-body">
 		@instanceTabs(caps, inst.Name, active, true)
 		switch active {
+			case "backups":
+				<div
+					id="backups"
+					hx-get={ "/instances/" + url.PathEscape(inst.Name) + "/backups" }
+					hx-trigger="load"
+					hx-swap="outerHTML"
+				></div>
 			case "snapshots":
 				@SnapshotTable(inst.Name, snapshots)
 				<div
@@ -154,6 +166,10 @@ func effectiveTab(caps backend.Capabilities, tab string) string {
 		if caps.Snapshots {
 			return "snapshots"
 		}
+	case "backups":
+		if caps.StoredBackups {
+			return "backups"
+		}
 	case "metrics":
 		if caps.Metrics {
 			return "metrics"
@@ -188,6 +204,9 @@ templ instanceTabs(caps backend.Capabilities, name, active string, swap bool) {
 		@tabLink(name, "summary", "Summary", "info", active, swap)
 		if caps.Snapshots {
 			@tabLink(name, "snapshots", "Snapshots", "camera", active, swap)
+		}
+		if caps.StoredBackups {
+			@tabLink(name, "backups", "Backups", "archive", active, swap)
 		}
 		if caps.Console {
 			<a

@@ -72,3 +72,17 @@ test("projects: create, switch scope, edit, rename, and delete", async ({ page }
   // Deleting the selected project fell back to default.
   await expect(page.getByRole("link", { name: "demo" }).first()).toBeVisible();
 });
+
+test("projects: delete an empty project straight from the list", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
+  await page.goto("/projects");
+  await page.locator('input[name="name"]').fill("e2e-rowdel");
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page).toHaveURL(/\/projects\/e2e-rowdel$/);
+
+  await page.goto("/projects");
+  await expect(async () => {
+    await page.getByRole("row", { name: /e2e-rowdel/ }).getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("link", { name: "e2e-rowdel" })).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});

@@ -53,6 +53,7 @@ templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, curren
 					@table.Head() { Name }
 					@table.Head() { Description }
 					@table.Head() { Resources }
+					@table.Head() { }
 				}
 			}
 			@table.Body() {
@@ -69,6 +70,23 @@ templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, curren
 						}
 						@table.Cell() {
 							{ fmt.Sprint(len(p.UsedBy)) }
+						}
+						@table.Cell() {
+							if p.Name != "default" {
+								if projectBlockers(p) > 0 {
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Disabled: true, Attributes: templ.Attributes{"title": "not empty; delete its resources first"}}) {
+										@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+										Delete
+									}
+								} else {
+									<form method="post" action={ templ.URL("/projects/" + url.PathEscape(p.Name) + "/delete") } hx-confirm={ "Delete project " + p.Name + "?" }>
+										@button.Button(button.Props{Size: button.SizeSm, Type: button.TypeSubmit, Variant: button.VariantDestructive}) {
+											@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+											Delete
+										}
+									</form>
+								}
+							}
 						}
 					}
 				}

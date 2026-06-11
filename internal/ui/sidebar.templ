@@ -15,6 +15,17 @@ templ Sidebar(caps backend.Capabilities, nav Nav) {
 		@projectSwitcherSelect(projectSwitcherFrom(ctx))
 	}
 	<nav class="space-y-1">
+		if caps.Projects {
+			<a
+				href="/projects"
+				class={ "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium",
+					templ.KV("bg-accent text-accent-foreground", nav.Section == NavProjects),
+					templ.KV("text-muted-foreground hover:text-foreground", nav.Section != NavProjects) }
+			>
+				@icon.Icon("folder")(icon.Props{Class: "size-4"})
+				Projects
+			</a>
+		}
 		<a
 			href="/"
 			class={ "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium",
@@ -66,17 +77,6 @@ templ Sidebar(caps backend.Capabilities, nav Nav) {
 			>
 				@icon.Icon("image")(icon.Props{Class: "size-4"})
 				Images
-			</a>
-		}
-		if caps.Projects {
-			<a
-				href="/projects"
-				class={ "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium",
-					templ.KV("bg-accent text-accent-foreground", nav.Section == NavProjects),
-					templ.KV("text-muted-foreground hover:text-foreground", nav.Section != NavProjects) }
-			>
-				@icon.Icon("folder")(icon.Props{Class: "size-4"})
-				Projects
 			</a>
 		}
 		if caps.ServerAdmin {

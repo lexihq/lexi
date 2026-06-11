@@ -22,9 +22,17 @@ test("tasks panel lists operations and picks up new ones", async ({ page }) => {
   await footer.locator('label[for="ops-toggle"]').click();
   await expect(footer.getByText(`Creating instance "${name}"`)).toBeVisible();
 
-  // Delete the instance; the 5s poll picks the new operation up.
+  // Delete the instance via the row's kebab menu (accepting the hx-confirm
+  // dialog); the 5s poll picks the new operation up.
+  const deleteItem = row.getByRole("menuitem", { name: "Delete", exact: true });
+  // One persistent handler for the whole retry loop: stacking a page.once per
+  // attempt would invoke several accepts on the same dialog, which throws.
+  page.on("dialog", (d) => void d.accept().catch(() => {}));
   await expect(async () => {
-    await row.getByRole("button", { name: "Delete", exact: true }).click();
+    if (!(await deleteItem.isVisible())) {
+      await row.getByRole("button", { name: `Actions for ${name}` }).click();
+    }
+    await deleteItem.click();
     await expect(row).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
   await expect(footer.getByText(`Deleting instance "${name}"`)).toBeVisible({ timeout: 10000 });

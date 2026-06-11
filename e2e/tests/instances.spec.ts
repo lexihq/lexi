@@ -1,33 +1,99 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 // Instance lifecycle through the list UI: create, start/stop/clone/delete,
 // rename/move, restart/pause/resume, and the export/import round-trip.
 // All tests run against the shared fake-backed server (instance "demo" seeded).
+//
+// Row actions live in two places: a status-aware primary button (Start/Stop/
+// Resume) and a kebab menu ("Actions for <name>") holding everything else.
+// Clone/Rename/Move open per-row dialogs that submit a full-page POST.
 
-test("create from the image browser, then start/stop/clone/delete in the list", async ({ page }) => {
-  const name = "e2e-create";
+// primaryAction clicks the row's status-aware button and waits for its HTMX
+// POST to complete, so the in-place row swap has settled before the next
+// action or assertion. Retry the click until the POST actually fires: a button
+// in a freshly htmx-swapped row can be clicked before its hx-post handler is
+// bound (the swap-then-click race), losing the click. We only re-click when no
+// response was observed, so a registered action is never fired twice.
+const primaryAction = async (page: Page, instance: string, button: string) => {
+  // Only a lost click (no POST observed within the inner timeout) should retry;
+  // a POST that returns an error still resolves waitForResponse, so the retry
+  // never re-fires a registered action — the outer state assertions surface
+  // real failures.
+  await expect(async () => {
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
+        { timeout: 3000 },
+      ),
+      page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
+    ]);
+  }).toPass({ timeout: 15000 });
+};
 
-  // rowAction clicks a row button and waits for its HTMX POST to complete, so
-  // the in-place row swap has settled before the next action or assertion.
-  // Retry the click until the POST actually fires: a button in a freshly
-  // htmx-swapped row can be clicked before its hx-post handler is bound (the
-  // swap-then-click race), losing the click. We only re-click when no response
-  // was observed, so a registered action is never fired twice.
-  const rowAction = async (instance: string, button: string) => {
-    // Only a lost click (no POST observed within the inner timeout) should retry;
-    // a POST that returns an error still resolves waitForResponse, so the retry
-    // never re-fires a registered action — the outer state assertions surface
-    // real failures.
+// menuAction opens the row's kebab menu and clicks a menu item, waiting for
+// its HTMX POST. The menu content renders inside the row, so everything is
+// scoped to it. Destructive items use hx-confirm (a native confirm dialog),
+// accepted via opts.confirm. The toPass retry covers the same swap-then-click
+// race as primaryAction; re-clicking the trigger on a retry merely toggles the
+// menu, which the visibility guard below absorbs.
+const menuAction = async (
+  page: Page,
+  instance: string,
+  item: string,
+  opts: { confirm?: boolean } = {},
+) => {
+  const row = page.locator(`#instance-${instance}`);
+  const menuItem = row.getByRole("menuitem", { name: item, exact: true });
+  // One persistent handler for the whole retry loop: stacking a page.once per
+  // attempt would invoke several accepts on the same dialog, which throws.
+  const acceptDialog = (d: import("@playwright/test").Dialog) => d.accept().catch(() => {});
+  if (opts.confirm) {
+    page.on("dialog", acceptDialog);
+  }
+  try {
     await expect(async () => {
+      if (!(await menuItem.isVisible())) {
+        await row.getByRole("button", { name: `Actions for ${instance}` }).click();
+      }
+      await expect(menuItem).toBeVisible({ timeout: 2000 });
       await Promise.all([
         page.waitForResponse(
           (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
           { timeout: 3000 },
         ),
-        page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
+        menuItem.click(),
       ]);
     }).toPass({ timeout: 15000 });
-  };
+  } finally {
+    if (opts.confirm) {
+      page.off("dialog", acceptDialog);
+    }
+  }
+};
+
+// dialogAction opens a row dialog via the kebab menu and submits its
+// single-input form. The submit is a full-page POST (hx-boost off), so callers
+// assert on the resulting navigation instead of an HTMX response.
+const dialogAction = async (
+  page: Page,
+  instance: string,
+  item: string,
+  dialogId: string,
+  field: string,
+  value: string,
+  submit: string,
+) => {
+  const row = page.locator(`#instance-${instance}`);
+  await row.getByRole("button", { name: `Actions for ${instance}` }).click();
+  await row.getByRole("menuitem", { name: item, exact: true }).click();
+  const dlg = page.locator(`#${dialogId} dialog`);
+  await expect(dlg).toBeVisible();
+  await dlg.locator(`input[name=${field}]`).fill(value);
+  await dlg.getByRole("button", { name: submit, exact: true }).click();
+};
+
+test("create from the image browser, then start/stop/clone/delete in the list", async ({ page }) => {
+  const name = "e2e-create";
 
   await page.goto("/instances/new");
 
@@ -45,21 +111,22 @@ test("create from the image browser, then start/stop/clone/delete in the list", 
   await expect(page.locator(`#instance-${name}`)).toContainText(name);
   await expect(page.locator(`#instance-${name}`)).toContainText("Running");
 
-  // Stop / Start swap the row in place over HTMX.
-  await rowAction(name, "Stop");
+  // Stop / Start swap the row in place over HTMX, flipping the primary button.
+  await primaryAction(page, name, "Stop");
   await expect(page.locator(`#instance-${name}`)).toContainText("Stopped");
-  await rowAction(name, "Start");
+  await expect(page.locator(`#instance-${name}`).getByRole("button", { name: "Start" })).toBeVisible();
+  await primaryAction(page, name, "Start");
   await expect(page.locator(`#instance-${name}`)).toContainText("Running");
+  await expect(page.locator(`#instance-${name}`).getByRole("button", { name: "Stop" })).toBeVisible();
 
-  // Clone (full-page submit) adds a second row.
+  // Clone via the kebab dialog (full-page submit) adds a second row.
   const clone = `${name}-copy`;
-  await page.locator(`#instance-${name} input[name=dst]`).fill(clone);
-  await page.locator(`#instance-${name}`).getByRole("button", { name: "Clone" }).click();
+  await dialogAction(page, name, "Clone…", `clone-${name}`, "dst", clone, "Clone");
   await expect(page.locator(`#instance-${clone}`)).toBeVisible();
 
-  // Delete both rows; each removes itself from the table.
+  // Delete both rows from the kebab menu; each removes itself from the table.
   for (const n of [clone, name]) {
-    await rowAction(n, "Delete");
+    await menuAction(page, n, "Delete", { confirm: true });
     await expect(page.locator(`#instance-${n}`)).toHaveCount(0);
   }
 });
@@ -97,10 +164,8 @@ test("create with profile, pool, network, and initial config", async ({ page }) 
 
   // Clean up from the list (shared server state).
   await page.goto("/");
-  await expect(async () => {
-    await page.locator(`#instance-${name}`).getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(page.locator(`#instance-${name}`)).toHaveCount(0, { timeout: 1000 });
-  }).toPass({ timeout: 10000 });
+  await menuAction(page, name, "Delete", { confirm: true });
+  await expect(page.locator(`#instance-${name}`)).toHaveCount(0);
 });
 
 test("create page arch and type filters narrow the image list", async ({ page }) => {
@@ -131,30 +196,24 @@ test("rename and move an instance from the list row", async ({ page }) => {
   await firstImage.check();
   await page.locator("#name").fill(name);
   await page.getByRole("button", { name: "Create instance" }).click();
+  await expect(page.locator(`#instance-${name}`)).toBeVisible();
 
-  // Rename (hx-boost=false → native POST, full navigation to the new detail page).
-  const row = page.locator(`#instance-${name}`);
-  await expect(row).toBeVisible();
-  await row.locator('input[name="new_name"]').fill("e2e-moved");
-  await row.getByRole("button", { name: "Rename" }).click();
+  // Rename via the kebab dialog (full-page POST, navigates to the new detail page).
+  await dialogAction(page, name, "Rename…", `rename-${name}`, "new_name", "e2e-moved", "Rename");
   await expect(page).toHaveURL(/\/instances\/e2e-moved$/);
 
   // Move to a seeded pool from the list row (fake records it as a validated no-op).
   await page.goto("/");
-  const moved = page.locator("#instance-e2e-moved");
-  await expect(moved).toBeVisible();
-  // The move input offers pool suggestions from the page-level datalist.
+  await expect(page.locator("#instance-e2e-moved")).toBeVisible();
+  // The move dialog's input offers pool suggestions from the page-level datalist.
   await expect(page.locator("#pool-options option[value='default']")).toBeAttached();
-  await moved.locator('input[name="pool"]').fill("default");
-  await moved.getByRole("button", { name: "Move" }).click();
+  await dialogAction(page, "e2e-moved", "Move…", "move-e2e-moved", "pool", "default", "Move");
   await expect(page).toHaveURL(/\/instances\/e2e-moved$/);
 
   // Clean up.
   await page.goto("/");
-  await expect(async () => {
-    await page.locator("#instance-e2e-moved").getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(page.locator("#instance-e2e-moved")).toHaveCount(0, { timeout: 1000 });
-  }).toPass({ timeout: 10000 });
+  await menuAction(page, "e2e-moved", "Delete", { confirm: true });
+  await expect(page.locator("#instance-e2e-moved")).toHaveCount(0);
 });
 
 test("export downloads a tarball that re-imports as a new instance", async ({ page }) => {
@@ -175,32 +234,12 @@ test("export downloads a tarball that re-imports as a new instance", async ({ pa
   await expect(page.locator(`#instance-${imported}`)).toBeVisible();
 
   // Clean up the imported instance.
-  await page.locator(`#instance-${imported}`).getByRole("button", { name: "Delete" }).click();
+  await menuAction(page, imported, "Delete", { confirm: true });
   await expect(page.locator(`#instance-${imported}`)).toHaveCount(0);
 });
 
 test("restart, pause, and resume an instance from the list row", async ({ page }) => {
   const name = "e2e-lifecycle";
-
-  // Retry the click until the POST actually fires: a button in a freshly
-  // htmx-swapped row can be clicked before its hx-post handler is bound (the
-  // swap-then-click race), losing the click. We only re-click when no response
-  // was observed, so a registered action is never fired twice.
-  const rowAction = async (instance: string, button: string) => {
-    // Only a lost click (no POST observed within the inner timeout) should retry;
-    // a POST that returns an error still resolves waitForResponse, so the retry
-    // never re-fires a registered action — the outer state assertions surface
-    // real failures.
-    await expect(async () => {
-      await Promise.all([
-        page.waitForResponse(
-          (r) => r.request().method() === "POST" && r.url().includes(`/instances/${instance}/`),
-          { timeout: 3000 },
-        ),
-        page.locator(`#instance-${instance}`).getByRole("button", { name: button, exact: true }).click(),
-      ]);
-    }).toPass({ timeout: 15000 });
-  };
 
   // Create a running instance to exercise the lifecycle controls.
   await page.goto("/instances/new");
@@ -215,22 +254,21 @@ test("restart, pause, and resume an instance from the list row", async ({ page }
   const row = page.locator(`#instance-${name}`);
   await expect(row).toContainText("Running");
 
-  // Restart leaves it Running.
-  await rowAction(name, "Restart");
+  // Restart (kebab menu) leaves it Running.
+  await menuAction(page, name, "Restart");
   await expect(row).toContainText("Running");
 
-  // Pause freezes it; the Pause button gives way to Resume.
-  await rowAction(name, "Pause");
+  // Pause freezes it; the primary button becomes Resume.
+  await menuAction(page, name, "Pause");
   await expect(row).toContainText("Frozen");
   await expect(row.getByRole("button", { name: "Resume" })).toBeVisible();
-  await expect(row.getByRole("button", { name: "Pause" })).toHaveCount(0);
 
-  // Resume runs it again; Pause returns.
-  await rowAction(name, "Resume");
+  // Resume runs it again; the primary button returns to Stop.
+  await primaryAction(page, name, "Resume");
   await expect(row).toContainText("Running");
-  await expect(row.getByRole("button", { name: "Pause" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Stop" })).toBeVisible();
 
   // Clean up.
-  await rowAction(name, "Delete");
+  await menuAction(page, name, "Delete", { confirm: true });
   await expect(row).toHaveCount(0);
 });

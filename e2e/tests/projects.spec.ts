@@ -54,9 +54,15 @@ test("projects: create, switch scope, edit, rename, and delete", async ({ page }
   await switchTo("e2e-proj", async () => {
     await expect(page.locator("#instance-e2e-proj-inst")).toBeVisible({ timeout: 1000 });
   });
+  const projInst = page.locator("#instance-e2e-proj-inst");
+  const projInstDelete = projInst.getByRole("menuitem", { name: "Delete", exact: true });
   await expect(async () => {
-    await page.locator("#instance-e2e-proj-inst").getByRole("button", { name: "Delete" }).click();
-    await expect(page.locator("#instance-e2e-proj-inst")).toHaveCount(0, { timeout: 1000 });
+    if (!(await projInstDelete.isVisible())) {
+      await projInst.getByRole("button", { name: "Actions for e2e-proj-inst" }).click();
+    }
+    // The test-wide page.on("dialog") handler accepts the hx-confirm prompt.
+    await projInstDelete.click();
+    await expect(projInst).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 
   await page.goto("/projects/e2e-proj");

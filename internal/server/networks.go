@@ -25,7 +25,100 @@ func (h handlers) networkDetail(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.NetworkDetailPage(h.backend.Capabilities(r.Context()), n))
+	caps := h.backend.Capabilities(r.Context())
+	// State, leases, and forwards exist for managed networks only; the page
+	// hides those sections otherwise, so zero values suffice.
+	var st backend.NetworkState
+	var leases []backend.NetworkLease
+	var forwards []backend.NetworkForward
+	if n.Managed {
+		if st, err = h.backend.GetNetworkState(r.Context(), n.Name); err != nil {
+			h.fail(w, err)
+			return
+		}
+		if leases, err = h.backend.ListNetworkLeases(r.Context(), n.Name); err != nil {
+			h.fail(w, err)
+			return
+		}
+		if caps.NetworkForwards {
+			if forwards, err = h.backend.ListNetworkForwards(r.Context(), n.Name); err != nil {
+				h.fail(w, err)
+				return
+			}
+		}
+	}
+	h.renderShell(w, r, http.StatusOK, ui.NetworkDetailPage(caps, n, st, leases, forwards))
+}
+
+// createNetworkForward adds a port forward to a managed network.
+func (h handlers) createNetworkForward(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	network := r.PathValue("name")
+	fw := backend.NetworkForward{
+		ListenAddress: strings.TrimSpace(r.Form.Get("listen_address")),
+		Description:   strings.TrimSpace(r.Form.Get("description")),
+		DefaultTarget: strings.TrimSpace(r.Form.Get("target_address")),
+	}
+	if fw.ListenAddress == "" {
+		h.fail(w, fmt.Errorf("listen address is required: %w", backend.ErrInvalid))
+		return
+	}
+	if err := h.backend.CreateNetworkForward(r.Context(), network, fw); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/networks/"+url.PathEscape(network), http.StatusSeeOther)
+}
+
+// updateNetworkForward replaces a forward's description, default target, and
+// port set from the per-forward editor (rows with an empty listen port are
+// dropped, so clearing one removes the mapping).
+func (h handlers) updateNetworkForward(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	network, addr := r.PathValue("name"), r.PathValue("addr")
+	fw := backend.NetworkForward{
+		ListenAddress: addr,
+		Description:   strings.TrimSpace(r.Form.Get("description")),
+		DefaultTarget: strings.TrimSpace(r.Form.Get("target_address")),
+	}
+	protos, listens := r.Form["port_protocol"], r.Form["listen_port"]
+	targets, tports := r.Form["port_target"], r.Form["target_port"]
+	for i, lp := range listens {
+		if strings.TrimSpace(lp) == "" {
+			continue
+		}
+		p := backend.ForwardPort{ListenPort: strings.TrimSpace(lp)}
+		if i < len(protos) {
+			p.Protocol = protos[i]
+		}
+		if i < len(targets) {
+			p.TargetAddress = strings.TrimSpace(targets[i])
+		}
+		if i < len(tports) {
+			p.TargetPort = strings.TrimSpace(tports[i])
+		}
+		fw.Ports = append(fw.Ports, p)
+	}
+	if err := h.backend.UpdateNetworkForward(r.Context(), network, fw); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/networks/"+url.PathEscape(network), http.StatusSeeOther)
+}
+
+func (h handlers) deleteNetworkForward(w http.ResponseWriter, r *http.Request) {
+	network := r.PathValue("name")
+	if err := h.backend.DeleteNetworkForward(r.Context(), network, r.PathValue("addr")); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/networks/"+url.PathEscape(network), http.StatusSeeOther)
 }
 
 func (h handlers) networkCreateForm(w http.ResponseWriter, r *http.Request) {

@@ -31,15 +31,17 @@ test("create and delete a network in the Networks section", async ({ page }) => 
 
 test("edit a managed network's description and config", async ({ page }) => {
   await page.goto("/networks/incusbr0");
-  await page.locator('input[name="description"]').fill("edited by e2e");
+  // Scope to the config form: the forwards card has a description input too.
+  const config = page.locator('form[action="/networks/incusbr0/config"]');
+  await config.locator('input[name="description"]').fill("edited by e2e");
   // Blank key rows are appended after the existing config rows.
-  await page.locator('input[name="key"]').last().fill("user.e2e");
-  await page.locator('input[name="value"]').last().fill("yes");
-  await page.getByRole("button", { name: "Apply config" }).click();
+  await config.locator('input[name="key"]').last().fill("user.e2e");
+  await config.locator('input[name="value"]').last().fill("yes");
+  await config.getByRole("button", { name: "Apply config" }).click();
 
   await expect(page).toHaveURL(/\/networks\/incusbr0$/);
-  await expect(page.locator('input[name="description"]')).toHaveValue("edited by e2e");
-  await expect(page.locator('input[name="key"][value="user.e2e"]')).toBeVisible();
+  await expect(config.locator('input[name="description"]')).toHaveValue("edited by e2e");
+  await expect(config.locator('input[name="key"][value="user.e2e"]')).toBeVisible();
 });
 
 test("backend errors surface as a toast", async ({ page }) => {
@@ -132,4 +134,44 @@ test("network ACLs: create, add rule, remove rule, rename, delete", async ({ pag
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page).toHaveURL(/\/network-acls$/);
   await expect(page.getByRole("link", { name: "e2e-acl2" })).toHaveCount(0);
+});
+
+test("network detail: leases and port forwards on the managed bridge", async ({ page }) => {
+  // Forward delete asks via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
+
+  // A running instance holds a DHCP lease on the default bridge.
+  await page.goto("/");
+  const demoRow = page.locator("#instance-demo");
+  const startBtn = demoRow.getByRole("button", { name: "Start", exact: true });
+  if (await startBtn.isVisible()) {
+    await startBtn.click();
+  }
+  await page.goto("/networks/incusbr0");
+  await expect(page.getByText("MTU 1500")).toBeVisible();
+  await expect(page.getByRole("row", { name: /demo/ })).toBeVisible();
+
+  // Create a forward, add a port mapping, then delete it.
+  await page.locator('input[name="listen_address"]').fill("192.0.2.40");
+  await page.locator('form[action="/networks/incusbr0/forwards"] input[name="description"]').fill("e2e fwd");
+  await page.getByRole("button", { name: "Add forward" }).click();
+  await expect(page).toHaveURL(/\/networks\/incusbr0$/);
+  await expect(page.getByText("192.0.2.40")).toBeVisible();
+
+  const editor = page.locator('form[action="/networks/incusbr0/forwards/192.0.2.40/update"]');
+  await editor.locator('input[name="listen_port"]').last().fill("8080");
+  await editor.locator('input[name="port_target"]').last().fill("10.0.3.9");
+  await editor.getByRole("button", { name: "Apply forward" }).click();
+  await expect(page.locator('input[name="listen_port"][value="8080"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "Delete", exact: true }).first().click();
+  await expect(page.getByText("192.0.2.40")).toHaveCount(0);
+
+  // Restore the seeded state for later tests: stop demo again.
+  await page.goto("/");
+  const stopBtn = page.locator("#instance-demo").getByRole("button", { name: "Stop", exact: true });
+  if (await stopBtn.isVisible()) {
+    await stopBtn.click();
+    await expect(page.locator("#instance-demo").getByText("Stopped")).toBeVisible();
+  }
 });

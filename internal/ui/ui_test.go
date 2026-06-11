@@ -785,3 +785,23 @@ func TestInstanceRowOffersMigrateForStoppedWithTargets(t *testing.T) {
 	html := render(t, InstancesPage(caps, []backend.Instance{{Name: "demo", Status: "Stopped"}}, nil))
 	assertNotContains(t, html, "Migrate…")
 }
+
+func TestNetworkDetailRendersLeasesAndForwards(t *testing.T) {
+	caps := testCaps()
+	caps.NetworkForwards = true
+	n := backend.Network{Name: "incusbr0", Type: "bridge", Managed: true}
+	st := backend.NetworkState{State: "up", MTU: 1500, Addresses: []string{"10.0.3.1/24"}}
+	leases := []backend.NetworkLease{{Hostname: "demo", MAC: "10:66:6a:00:04:9f", Address: "10.0.3.21", Type: "dynamic"}}
+	forwards := []backend.NetworkForward{{ListenAddress: "192.0.2.10", Description: "web", Ports: []backend.ForwardPort{{Protocol: "tcp", ListenPort: "80", TargetAddress: "10.0.3.5"}}}}
+
+	html := render(t, NetworkDetailPage(caps, n, st, leases, forwards))
+	assertContains(t, html, "MTU 1500")
+	assertContains(t, html, "10.0.3.21")
+	assertContains(t, html, "192.0.2.10")
+	assertContains(t, html, `action="/networks/incusbr0/forwards"`)
+	assertContains(t, html, `hx-confirm="Delete forward 192.0.2.10?"`)
+
+	caps.NetworkForwards = false
+	html = render(t, NetworkDetailPage(caps, n, st, leases, nil))
+	assertNotContains(t, html, "Add forward")
+}

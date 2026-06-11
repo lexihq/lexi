@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
@@ -86,8 +87,9 @@ templ NetworksTable(networks []backend.Network) {
 	</div>
 }
 
-// NetworkDetailPage shows a network's config and used-by, read-only.
-templ NetworkDetailPage(caps backend.Capabilities, n backend.Network) {
+// NetworkDetailPage shows a network's config and used-by, plus live state,
+// DHCP leases, and port forwards for managed networks.
+templ NetworkDetailPage(caps backend.Capabilities, n backend.Network, st backend.NetworkState, leases []backend.NetworkLease, forwards []backend.NetworkForward) {
 	@Layout(n.Name, caps, Nav{Section: NavNetworks}) {
 		<div class="mb-6">
 			<a href="/networks" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Networks</a>
@@ -95,7 +97,10 @@ templ NetworkDetailPage(caps backend.Capabilities, n backend.Network) {
 			<p class="text-muted-foreground">
 				{ n.Type }
 				if n.Managed {
-					· managed
+					· managed · { st.State } · MTU { fmt.Sprint(st.MTU) }
+					if len(st.Addresses) > 0 {
+						· { strings.Join(st.Addresses, ", ") }
+					}
 				} else {
 					· unmanaged
 				}
@@ -143,6 +148,41 @@ templ NetworkDetailPage(caps backend.Capabilities, n backend.Network) {
 				}
 			</section>
 		}
+		if n.Managed {
+			<section class="mb-8 rounded-lg border bg-card p-4">
+				<h2 class="mb-3 text-lg font-medium">Leases</h2>
+				@table.Table() {
+					@table.Header() {
+						@table.Row() {
+							@table.Head() { Hostname }
+							@table.Head() { MAC }
+							@table.Head() { Address }
+							@table.Head() { Type }
+						}
+					}
+					@table.Body() {
+						if len(leases) == 0 {
+							@emptyRow("4", "No leases.")
+						}
+						for _, l := range leases {
+							@table.Row() {
+								@table.Cell() { { l.Hostname } }
+								@table.Cell() {
+									<span class="font-mono text-xs">{ l.MAC }</span>
+								}
+								@table.Cell() { { l.Address } }
+								@table.Cell() {
+									<span class="text-xs text-muted-foreground">{ l.Type }</span>
+								}
+							}
+						}
+					}
+				}
+			</section>
+			if caps.NetworkForwards {
+				@networkForwardsSection(n.Name, forwards)
+			}
+		}
 		<section class="rounded-lg border bg-card p-4">
 			<h2 class="mb-3 text-lg font-medium">Used by</h2>
 			if len(n.UsedBy) == 0 {
@@ -156,6 +196,72 @@ templ NetworkDetailPage(caps backend.Capabilities, n backend.Network) {
 			}
 		</section>
 	}
+}
+
+// networkForwardsSection manages a managed network's port forwards: one
+// editor per forward (description/default target/port rows; an emptied
+// listen-port row removes the mapping on apply) plus the create form.
+templ networkForwardsSection(network string, forwards []backend.NetworkForward) {
+	{{ en := url.PathEscape(network) }}
+	<section class="mb-8 rounded-lg border bg-card p-4">
+		<h2 class="mb-1 text-lg font-medium">Forwards</h2>
+		<p class="mb-4 text-sm text-muted-foreground">Traffic to a listen address is redirected into instances: per-port mappings first, the default target for everything else.</p>
+		for _, fw := range forwards {
+			{{ ea := url.PathEscape(fw.ListenAddress) }}
+			<div class="mb-6 rounded-md border p-3">
+				<div class="mb-2 flex items-center justify-between gap-2">
+					<span class="font-mono text-sm font-medium">{ fw.ListenAddress }</span>
+					<form method="post" action={ templ.URL("/networks/" + en + "/forwards/" + ea + "/delete") } hx-confirm={ "Delete forward " + fw.ListenAddress + "?" }>
+						@button.Button(button.Props{Size: button.SizeSm, Type: button.TypeSubmit, Variant: button.VariantOutline, Class: "text-destructive"}) {
+							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+							Delete
+						}
+					</form>
+				</div>
+				<form method="post" action={ templ.URL("/networks/" + en + "/forwards/" + ea + "/update") } class="space-y-2">
+					<div class="flex gap-2">
+						<input name="description" value={ fw.Description } placeholder="description" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+						<input name="target_address" value={ fw.DefaultTarget } placeholder="default target address" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+					</div>
+					for _, p := range fw.Ports {
+						@forwardPortRow(p)
+					}
+					@forwardPortRow(backend.ForwardPort{})
+					<p class="text-xs text-muted-foreground">Ports accept ranges like 8080-8090; clear a listen port and apply to remove its row.</p>
+					@button.Button(button.Props{Size: button.SizeSm, Type: button.TypeSubmit}) {
+						@icon.Icon("check")(icon.Props{Class: "size-4"})
+						Apply forward
+					}
+				</form>
+			</div>
+		}
+		<form method="post" action={ templ.URL("/networks/" + en + "/forwards") } class="max-w-xl space-y-2">
+			<h3 class="text-sm font-medium">Add forward</h3>
+			<div class="flex gap-2">
+				<input name="listen_address" required placeholder="listen address (e.g. 192.0.2.10)" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+				<input name="target_address" placeholder="default target (optional)" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+			</div>
+			<input name="description" placeholder="description" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+			@button.Button(button.Props{Size: button.SizeSm, Type: button.TypeSubmit}) {
+				@icon.Icon("plus")(icon.Props{Class: "size-4"})
+				Add forward
+			}
+		</form>
+	</section>
+}
+
+// forwardPortRow is one port mapping in the forward editor; the zero value
+// renders the trailing blank row that adds a mapping.
+templ forwardPortRow(p backend.ForwardPort) {
+	<div class="flex gap-2">
+		<select name="port_protocol" class="h-9 w-24 rounded-md border bg-background px-2 text-sm">
+			<option value="tcp" selected?={ p.Protocol != "udp" }>tcp</option>
+			<option value="udp" selected?={ p.Protocol == "udp" }>udp</option>
+		</select>
+		<input name="listen_port" value={ p.ListenPort } placeholder="listen port" class="h-9 w-1/4 rounded-md border bg-background px-3 font-mono text-sm"/>
+		<input name="port_target" value={ p.TargetAddress } placeholder="target address" class="h-9 w-1/3 rounded-md border bg-background px-3 font-mono text-sm"/>
+		<input name="target_port" value={ p.TargetPort } placeholder="target port" class="h-9 w-1/4 rounded-md border bg-background px-3 font-mono text-sm"/>
+	</div>
 }
 
 // NetworkCreatePage is the create form: name, type, description, and optional

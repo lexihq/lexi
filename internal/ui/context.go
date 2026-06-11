@@ -43,6 +43,25 @@ func projectSwitcherFrom(ctx context.Context) projectSwitcher {
 	return projectSwitcher{}
 }
 
+// remoteSwitcherCtxKey keys the remote list the shell preloads for the
+// sidebar switcher — layout-wide data, like the project switcher.
+type remoteSwitcherCtxKey struct{}
+
+// WithRemoteSwitcher returns a context carrying the switcher's remote list
+// (each entry's Current flag marks the selection).
+func WithRemoteSwitcher(ctx context.Context, remotes []backend.Remote) context.Context {
+	return context.WithValue(ctx, remoteSwitcherCtxKey{}, remotes)
+}
+
+// remoteSwitcherFrom returns the preloaded remote list; an absent value
+// (render paths that didn't set one) hides the switcher.
+func remoteSwitcherFrom(ctx context.Context) []backend.Remote {
+	if remotes, ok := ctx.Value(remoteSwitcherCtxKey{}).([]backend.Remote); ok {
+		return remotes
+	}
+	return nil
+}
+
 // sidebarInstancesFrom returns the preloaded sidebar instance list, or nil when
 // a render path (e.g. a unit test rendering a page directly) didn't set one —
 // in which case the sidebar's poll fills it in shortly after load.

@@ -65,7 +65,9 @@ func (h handlers) renderError(w http.ResponseWriter, code int, message string) {
 func (h handlers) render(w http.ResponseWriter, r *http.Request, code int, component templ.Component) {
 	writeHTML(w, code)
 	if err := component.Render(r.Context(), w); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		// Headers are already written, so no status can be set; typical cause
+		// is the client aborting mid-render (e.g. navigating away).
+		slog.Warn("render after headers", "err", err)
 	}
 }
 
@@ -98,8 +100,18 @@ func (h handlers) renderWithSidebar(w http.ResponseWriter, r *http.Request, code
 			slog.Warn("list projects for switcher", "err", err)
 		}
 	}
+	// The remote switcher degrades the same way: hidden on a listing failure.
+	if h.backend.Capabilities(r.Context()).Remotes {
+		if remotes, err := h.backend.ListRemotes(r.Context()); err == nil {
+			ctx = ui.WithRemoteSwitcher(ctx, remotes)
+		} else {
+			slog.Warn("list remotes for switcher", "err", err)
+		}
+	}
 	if err := component.Render(ctx, w); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		// Headers are already written, so no status can be set; typical cause
+		// is the client aborting mid-render (e.g. navigating away).
+		slog.Warn("render after headers", "err", err)
 	}
 }
 

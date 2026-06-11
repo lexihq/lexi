@@ -26,6 +26,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("GET /", h.list)
 	mux.HandleFunc("GET /partials/sidebar", h.sidebar)
 	mux.HandleFunc("POST /project", h.selectProject)
+	mux.HandleFunc("POST /remote", h.selectRemote)
 	mux.HandleFunc("GET /projects", h.projectsPage)
 	mux.HandleFunc("POST /projects", h.createProject)
 	mux.HandleFunc("GET /projects/{name}", h.projectDetail)
@@ -136,7 +137,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/delete", h.deleteSnapshot)
 
 	return &http.Server{
-		Handler:           csrfGuard(h.withProject(mux)),
+		Handler:           csrfGuard(h.withRemote(h.withProject(mux))),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 }

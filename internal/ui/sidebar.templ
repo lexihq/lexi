@@ -11,6 +11,9 @@ import (
 // flashes an empty sidebar) and refreshes every 10s via the /partials/sidebar
 // route; the active highlight is baked in from nav.Instance.
 templ Sidebar(caps backend.Capabilities, nav Nav) {
+	if caps.Remotes {
+		@remoteSwitcherSelect(remoteSwitcherFrom(ctx))
+	}
 	if caps.Projects {
 		@projectSwitcherSelect(projectSwitcherFrom(ctx))
 	}
@@ -127,6 +130,31 @@ func statusDot(status string) string {
 		return "bg-green-500"
 	}
 	return "bg-muted-foreground"
+}
+
+// remoteSwitcherSelect is the remote (server) dropdown at the very top of the
+// sidebar — the outermost scope, above the project switcher. Selecting an
+// option submits the plain form; the server validates, sets the selection
+// cookie, clears the project cookie, and lands on the instance list.
+templ remoteSwitcherSelect(remotes []backend.Remote) {
+	if len(remotes) > 0 {
+		<form method="post" action="/remote" hx-boost="false" class="mb-3">
+			<label class="px-3 pb-1 text-xs font-medium uppercase text-muted-foreground">Remote</label>
+			<select
+				name="remote"
+				onchange="this.form.requestSubmit()"
+				class="mt-1 h-9 w-full rounded-md border bg-background px-3 text-sm"
+			>
+				for _, r := range remotes {
+					if r.Current {
+						<option value={ r.Name } selected>{ r.Name }</option>
+					} else {
+						<option value={ r.Name }>{ r.Name }</option>
+					}
+				}
+			</select>
+		</form>
+	}
 }
 
 // projectSwitcherSelect is the project dropdown at the top of the sidebar.

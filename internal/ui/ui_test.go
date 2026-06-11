@@ -737,3 +737,24 @@ func TestTasksPanelUsesSSEWhenEventsCapable(t *testing.T) {
 	assertContains(t, html, `hx-trigger="load, every 5s"`)
 	assertNotContains(t, html, "sse-connect")
 }
+
+func TestSidebarRendersRemoteSwitcher(t *testing.T) {
+	caps := testCaps()
+	caps.Remotes = true
+	ctx := WithRemoteSwitcher(context.Background(), []backend.Remote{
+		{Name: "local", Current: true},
+		{Name: "secondary"},
+	})
+	var buf bytes.Buffer
+	if err := InstancesPage(caps, nil, nil).Render(ctx, &buf); err != nil {
+		t.Fatal(err)
+	}
+	html := buf.String()
+	assertContains(t, html, `action="/remote"`)
+	assertContains(t, html, `<option value="local" selected>`)
+	assertContains(t, html, `<option value="secondary">`)
+
+	caps.Remotes = false
+	html = render(t, InstancesPage(caps, nil, nil))
+	assertNotContains(t, html, `action="/remote"`)
+}

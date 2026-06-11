@@ -721,3 +721,19 @@ func TestSnapshotAndVolumeDeletesAskForConfirmation(t *testing.T) {
 	vol := render(t, StorageVolumePage(testCaps(), backend.StorageVolume{Pool: "default", Name: "vol0"}, []backend.StorageVolumeSnapshot{{Name: "vsnap0"}}))
 	assertContains(t, vol, `hx-confirm="Delete snapshot vsnap0?"`)
 }
+
+func TestTasksPanelUsesSSEWhenEventsCapable(t *testing.T) {
+	caps := testCaps()
+	caps.Operations = true
+	caps.Events = true
+	html := render(t, InstancesPage(caps, nil, nil))
+	assertContains(t, html, `sse-connect="/events/operations"`)
+	assertContains(t, html, `sse-swap="operations"`)
+	assertContains(t, html, "htmx-ext-sse.min.js")
+	assertNotContains(t, html, "every 5s")
+
+	caps.Events = false
+	html = render(t, InstancesPage(caps, nil, nil))
+	assertContains(t, html, `hx-trigger="load, every 5s"`)
+	assertNotContains(t, html, "sse-connect")
+}

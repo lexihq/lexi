@@ -51,6 +51,9 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 			<title>{ title } · lxcon</title>
 			<link href="/static/css/app.css" rel="stylesheet"/>
 			<script src="/static/js/htmx.min.js" defer></script>
+			if caps.Events {
+				<script src="/static/js/htmx-ext-sse.min.js" defer></script>
+			}
 			<script src="/static/js/toast.js" defer></script>
 			<script src="/static/js/errors.js" defer></script>
 		</head>
@@ -87,12 +90,24 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 							@icon.Icon("list-todo")(icon.Props{Class: "size-4"})
 							Tasks
 						</label>
-						<div
-							class="hidden max-h-48 overflow-y-auto border-t px-4 peer-checked:block"
-							hx-get="/partials/operations"
-							hx-trigger="load, every 5s"
-							hx-swap="innerHTML"
-						></div>
+						if caps.Events {
+							// Push mode: the SSE extension swaps each named
+							// "operations" frame into the panel; the endpoint
+							// sends the first frame on connect, so no hx-get.
+							<div
+								class="hidden max-h-48 overflow-y-auto border-t px-4 peer-checked:block"
+								hx-ext="sse"
+								sse-connect="/events/operations"
+								sse-swap="operations"
+							></div>
+						} else {
+							<div
+								class="hidden max-h-48 overflow-y-auto border-t px-4 peer-checked:block"
+								hx-get="/partials/operations"
+								hx-trigger="load, every 5s"
+								hx-swap="innerHTML"
+							></div>
+						}
 					</footer>
 				}
 			</div>

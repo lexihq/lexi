@@ -683,3 +683,10 @@ func TestImageAndNetworkDeletesAskForConfirmation(t *testing.T) {
 	networks := render(t, NetworksPage(testCaps(), []backend.Network{{Name: "br0", Managed: true}}))
 	assertContains(t, networks, `hx-confirm="Delete network br0?"`)
 }
+
+func TestServerConfigRendersSingleBlankRow(t *testing.T) {
+	html := render(t, ServerPage(testCaps(), backend.ServerOverview{}, map[string]string{}, "etag-1", nil, nil))
+	if n := strings.Count(html, `placeholder="user.mykey"`); n != 1 {
+		t.Fatalf("want 1 blank config row, got %d", n)
+	}
+}

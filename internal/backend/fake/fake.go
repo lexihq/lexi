@@ -375,6 +375,7 @@ func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 		Projects:        true,
 		Events:          true,
 		Remotes:         true,
+		Migrate:         true,
 	}
 }
 

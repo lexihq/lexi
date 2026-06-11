@@ -77,6 +77,9 @@ type Capabilities struct {
 	// Remotes is multi-server support: ListRemotes plus per-request scoping
 	// via WithRemote. Only set when more than one remote is reachable.
 	Remotes bool
+	// Migrate is cross-remote instance migration (stopped move). Like
+	// Remotes, only set when there is another reachable remote to target.
+	Migrate bool
 }
 
 // Instance is a system container or virtual machine.
@@ -538,6 +541,12 @@ type Backend interface {
 	// ListRemotes returns the reachable configured remotes, marking the one
 	// the request context selects (or the default) as Current.
 	ListRemotes(ctx context.Context) ([]Remote, error)
+	// MigrateInstance moves a stopped instance to another reachable remote
+	// (copy, then delete the source), landing in the target's default
+	// project. An empty newName keeps the name. A running instance is
+	// ErrInvalid, an unknown target ErrNotFound, a taken target name
+	// ErrConflict (the source survives any failure).
+	MigrateInstance(ctx context.Context, name, targetRemote, newName string) error
 
 	ListProjects(ctx context.Context) ([]Project, error)
 	// GetProject returns the project with a populated Version token.

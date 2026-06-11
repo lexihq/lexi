@@ -57,3 +57,34 @@ func TestRemotesIsolateState(t *testing.T) {
 		assert.NotEqual(t, "sec-cert", c.Name, "secondary certificate leaked into local")
 	}
 }
+
+func TestMigrateInstanceMovesAcrossRemotes(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "mig", Image: "debian/12"}))
+
+	// Running instances must be stopped first.
+	require.NoError(t, f.StartInstance(ctx(), "mig"))
+	err := f.MigrateInstance(ctx(), "mig", "secondary", "")
+	require.ErrorIs(t, err, backend.ErrInvalid)
+	require.NoError(t, f.StopInstance(ctx(), "mig"))
+
+	// Unknown target remote.
+	err = f.MigrateInstance(ctx(), "mig", "ghost", "")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+
+	// Happy path with rename: gone from local, present on secondary.
+	require.NoError(t, f.MigrateInstance(ctx(), "mig", "secondary", "mig2"))
+	_, err = f.GetInstance(ctx(), "mig")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+	inst, err := f.GetInstance(secondaryCtx(), "mig2")
+	require.NoError(t, err)
+	assert.Equal(t, "Stopped", inst.Status)
+
+	// Name conflicts on the target are rejected and the source is kept.
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "mig2", Image: "debian/12"}))
+	err = f.MigrateInstance(ctx(), "mig2", "secondary", "")
+	require.ErrorIs(t, err, backend.ErrConflict)
+	if _, err := f.GetInstance(ctx(), "mig2"); err != nil {
+		t.Fatalf("source must survive a failed migration: %v", err)
+	}
+}

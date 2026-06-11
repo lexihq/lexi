@@ -132,10 +132,12 @@ func New() (*incusBackend, error) {
 			remotes[name] = &remoteConn{srv: rsrv, caps: rcaps, addr: r.Addr}
 		}
 	}
-	// The switcher only appears when there is somewhere to switch to.
+	// The switcher (and migration, which needs a target) only appear when
+	// there is somewhere to switch to.
 	multi := len(remotes) > 1
 	for _, rc := range remotes {
 		rc.caps.Remotes = multi
+		rc.caps.Migrate = multi
 	}
 
 	return &incusBackend{

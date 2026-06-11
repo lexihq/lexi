@@ -88,3 +88,27 @@ func TestConnect(t *testing.T) {
 	}
 	t.Logf("connected: %s", caps.ServerInfo)
 }
+
+// TestListRemotesIncludesDefault verifies the dialed remote set reflects the
+// CLI config: the default remote is present and marked Current for a bare
+// context.
+func TestListRemotesIncludesDefault(t *testing.T) {
+	b := newBackend(t)
+	remotes, err := b.ListRemotes(context.Background())
+	if err != nil {
+		t.Fatalf("ListRemotes: %v", err)
+	}
+	var current int
+	found := false
+	for _, r := range remotes {
+		if r.Current {
+			current++
+			if r.Name == b.remoteName {
+				found = true
+			}
+		}
+	}
+	if current != 1 || !found {
+		t.Fatalf("want exactly the default remote %q current, got %+v", b.remoteName, remotes)
+	}
+}

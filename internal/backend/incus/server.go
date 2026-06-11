@@ -14,12 +14,12 @@ import (
 
 // GetServerOverview combines the daemon environment with the host's headline
 // resources (CPU threads, memory).
-func (b *incusBackend) GetServerOverview(_ context.Context) (backend.ServerOverview, error) {
-	srv, _, err := b.srv.GetServer()
+func (b *incusBackend) GetServerOverview(ctx context.Context) (backend.ServerOverview, error) {
+	srv, _, err := b.server(ctx).GetServer()
 	if err != nil {
 		return backend.ServerOverview{}, fmt.Errorf("get server: %w", mapErr(err))
 	}
-	res, err := b.srv.GetServerResources()
+	res, err := b.server(ctx).GetServerResources()
 	if err != nil {
 		return backend.ServerOverview{}, fmt.Errorf("get server resources: %w", mapErr(err))
 	}
@@ -38,8 +38,8 @@ func (b *incusBackend) GetServerOverview(_ context.Context) (backend.ServerOverv
 
 // GetServerConfig returns the config map plus the server etag as the opaque
 // version token callers thread back into UpdateServerConfig.
-func (b *incusBackend) GetServerConfig(_ context.Context) (map[string]string, string, error) {
-	srv, etag, err := b.srv.GetServer()
+func (b *incusBackend) GetServerConfig(ctx context.Context) (map[string]string, string, error) {
+	srv, etag, err := b.server(ctx).GetServer()
 	if err != nil {
 		return nil, "", fmt.Errorf("get server config: %w", mapErr(err))
 	}
@@ -55,8 +55,8 @@ func (b *incusBackend) GetServerConfig(_ context.Context) (map[string]string, st
 // means "explicitly set to empty" (what `incus config unset` sends) — so keys
 // present on the server but absent from config are added with empty values to
 // make this a true replace.
-func (b *incusBackend) UpdateServerConfig(_ context.Context, config map[string]string, version string) error {
-	srv, _, err := b.srv.GetServer()
+func (b *incusBackend) UpdateServerConfig(ctx context.Context, config map[string]string, version string) error {
+	srv, _, err := b.server(ctx).GetServer()
 	if err != nil {
 		return fmt.Errorf("get server: %w", mapErr(err))
 	}
@@ -67,14 +67,14 @@ func (b *incusBackend) UpdateServerConfig(_ context.Context, config map[string]s
 		}
 	}
 	maps.Copy(put, api.ConfigMap(config))
-	if err := b.srv.UpdateServer(api.ServerPut{Config: put}, version); err != nil {
+	if err := b.server(ctx).UpdateServer(api.ServerPut{Config: put}, version); err != nil {
 		return fmt.Errorf("update server config: %w", mapErr(err))
 	}
 	return nil
 }
 
-func (b *incusBackend) ListCertificates(_ context.Context) ([]backend.Certificate, error) {
-	certs, err := b.srv.GetCertificates()
+func (b *incusBackend) ListCertificates(ctx context.Context) ([]backend.Certificate, error) {
+	certs, err := b.server(ctx).GetCertificates()
 	if err != nil {
 		return nil, fmt.Errorf("list certificates: %w", mapErr(err))
 	}
@@ -92,7 +92,7 @@ func (b *incusBackend) ListCertificates(_ context.Context) ([]backend.Certificat
 
 // AddCertificate decodes the pasted PEM and hands the daemon the base64 DER;
 // the daemon is authoritative for X.509 validity and the certificate type.
-func (b *incusBackend) AddCertificate(_ context.Context, name, certType, pemData string) error {
+func (b *incusBackend) AddCertificate(ctx context.Context, name, certType, pemData string) error {
 	block, _ := pem.Decode([]byte(pemData))
 	if block == nil || block.Type != "CERTIFICATE" {
 		return fmt.Errorf("add certificate %q: not a PEM certificate: %w", name, backend.ErrInvalid)
@@ -104,23 +104,23 @@ func (b *incusBackend) AddCertificate(_ context.Context, name, certType, pemData
 			Certificate: base64.StdEncoding.EncodeToString(block.Bytes),
 		},
 	}
-	if err := b.srv.CreateCertificate(post); err != nil {
+	if err := b.server(ctx).CreateCertificate(post); err != nil {
 		return fmt.Errorf("add certificate %q: %w", name, mapErr(err))
 	}
 	return nil
 }
 
 // DeleteCertificate removes a certificate from the trust store by fingerprint.
-func (b *incusBackend) DeleteCertificate(_ context.Context, fingerprint string) error {
-	if err := b.srv.DeleteCertificate(fingerprint); err != nil {
+func (b *incusBackend) DeleteCertificate(ctx context.Context, fingerprint string) error {
+	if err := b.server(ctx).DeleteCertificate(fingerprint); err != nil {
 		return fmt.Errorf("delete certificate %q: %w", fingerprint, mapErr(err))
 	}
 	return nil
 }
 
 // ListWarnings returns daemon warnings, newest last-seen first.
-func (b *incusBackend) ListWarnings(_ context.Context) ([]backend.Warning, error) {
-	warnings, err := b.srv.GetWarnings()
+func (b *incusBackend) ListWarnings(ctx context.Context) ([]backend.Warning, error) {
+	warnings, err := b.server(ctx).GetWarnings()
 	if err != nil {
 		return nil, fmt.Errorf("list warnings: %w", mapErr(err))
 	}
@@ -142,19 +142,19 @@ func (b *incusBackend) ListWarnings(_ context.Context) ([]backend.Warning, error
 
 // AcknowledgeWarning flips a warning's status via a conditional PUT (there is
 // no PATCH for warnings).
-func (b *incusBackend) AcknowledgeWarning(_ context.Context, uuid string) error {
-	_, etag, err := b.srv.GetWarning(uuid)
+func (b *incusBackend) AcknowledgeWarning(ctx context.Context, uuid string) error {
+	_, etag, err := b.server(ctx).GetWarning(uuid)
 	if err != nil {
 		return fmt.Errorf("get warning %q: %w", uuid, mapErr(err))
 	}
-	if err := b.srv.UpdateWarning(uuid, api.WarningPut{Status: "acknowledged"}, etag); err != nil {
+	if err := b.server(ctx).UpdateWarning(uuid, api.WarningPut{Status: "acknowledged"}, etag); err != nil {
 		return fmt.Errorf("acknowledge warning %q: %w", uuid, mapErr(err))
 	}
 	return nil
 }
 
-func (b *incusBackend) DeleteWarning(_ context.Context, uuid string) error {
-	if err := b.srv.DeleteWarning(uuid); err != nil {
+func (b *incusBackend) DeleteWarning(ctx context.Context, uuid string) error {
+	if err := b.server(ctx).DeleteWarning(uuid); err != nil {
 		return fmt.Errorf("delete warning %q: %w", uuid, mapErr(err))
 	}
 	return nil

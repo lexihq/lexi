@@ -2,14 +2,28 @@ package incus
 
 import (
 	"context"
+	"sort"
 
 	"github.com/adam/lxcon/internal/backend"
 )
 
-// ListRemotes reports the connected remote. Single-remote for now: the
-// multi-remote dial (Batch C of the remotes plan) replaces this with the full
-// CLI-config set, and Capabilities.Remotes stays false until then so the UI
-// never offers a switch the driver can't honor.
-func (b *incusBackend) ListRemotes(_ context.Context) ([]backend.Remote, error) {
-	return []backend.Remote{{Name: b.remoteName, Addr: b.remoteAddr, Current: true}}, nil
+// ListRemotes reports the remotes that were reachable at startup, sorted by
+// name, marking the request's selection (default when unset) as Current.
+func (b *incusBackend) ListRemotes(ctx context.Context) ([]backend.Remote, error) {
+	current := backend.RemoteFromContext(ctx)
+	if _, ok := b.remotes[current]; !ok {
+		current = b.remoteName
+	}
+
+	names := make([]string, 0, len(b.remotes))
+	for name := range b.remotes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	out := make([]backend.Remote, 0, len(names))
+	for _, name := range names {
+		out = append(out, backend.Remote{Name: name, Addr: b.remotes[name].addr, Current: name == current})
+	}
+	return out, nil
 }

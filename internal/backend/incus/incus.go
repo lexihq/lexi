@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -30,16 +31,26 @@ const backupDeleteTimeout = 30 * time.Second
 // Compile-time proof that incusBackend satisfies the Backend contract.
 var _ backend.Backend = (*incusBackend)(nil)
 
-// incusBackend implements backend.Backend over the Incus Go client.
+// remoteConn is one dialed remote: its connection, probed capabilities, and
+// configured address. Connections and capability probes happen once at New().
+type remoteConn struct {
+	srv  incusclient.InstanceServer
+	caps backend.Capabilities
+	addr string
+}
+
+// incusBackend implements backend.Backend over the Incus Go client. It holds
+// one connection per reachable CLI-config remote; srv/caps mirror the default
+// remote's entry for the hot path.
 type incusBackend struct {
 	srv  incusclient.InstanceServer
 	caps backend.Capabilities
 
-	// remoteName/remoteAddr identify the default remote this backend dialed;
-	// the multi-remote dial (Batch C of the remotes plan) extends this to the
-	// full CLI-config remote set.
+	// remoteName names the default remote; remotes holds every reachable
+	// remote, keyed by name (always including the default). Remotes that
+	// fail to dial at startup are logged and excluded until restart.
 	remoteName string
-	remoteAddr string
+	remotes    map[string]*remoteConn
 
 	imgMu     sync.Mutex
 	imgCache  []backend.Image
@@ -50,66 +61,124 @@ type incusBackend struct {
 	cpuEpoch   uint64
 }
 
-// New connects to Incus (default remote) and probes the server to populate
-// capabilities. It returns a clear error if the daemon is unreachable.
+// probeCaps interrogates one daemon for its feature set. Every flag reflects
+// what that server actually supports — the UI never offers an operation the
+// connected daemon can't honor.
+func probeCaps(srv incusclient.InstanceServer) (backend.Capabilities, error) {
+	info, _, err := srv.GetServer()
+	if err != nil {
+		return backend.Capabilities{}, fmt.Errorf("probe incus server: %w", err)
+	}
+	return backend.Capabilities{
+		Tier:       backend.TierIncus,
+		ServerInfo: "Incus " + info.Environment.ServerVersion,
+		Snapshots:  true,
+		Clone:      true,
+		Backup:     true,
+		Console:    true,
+		Metrics:    true,
+		Limits:     true,
+		Pause:      true,
+		Profiles:   true,
+		Config:     true,
+		Devices:    true,
+		Networks:   true,
+		Storage:    true,
+		Move:       true,
+
+		ImageManagement: true,
+		Operations:      true,
+		Files:           true,
+		FileDelete:      srv.HasExtension("file_delete"),
+		FileMkdir:       srv.HasExtension("directory_manipulation"),
+		ServerAdmin:     true,
+		NetworkACLs:     srv.HasExtension("network_acl"),
+		VolumeBackups:   srv.HasExtension("custom_volume_backup") && srv.HasExtension("backup_override_name"),
+		Projects:        srv.HasExtension("projects"),
+		Events:          true, // the events API is core, no extension to probe
+	}, nil
+}
+
+// New connects to Incus and probes capabilities. The default remote failing
+// is fatal; every other instance-server remote in the CLI config is dialed
+// best-effort — one that's down at startup is logged and excluded from the
+// switcher until restart.
 func New() (*incusBackend, error) {
-	srv, remoteName, remoteAddr, _, err := Connect()
+	srv, remoteName, remoteAddr, conf, err := Connect()
 	if err != nil {
 		return nil, fmt.Errorf("connect to incus: %w", err)
 	}
-	info, _, err := srv.GetServer()
+	caps, err := probeCaps(srv)
 	if err != nil {
-		return nil, fmt.Errorf("probe incus server: %w", err)
+		return nil, err
 	}
+
+	remotes := map[string]*remoteConn{remoteName: {srv: srv, caps: caps, addr: remoteAddr}}
+	if conf != nil {
+		for name, r := range conf.Remotes {
+			if name == remoteName || r.Public || (r.Protocol != "" && r.Protocol != "incus") {
+				continue // images servers and the already-dialed default
+			}
+			rsrv, err := conf.GetInstanceServer(name)
+			if err != nil {
+				log.Printf("remote %q unreachable, excluded until restart: %v", name, err)
+				continue
+			}
+			rcaps, err := probeCaps(rsrv)
+			if err != nil {
+				log.Printf("remote %q probe failed, excluded until restart: %v", name, err)
+				continue
+			}
+			remotes[name] = &remoteConn{srv: rsrv, caps: rcaps, addr: r.Addr}
+		}
+	}
+	// The switcher only appears when there is somewhere to switch to.
+	multi := len(remotes) > 1
+	for _, rc := range remotes {
+		rc.caps.Remotes = multi
+	}
+
 	return &incusBackend{
 		srv:        srv,
+		caps:       remotes[remoteName].caps,
 		remoteName: remoteName,
-		remoteAddr: remoteAddr,
-		caps: backend.Capabilities{
-			Tier:       backend.TierIncus,
-			ServerInfo: "Incus " + info.Environment.ServerVersion,
-			Snapshots:  true,
-			Clone:      true,
-			Backup:     true,
-			Console:    true,
-			Metrics:    true,
-			Limits:     true,
-			Pause:      true,
-			Profiles:   true,
-			Config:     true,
-			Devices:    true,
-			Networks:   true,
-			Storage:    true,
-			Move:       true,
-
-			ImageManagement: true,
-			Operations:      true,
-			Files:           true,
-			FileDelete:      srv.HasExtension("file_delete"),
-			FileMkdir:       srv.HasExtension("directory_manipulation"),
-			ServerAdmin:     true,
-			NetworkACLs:     srv.HasExtension("network_acl"),
-			VolumeBackups:   srv.HasExtension("custom_volume_backup") && srv.HasExtension("backup_override_name"),
-			Projects:        srv.HasExtension("projects"),
-			Events:          true, // the events API is core, no extension to probe
-		},
+		remotes:    remotes,
 		cpuSamples: make(map[string]cpuSample),
 	}, nil
 }
 
-// Capabilities reports the server info and feature flags probed at New().
-func (b *incusBackend) Capabilities(_ context.Context) backend.Capabilities { return b.caps }
+// Capabilities reports the feature flags probed at New() for the remote the
+// request is scoped to, so the UI only ever offers what that daemon supports.
+func (b *incusBackend) Capabilities(ctx context.Context) backend.Capabilities {
+	if rc, ok := b.remotes[backend.RemoteFromContext(ctx)]; ok {
+		return rc.caps
+	}
+	return b.caps
+}
 
-// project returns the client scoped to the request's project (the Backend
-// interface contract: WithProject tags the ctx, unset means default), or the
-// bare client. UseProject is a cheap struct copy sharing the HTTP client;
+// server returns the request's remote connection, project-unscoped (server
+// config, certificates, projects themselves). An unknown remote falls back
+// to the default: the HTTP layer validates the selection against ListRemotes
+// before any handler runs, so this only triggers on contexts that never saw
+// the middleware (tests, internal calls).
+func (b *incusBackend) server(ctx context.Context) incusclient.InstanceServer {
+	if rc, ok := b.remotes[backend.RemoteFromContext(ctx)]; ok {
+		return rc.srv
+	}
+	return b.srv
+}
+
+// project returns the client scoped to the request's remote and project (the
+// Backend interface contract: WithRemote/WithProject tag the ctx, unset means
+// the defaults). UseProject is a cheap struct copy sharing the HTTP client;
 // the daemon routes shared resource kinds (per the project's features.*) to
 // the default project itself, so scoping every call is safe.
 func (b *incusBackend) project(ctx context.Context) incusclient.InstanceServer {
+	srv := b.server(ctx)
 	if name := backend.ProjectFromContext(ctx); name != "" && name != "default" {
-		return b.srv.UseProject(name)
+		return srv.UseProject(name)
 	}
-	return b.srv
+	return srv
 }
 
 // mapErr translates an Incus client error into a backend sentinel so the HTTP

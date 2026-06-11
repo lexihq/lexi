@@ -2,6 +2,7 @@ package fake
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -112,7 +113,8 @@ func New() *Fake {
 		projects: map[string]backend.Project{
 			"default": {Name: "default", Description: "Default Incus project", Config: map[string]string{
 				"features.images": "true", "features.networks": "true",
-				"features.profiles": "true", "features.storage.volumes": "true",
+				"features.networks.zones": "true", "features.profiles": "true",
+				"features.storage.buckets": "true", "features.storage.volumes": "true",
 			}},
 		},
 		projectVersions: map[string]int{},
@@ -262,3 +264,9 @@ func validAPIName(name string) bool {
 	}
 	return !strings.ContainsAny(name, `$?&+"'`+"`*/")
 }
+
+// apiNameEnds is the daemon's IsAPIName tail rule: names must start and end
+// with an alphanumeric character (which implies a minimum of two). It applies
+// where the daemon runs the full IsAPIName (projects, volume creation), not
+// to snapshot names.
+var apiNameEnds = regexp.MustCompile(`^[a-zA-Z0-9]+.*[a-zA-Z0-9]+$`)

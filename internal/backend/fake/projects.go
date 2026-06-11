@@ -37,7 +37,7 @@ func (f *Fake) CreateProject(_ context.Context, name, description string, config
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if !validAPIName(name) {
+	if !validProjectName(name) {
 		return invalid("invalid project name %q", name)
 	}
 	if _, ok := f.projects[name]; ok {
@@ -91,7 +91,7 @@ func (f *Fake) RenameProject(_ context.Context, name, newName string) error {
 	if name == "default" {
 		return invalid("the default project cannot be renamed")
 	}
-	if !validAPIName(newName) {
+	if !validProjectName(newName) {
 		return invalid("invalid project name %q", newName)
 	}
 	if _, exists := f.projects[newName]; exists {
@@ -125,6 +125,12 @@ func (f *Fake) DeleteProject(_ context.Context, name string) error {
 	return nil
 }
 
+// validProjectName mirrors the daemon's full IsAPIName for projects: the
+// shared validAPIName rules plus alphanumeric start/end.
+func validProjectName(name string) bool {
+	return validAPIName(name) && apiNameEnds.MatchString(name)
+}
+
 // projectView materializes a project with a fresh UsedBy. Callers must hold
 // the mutex.
 func (f *Fake) projectView(name string) backend.Project {
@@ -150,6 +156,17 @@ func (f *Fake) projectUsedBy(name string) []string {
 	}
 	for fp := range f.images {
 		used = append(used, "/1.0/images/"+fp)
+	}
+	for netName := range f.networks {
+		used = append(used, "/1.0/networks/"+netName)
+	}
+	for aclName := range f.acls {
+		used = append(used, "/1.0/network-acls/"+aclName)
+	}
+	for poolName, pool := range f.pools {
+		for volName := range pool.volumes {
+			used = append(used, "/1.0/storage-pools/"+poolName+"/volumes/custom/"+volName)
+		}
 	}
 	sort.Strings(used)
 	return used

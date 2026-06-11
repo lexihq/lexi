@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -380,8 +381,15 @@ func validAPIName(name string) bool {
 			return false
 		}
 	}
-	return !strings.ContainsAny(name, `$?&+"'`+"`*/")
+	if strings.ContainsAny(name, `$?&+"'`+"`*/") {
+		return false
+	}
+	// The daemon also requires names to start and end with an alphanumeric
+	// character (validate.IsAPIName), which implies a minimum of two.
+	return apiNameEnds.MatchString(name)
 }
+
+var apiNameEnds = regexp.MustCompile(`^[a-zA-Z0-9]+.*[a-zA-Z0-9]+$`)
 
 // rejectNonCustomBackup peeks backup/index.yaml from the upload and refuses
 // instance backups (type container/virtual-machine) with ErrInvalid — the

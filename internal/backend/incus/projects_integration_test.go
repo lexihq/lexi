@@ -54,3 +54,45 @@ func TestProjectCRUDRoundTrip(t *testing.T) {
 	require.NoError(t, b.DeleteProject(ctx, renamed))
 	require.ErrorIs(t, b.DeleteProject(ctx, renamed), backend.ErrNotFound)
 }
+
+// TestProjectScopedInstanceIsolation creates an instance inside a throwaway
+// project (sharing default's profiles and images so the create works without
+// configuring a root disk) and asserts the two projects don't see each
+// other's instances.
+func TestProjectScopedInstanceIsolation(t *testing.T) {
+	b := newBackend(t)
+	if !b.Capabilities().Projects {
+		t.Skip("daemon lacks the projects extension")
+	}
+	ctx := context.Background()
+	project := uniqueName("lxscope")
+	require.NoError(t, b.CreateProject(ctx, project, "made by test", map[string]string{
+		"features.profiles": "false", "features.images": "false",
+	}))
+	scoped := backend.WithProject(ctx, project)
+	name := uniqueName("scoped")
+	t.Cleanup(func() {
+		cleanupInstance(t, b, name) // default-project ghost cleanup is a no-op
+		_ = b.DeleteInstance(scoped, name)
+		_ = b.DeleteProject(ctx, project)
+	})
+
+	require.NoError(t, b.CreateInstance(scoped, backend.CreateOptions{Name: name, Image: testImage}))
+
+	scopedList, err := b.ListInstances(scoped)
+	require.NoError(t, err)
+	require.True(t, listed(scopedList, name), "instance missing from its own project")
+
+	defaultList, err := b.ListInstances(ctx)
+	require.NoError(t, err)
+	require.False(t, listed(defaultList, name), "instance leaked into the default project")
+
+	// Metrics and state flow through the scoped client too.
+	_, err = b.GetInstance(scoped, name)
+	require.NoError(t, err)
+	_, err = b.GetInstance(ctx, name)
+	require.ErrorIs(t, err, backend.ErrNotFound)
+
+	require.NoError(t, b.DeleteInstance(scoped, name))
+	require.NoError(t, b.DeleteProject(ctx, project))
+}

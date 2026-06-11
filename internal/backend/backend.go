@@ -335,20 +335,6 @@ type Operation struct {
 
 // LocalImage is an image in the host's local image store (as opposed to Image,
 // which is a per-alias entry of the remote catalog backing the create picker).
-// ImageExportFormat tells an ExportImage caller what the returned stream is,
-// before any payload byte, so HTTP headers (filename, content type) can be
-// chosen safely.
-type ImageExportFormat string
-
-const (
-	// ImageExportUnified is a single image tarball, importable as-is.
-	ImageExportUnified ImageExportFormat = "unified"
-	// ImageExportSplitZip is a zip carrying a "metadata" entry plus a
-	// "rootfs" (container) or "rootfs.img" (VM) entry, the lxcon packaging
-	// for split images; ImportImage unpacks it.
-	ImageExportSplitZip ImageExportFormat = "split-zip"
-)
-
 type LocalImage struct {
 	Fingerprint string
 	Aliases     []string
@@ -543,13 +529,14 @@ type Backend interface {
 	DeleteImage(ctx context.Context, fingerprint string) error
 	AddImageAlias(ctx context.Context, fingerprint, alias string) error
 	RemoveImageAlias(ctx context.Context, alias string) error
-	// ExportImage spools the image and returns a reader over the result: a
-	// single tarball (ImageExportUnified) or, for split images (separate
-	// metadata + rootfs, typically VM images), a zip with a "metadata" entry
-	// plus "rootfs" (container) or "rootfs.img" (VM) — ImageExportSplitZip.
-	// The format is known before any payload byte so callers can set response
-	// headers; Close releases the spool.
-	ExportImage(ctx context.Context, fingerprint string) (ImageExportFormat, io.ReadCloser, error)
+	// ExportImage spools the image and returns its download filename plus a
+	// reader over the result: a single tarball (the daemon-reported name,
+	// e.g. "<fingerprint>.tar.gz") or, for split images (separate metadata +
+	// rootfs, typically VM images), a "<fingerprint>.zip" with a "metadata"
+	// entry plus "rootfs" (container) or "rootfs.img" (VM). The filename is
+	// known before any payload byte so callers can set response headers;
+	// Close releases the spool.
+	ExportImage(ctx context.Context, fingerprint string) (string, io.ReadCloser, error)
 	// ImportImage creates a local image from r — either a unified tarball or
 	// a split-zip as produced by ExportImage (detected by the zip signature;
 	// the rootfs entry name carries the image type) — tagging it with alias

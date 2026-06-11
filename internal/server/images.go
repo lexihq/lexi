@@ -95,28 +95,21 @@ func (h handlers) updateImage(w http.ResponseWriter, r *http.Request) {
 }
 
 // exportImage streams an image as a file download: a tarball for unified
-// images, a metadata+rootfs zip for split (VM) images. The driver spools the
-// whole download before returning, so every failure — including a ghost
+// images (named by the driver with its real compression extension), a
+// metadata+rootfs zip for split (VM) images. The driver spools the whole
+// download before returning, so every failure — including a ghost
 // fingerprint — arrives before any header or body byte is committed.
 func (h handlers) exportImage(w http.ResponseWriter, r *http.Request) {
 	fingerprint := r.PathValue("fingerprint")
-	format, rc, err := h.backend.ExportImage(r.Context(), fingerprint)
+	filename, rc, err := h.backend.ExportImage(r.Context(), fingerprint)
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
 	defer closeAndLog("image export spool", rc)
 
-	name := fingerprint
-	if len(name) > 12 {
-		name = name[:12]
-	}
-	ext := ".tar"
-	if format == backend.ImageExportSplitZip {
-		ext = ".zip"
-	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name+ext))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, filename))
 	if _, err := io.Copy(w, rc); err != nil {
 		// Headers are committed; a copy failure means the client went away.
 		slog.Warn("stream image export", "image", fingerprint, "err", err)

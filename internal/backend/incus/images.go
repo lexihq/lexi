@@ -231,12 +231,13 @@ func (s spoolReadCloser) Close() error {
 }
 
 // ExportImage downloads the image into temp spools (the client demands
-// io.ReadWriteSeeker targets) and returns a reader over the result: the meta
-// tarball as-is for unified images, or a metadata+rootfs zip for split images
-// (RootfsName on the response is only set when a rootfs part arrived). The
-// format is known before the first payload byte so callers can pick headers;
-// the download is cancelable via ctx, like ExportInstance.
-func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string) (backend.ImageExportFormat, io.ReadCloser, error) {
+// io.ReadWriteSeeker targets) and returns the download filename plus a reader
+// over the result: the meta tarball as-is for unified images (named by the
+// daemon, compression extension included), or a metadata+rootfs zip for split
+// images (RootfsName on the response is only set when a rootfs part arrived).
+// The filename is known before the first payload byte so callers can pick
+// headers; the download is cancelable via ctx, like ExportInstance.
+func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string) (string, io.ReadCloser, error) {
 	// The image type names the zip rootfs entry (rootfs vs rootfs.img — the
 	// daemon's own import naming); the GET also 404s a ghost fingerprint
 	// before any download work.
@@ -297,7 +298,13 @@ func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string) (bac
 
 	if resp.RootfsName == "" {
 		// Unified: the rootfs spool is unused; the reader owns both temps.
-		return backend.ImageExportUnified, spoolReadCloser{Reader: meta, temps: temps}, nil
+		// The daemon names the payload "<fingerprint><ext>" with the real
+		// compression extension; fall back to a bare .tar if it didn't.
+		filename := resp.MetaName
+		if filename == "" {
+			filename = shortFingerprint(fingerprint) + ".tar"
+		}
+		return filename, spoolReadCloser{Reader: meta, temps: temps}, nil
 	}
 
 	zipped, err := b.zipSplitImage(fingerprint, img.Type, meta, rootfs, newTemp)
@@ -305,7 +312,15 @@ func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string) (bac
 		cleanup()
 		return "", nil, err
 	}
-	return backend.ImageExportSplitZip, spoolReadCloser{Reader: zipped, temps: temps}, nil
+	return shortFingerprint(fingerprint) + ".zip", spoolReadCloser{Reader: zipped, temps: temps}, nil
+}
+
+// shortFingerprint trims a fingerprint to the familiar 12-char display form.
+func shortFingerprint(fingerprint string) string {
+	if len(fingerprint) > 12 {
+		return fingerprint[:12]
+	}
+	return fingerprint
 }
 
 // zipSplitImage assembles the lxcon split-image packaging: a zip (spooled to

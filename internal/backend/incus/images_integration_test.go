@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,12 +113,13 @@ func TestImageUpdateExportImportRoundTrip(t *testing.T) {
 
 	// Export the unified tarball, delete the original, re-import under a new
 	// alias (same fingerprint content).
-	format, rc, err := b.ExportImage(ctx, fingerprint)
+	filename, rc, err := b.ExportImage(ctx, fingerprint)
 	require.NoError(t, err)
 	blob, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
-	assert.Equal(t, backend.ImageExportUnified, format, "published container images export unified")
+	assert.True(t, strings.HasPrefix(filename, fingerprint), "unified exports carry the daemon-reported name, got %q", filename)
+	assert.False(t, strings.HasSuffix(filename, ".zip"), "published container images export unified")
 	require.NotEmpty(t, blob)
 	require.NoError(t, b.DeleteImage(ctx, fingerprint))
 
@@ -190,12 +192,12 @@ func TestSplitImageImportExportRoundTrip(t *testing.T) {
 	assert.Equal(t, "virtual-machine", imgs[idx].Type, "rootfs.img entry imports as a VM image")
 
 	// Export comes back as a split zip with both parts intact.
-	format, rc, err := b.ExportImage(ctx, fingerprint)
+	filename, rc, err := b.ExportImage(ctx, fingerprint)
 	require.NoError(t, err)
 	blob, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
-	require.Equal(t, backend.ImageExportSplitZip, format)
+	require.True(t, strings.HasSuffix(filename, ".zip"), "split exports are zips, got %q", filename)
 	zr, err := zip.NewReader(bytes.NewReader(blob), int64(len(blob)))
 	require.NoError(t, err)
 	require.Len(t, zr.File, 2)

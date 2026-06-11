@@ -210,11 +210,11 @@ func TestRemoveImageAliasGhost(t *testing.T) {
 	}
 }
 
-// exportImageBlob exports through the new spool-then-stream shape and returns
-// the format plus the payload bytes.
-func exportImageBlob(t *testing.T, b *Fake, fp string) (backend.ImageExportFormat, []byte) {
+// exportImageBlob exports through the spool-then-stream shape and returns
+// the download filename plus the payload bytes.
+func exportImageBlob(t *testing.T, b *Fake, fp string) (string, []byte) {
 	t.Helper()
-	format, rc, err := b.ExportImage(ctx(), fp)
+	filename, rc, err := b.ExportImage(ctx(), fp)
 	if err != nil {
 		t.Fatalf("export: %v", err)
 	}
@@ -225,7 +225,7 @@ func exportImageBlob(t *testing.T, b *Fake, fp string) (backend.ImageExportForma
 	if err := rc.Close(); err != nil {
 		t.Fatalf("close export: %v", err)
 	}
-	return format, blob
+	return filename, blob
 }
 
 func TestExportImportImageRoundTrip(t *testing.T) {
@@ -233,9 +233,9 @@ func TestExportImportImageRoundTrip(t *testing.T) {
 	imgs := mustLocal(t, b)
 	fp := imgs[0].Fingerprint
 
-	format, blob := exportImageBlob(t, b, fp)
-	if format != backend.ImageExportUnified {
-		t.Fatalf("want unified export for a container image, got %q", format)
+	filename, blob := exportImageBlob(t, b, fp)
+	if !strings.HasSuffix(filename, ".tar") {
+		t.Fatalf("want a tarball filename for a container image, got %q", filename)
 	}
 	if err := b.ImportImage(ctx(), bytes.NewReader(blob), "restored"); err != nil {
 		t.Fatalf("import: %v", err)
@@ -267,9 +267,9 @@ func TestSplitImageExportImportRoundTrip(t *testing.T) {
 	b := New()
 	b.SeedSplitImage("fake-vm-img", "VM image")
 
-	format, blob := exportImageBlob(t, b, "fake-vm-img")
-	if format != backend.ImageExportSplitZip {
-		t.Fatalf("want split-zip export for a VM image, got %q", format)
+	filename, blob := exportImageBlob(t, b, "fake-vm-img")
+	if !strings.HasSuffix(filename, ".zip") {
+		t.Fatalf("want a zip filename for a VM image, got %q", filename)
 	}
 
 	// The zip carries exactly metadata + rootfs.img, both stored uncompressed.

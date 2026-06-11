@@ -183,13 +183,13 @@ func TestExportImageUnifiedStreamsMeta(t *testing.T) {
 	}
 	b := &incusBackend{srv: s}
 
-	format, rc, err := b.ExportImage(t.Context(), "fp")
+	filename, rc, err := b.ExportImage(t.Context(), "fp")
 	require.NoError(t, err)
 	blob, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
 
-	assert.Equal(t, backend.ImageExportUnified, format)
+	assert.Equal(t, "meta.tar.gz", filename, "the daemon-reported payload name carries the real extension")
 	assert.Equal(t, "meta-tarball-bytes", string(blob))
 	require.NotNil(t, s.imageFileReq.Canceler, "image download should be cancelable")
 }
@@ -202,13 +202,13 @@ func TestExportImageSplitBuildsZip(t *testing.T) {
 	}
 	b := &incusBackend{srv: s}
 
-	format, rc, err := b.ExportImage(t.Context(), "fp")
+	filename, rc, err := b.ExportImage(t.Context(), "fp")
 	require.NoError(t, err)
 	blob, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
 
-	assert.Equal(t, backend.ImageExportSplitZip, format)
+	assert.Equal(t, "fp.zip", filename)
 	zr, err := zip.NewReader(bytes.NewReader(blob), int64(len(blob)))
 	require.NoError(t, err)
 	require.Len(t, zr.File, 2)

@@ -162,8 +162,10 @@ func (f *Fake) SeedSplitImage(fingerprint, description string) {
 
 // ExportImage returns a deterministic blob carrying the fingerprint so the
 // export→import round-trip is observable: a plain magic blob for container
-// images, a metadata+rootfs.img zip for VM (split) images.
-func (f *Fake) ExportImage(_ context.Context, fingerprint string) (backend.ImageExportFormat, io.ReadCloser, error) {
+// images, a metadata+rootfs.img zip for VM (split) images. The filename
+// mirrors the incus driver's naming (daemon-suggested name vs fingerprint
+// zip).
+func (f *Fake) ExportImage(_ context.Context, fingerprint string) (string, io.ReadCloser, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -172,7 +174,7 @@ func (f *Fake) ExportImage(_ context.Context, fingerprint string) (backend.Image
 		return "", nil, notFoundf("image %q", fingerprint)
 	}
 	if img.Type != "virtual-machine" {
-		return backend.ImageExportUnified, io.NopCloser(strings.NewReader(fakeImageMagic + fingerprint)), nil
+		return fingerprint + ".tar", io.NopCloser(strings.NewReader(fakeImageMagic + fingerprint)), nil
 	}
 
 	var buf bytes.Buffer
@@ -194,7 +196,7 @@ func (f *Fake) ExportImage(_ context.Context, fingerprint string) (backend.Image
 	if err := zw.Close(); err != nil {
 		return "", nil, err
 	}
-	return backend.ImageExportSplitZip, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+	return fingerprint + ".zip", io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
 // ImportImage recreates an image from a blob ExportImage wrote — unified
@@ -253,33 +255,45 @@ func parseFakeImageBlob(blob []byte) (fingerprint, imgType string, err error) {
 	if err != nil {
 		return "", "", fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
 	}
-	var meta []byte
+	var meta, rootfs []byte
 	imgType = ""
+	readEntry := func(zf *zip.File) ([]byte, error) {
+		rc, err := zf.Open()
+		if err != nil {
+			return nil, fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
+		}
+		data, err := io.ReadAll(rc)
+		closeErr := rc.Close()
+		if err != nil || closeErr != nil {
+			return nil, fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
+		}
+		return data, nil
+	}
 	for _, zf := range zr.File {
 		if zf.Method != zip.Store {
 			return "", "", fmt.Errorf("split-image zip entry %q is compressed: %w", zf.Name, backend.ErrInvalid)
 		}
 		switch zf.Name {
 		case "metadata":
-			rc, err := zf.Open()
-			if err != nil {
-				return "", "", fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
+			if meta, err = readEntry(zf); err != nil {
+				return "", "", err
 			}
-			meta, err = io.ReadAll(rc)
-			closeErr := rc.Close()
-			if err != nil || closeErr != nil {
-				return "", "", fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
+		case "rootfs", "rootfs.img":
+			// The real driver streams the rootfs to the daemon; the fake
+			// reads it so corrupt entries fail here too.
+			if rootfs, err = readEntry(zf); err != nil {
+				return "", "", err
 			}
-		case "rootfs":
 			imgType = "container"
-		case "rootfs.img":
-			imgType = "virtual-machine"
+			if zf.Name == "rootfs.img" {
+				imgType = "virtual-machine"
+			}
 		default:
 			return "", "", fmt.Errorf("unexpected split-image zip entry %q: %w", zf.Name, backend.ErrInvalid)
 		}
 	}
 	orig, ok := strings.CutPrefix(string(meta), fakeImageMagic)
-	if !ok || imgType == "" {
+	if !ok || imgType == "" || !strings.HasPrefix(string(rootfs), fakeRootfsMagic) {
 		return "", "", fmt.Errorf("split-image zip is missing metadata or rootfs: %w", backend.ErrInvalid)
 	}
 	return orig, imgType, nil

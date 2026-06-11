@@ -71,3 +71,43 @@ func TestCancelOperationGhostErrors(t *testing.T) {
 	err := b.CancelOperation(context.Background(), "00000000-0000-0000-0000-000000000000")
 	require.ErrorIs(t, err, backend.ErrNotFound)
 }
+
+// TestWatchOperationsTicksOnInstanceCreate subscribes to the events API and
+// asserts a tick arrives while an instance create runs — the create guarantees
+// at least one operation event. The channel must close after ctx cancel.
+func TestWatchOperationsTicksOnInstanceCreate(t *testing.T) {
+	b := newBackend(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	name := uniqueName("evw")
+	t.Cleanup(func() { cleanupInstance(t, b, name) })
+
+	ticks, err := b.WatchOperations(ctx)
+	require.NoError(t, err)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- b.CreateInstance(context.Background(), backend.CreateOptions{Name: name, Image: testImage})
+	}()
+
+	select {
+	case _, open := <-ticks:
+		require.True(t, open, "tick channel closed before cancel")
+	case <-time.After(2 * time.Minute):
+		t.Fatal("no operation event tick during instance create")
+	}
+	require.NoError(t, <-done)
+
+	cancel()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case _, open := <-ticks:
+			if !open {
+				return
+			}
+		case <-deadline:
+			t.Fatal("tick channel not closed after ctx cancel")
+		}
+	}
+}

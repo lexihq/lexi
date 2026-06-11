@@ -41,6 +41,9 @@ func main() {
 	// A cancelable running task so the e2e suite can exercise the Tasks panel
 	// cancel control (the fake's normal log only holds finished operations).
 	b.SeedRunningOperation(`Migrating instance "demo"`)
+	// A VM (split) image so the e2e suite can exercise the zip export/import
+	// round-trip (PublishImage only makes container images).
+	b.SeedSplitImage("fake-vm-noble-aarch64", "Ubuntu Noble VM image")
 
 	srv := server.New(b)
 	srv.Addr = *addr

@@ -3,8 +3,9 @@ package server
 import (
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
-	"slices"
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -93,36 +94,32 @@ func (h handlers) updateImage(w http.ResponseWriter, r *http.Request) {
 	h.imageAction(w, r, func() error { return h.backend.UpdateImage(r.Context(), fingerprint, description, public) })
 }
 
-// exportImage streams an image tarball as a file download. The image is
-// validated up front so a missing fingerprint 404s cleanly before the response
-// body is committed (split images still fail mid-probe with ErrUnsupported,
-// surfaced as plain text).
+// exportImage streams an image as a file download: a tarball for unified
+// images, a metadata+rootfs zip for split (VM) images. The driver spools the
+// whole download before returning, so every failure — including a ghost
+// fingerprint — arrives before any header or body byte is committed.
 func (h handlers) exportImage(w http.ResponseWriter, r *http.Request) {
 	fingerprint := r.PathValue("fingerprint")
-	images, err := h.backend.ListLocalImages(r.Context())
+	format, rc, err := h.backend.ExportImage(r.Context(), fingerprint)
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
-	if !slices.ContainsFunc(images, func(img backend.LocalImage) bool { return img.Fingerprint == fingerprint }) {
-		h.fail(w, fmt.Errorf("image %q: %w", fingerprint, backend.ErrNotFound))
-		return
-	}
+	defer closeAndLog("image export spool", rc)
+
 	name := fingerprint
 	if len(name) > 12 {
 		name = name[:12]
 	}
+	ext := ".tar"
+	if format == backend.ImageExportSplitZip {
+		ext = ".zip"
+	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name+".tar"))
-	if err := h.backend.ExportImage(r.Context(), fingerprint, w); err != nil {
-		// The export spools the daemon download before writing the response, so
-		// failures (notably ErrUnsupported for split images) arrive before any
-		// body bytes — drop the attachment headers so the browser shows the
-		// error instead of saving it as a .tar file.
-		w.Header().Del("Content-Disposition")
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		http.Error(w, err.Error(), statusFor(err))
-		return
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name+ext))
+	if _, err := io.Copy(w, rc); err != nil {
+		// Headers are committed; a copy failure means the client went away.
+		slog.Warn("stream image export", "image", fingerprint, "err", err)
 	}
 }
 

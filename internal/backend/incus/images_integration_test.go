@@ -3,10 +3,16 @@
 package incus
 
 import (
+	"archive/tar"
+	"archive/zip"
 	"bytes"
+	"compress/gzip"
 	"context"
+	"fmt"
+	"io"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/stretchr/testify/assert"
@@ -106,17 +112,103 @@ func TestImageUpdateExportImportRoundTrip(t *testing.T) {
 
 	// Export the unified tarball, delete the original, re-import under a new
 	// alias (same fingerprint content).
-	var buf bytes.Buffer
-	require.NoError(t, b.ExportImage(ctx, fingerprint, &buf))
-	require.Greater(t, buf.Len(), 0)
+	format, rc, err := b.ExportImage(ctx, fingerprint)
+	require.NoError(t, err)
+	blob, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	require.NoError(t, rc.Close())
+	assert.Equal(t, backend.ImageExportUnified, format, "published container images export unified")
+	require.NotEmpty(t, blob)
 	require.NoError(t, b.DeleteImage(ctx, fingerprint))
 
 	restored := alias + "-restored"
-	require.NoError(t, b.ImportImage(ctx, &buf, restored))
+	require.NoError(t, b.ImportImage(ctx, bytes.NewReader(blob), restored))
 	t.Cleanup(func() { _ = b.DeleteImage(ctx, fingerprint) })
 	imgs, err = b.ListLocalImages(ctx)
 	require.NoError(t, err)
 	idx = slices.IndexFunc(imgs, func(i backend.LocalImage) bool { return slices.Contains(i.Aliases, restored) })
 	require.GreaterOrEqual(t, idx, 0, "re-imported image missing")
 	assert.Equal(t, fingerprint, imgs[idx].Fingerprint, "import preserves the image identity")
+}
+
+// buildImageMetadata builds a minimal metadata tarball (gzip) the daemon
+// accepts: just metadata.yaml with an architecture and creation date.
+func buildImageMetadata(t *testing.T, description string) []byte {
+	t.Helper()
+	yaml := "architecture: aarch64\ncreation_date: " + fmt.Sprint(time.Now().Unix()) +
+		"\nproperties:\n  description: " + description + "\n"
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "metadata.yaml", Mode: 0o644, Size: int64(len(yaml))}))
+	_, err := tw.Write([]byte(yaml))
+	require.NoError(t, err)
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+	return buf.Bytes()
+}
+
+// buildSplitImageZip packs metadata + rootfs into the lxcon split-image zip.
+func buildSplitImageZip(t *testing.T, meta, rootfs []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, e := range []struct {
+		name    string
+		payload []byte
+	}{{"metadata", meta}, {"rootfs.img", rootfs}} {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: e.name, Method: zip.Store})
+		require.NoError(t, err)
+		_, err = w.Write(e.payload)
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+	return buf.Bytes()
+}
+
+// TestSplitImageImportExportRoundTrip handcrafts a split VM image (the daemon
+// validates the metadata tarball, not rootfs contents), imports it through
+// the zip path, exports it back as a zip with both parts, and re-imports the
+// export asserting fingerprint identity.
+func TestSplitImageImportExportRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	alias := uniqueName("splitimg")
+	meta := buildImageMetadata(t, "lxcon split-image integration test")
+	rootfs := []byte("lxcon-fake-vm-rootfs-blob")
+
+	require.NoError(t, b.ImportImage(ctx, bytes.NewReader(buildSplitImageZip(t, meta, rootfs)), alias))
+
+	imgs, err := b.ListLocalImages(ctx)
+	require.NoError(t, err)
+	idx := slices.IndexFunc(imgs, func(i backend.LocalImage) bool { return slices.Contains(i.Aliases, alias) })
+	require.GreaterOrEqual(t, idx, 0, "imported split image missing")
+	fingerprint := imgs[idx].Fingerprint
+	t.Cleanup(func() { _ = b.DeleteImage(ctx, fingerprint) })
+	assert.Equal(t, "virtual-machine", imgs[idx].Type, "rootfs.img entry imports as a VM image")
+
+	// Export comes back as a split zip with both parts intact.
+	format, rc, err := b.ExportImage(ctx, fingerprint)
+	require.NoError(t, err)
+	blob, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	require.NoError(t, rc.Close())
+	require.Equal(t, backend.ImageExportSplitZip, format)
+	zr, err := zip.NewReader(bytes.NewReader(blob), int64(len(blob)))
+	require.NoError(t, err)
+	require.Len(t, zr.File, 2)
+	for _, zf := range zr.File {
+		assert.Positive(t, zf.UncompressedSize64, zf.Name)
+	}
+
+	// Delete and re-import the export: same content, same fingerprint.
+	require.NoError(t, b.DeleteImage(ctx, fingerprint))
+	require.NoError(t, b.ImportImage(ctx, bytes.NewReader(blob), alias+"r"))
+	imgs, err = b.ListLocalImages(ctx)
+	require.NoError(t, err)
+	idx = slices.IndexFunc(imgs, func(i backend.LocalImage) bool { return slices.Contains(i.Aliases, alias+"r") })
+	require.GreaterOrEqual(t, idx, 0, "re-imported split image missing")
+	assert.Equal(t, fingerprint, imgs[idx].Fingerprint, "split round-trip preserves image identity")
 }

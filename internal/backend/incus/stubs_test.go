@@ -81,18 +81,25 @@ type instanceServerStub struct {
 	snap          *api.InstanceSnapshot      // returned by GetInstanceSnapshot
 	snapExpiry    *api.InstanceSnapshotPut   // captured by UpdateInstanceSnapshot
 
-	localImages   []api.Image                 // returned by GetImages
-	imagesErr     error                       // error for image calls
-	createdImage  *api.ImagesPost             // captured by CreateImage
-	createImageOp incusclient.Operation       // operation returned by CreateImage
-	imageCopySrc  incusclient.ImageServer     // captured by CopyImage
-	imageCopied   *api.Image                  // captured by CopyImage
-	imageCopyArgs *incusclient.ImageCopyArgs  // captured by CopyImage
-	imageCopyOp   incusclient.RemoteOperation // operation returned by CopyImage
-	deletedImage  string                      // captured by DeleteImage
-	createdAlias  *api.ImageAliasesPost       // captured by CreateImageAlias
-	deletedAlias  string                      // captured by DeleteImageAlias
-	aliasErr      error                       // error for image alias calls
+	localImages       []api.Image                   // returned by GetImages
+	image             *api.Image                    // returned by GetImage
+	imageFileMeta     []byte                        // meta payload written by GetImageFile
+	imageFileRootfs   []byte                        // rootfs payload written by GetImageFile (empty = unified)
+	imageFileReq      *incusclient.ImageFileRequest // captured by GetImageFile
+	imagesErr         error                         // error for image calls
+	createdImage      *api.ImagesPost               // captured by CreateImage
+	createImageArgs   *incusclient.ImageCreateArgs  // captured by CreateImage
+	createImageMeta   []byte                        // drained from args.MetaFile
+	createImageRootfs []byte                        // drained from args.RootfsFile
+	createImageOp     incusclient.Operation         // operation returned by CreateImage
+	imageCopySrc      incusclient.ImageServer       // captured by CopyImage
+	imageCopied       *api.Image                    // captured by CopyImage
+	imageCopyArgs     *incusclient.ImageCopyArgs    // captured by CopyImage
+	imageCopyOp       incusclient.RemoteOperation   // operation returned by CopyImage
+	deletedImage      string                        // captured by DeleteImage
+	createdAlias      *api.ImageAliasesPost         // captured by CreateImageAlias
+	deletedAlias      string                        // captured by DeleteImageAlias
+	aliasErr          error                         // error for image alias calls
 
 	operations    []api.Operation // returned by GetOperations
 	operationsErr error           // error for GetOperations
@@ -415,8 +422,22 @@ func (s *instanceServerStub) GetImages() ([]api.Image, error) {
 	return s.localImages, s.imagesErr
 }
 
-func (s *instanceServerStub) CreateImage(image api.ImagesPost, _ *incusclient.ImageCreateArgs) (incusclient.Operation, error) {
+func (s *instanceServerStub) CreateImage(image api.ImagesPost, args *incusclient.ImageCreateArgs) (incusclient.Operation, error) {
 	s.createdImage = &image
+	s.createImageArgs = args
+	if args != nil {
+		var err error
+		if args.MetaFile != nil {
+			if s.createImageMeta, err = io.ReadAll(args.MetaFile); err != nil {
+				return nil, err
+			}
+		}
+		if args.RootfsFile != nil {
+			if s.createImageRootfs, err = io.ReadAll(args.RootfsFile); err != nil {
+				return nil, err
+			}
+		}
+	}
 	if s.imagesErr != nil {
 		return nil, s.imagesErr
 	}
@@ -424,6 +445,29 @@ func (s *instanceServerStub) CreateImage(image api.ImagesPost, _ *incusclient.Im
 		return s.createImageOp, nil
 	}
 	return &operationStub{}, nil
+}
+
+func (s *instanceServerStub) GetImage(string) (*api.Image, string, error) {
+	if s.image == nil {
+		return nil, "", errNotFoundStatus()
+	}
+	return s.image, "image-etag", nil
+}
+
+func (s *instanceServerStub) GetImageFile(_ string, req incusclient.ImageFileRequest) (*incusclient.ImageFileResponse, error) {
+	s.imageFileReq = &req
+	if _, err := req.MetaFile.Write(s.imageFileMeta); err != nil {
+		return nil, err
+	}
+	resp := &incusclient.ImageFileResponse{MetaSize: int64(len(s.imageFileMeta)), MetaName: "meta.tar.gz"}
+	if len(s.imageFileRootfs) > 0 {
+		if _, err := req.RootfsFile.Write(s.imageFileRootfs); err != nil {
+			return nil, err
+		}
+		resp.RootfsSize = int64(len(s.imageFileRootfs))
+		resp.RootfsName = "fp.img"
+	}
+	return resp, nil
 }
 
 func (s *instanceServerStub) CopyImage(source incusclient.ImageServer, image api.Image, args *incusclient.ImageCopyArgs) (incusclient.RemoteOperation, error) {

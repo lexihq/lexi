@@ -1,6 +1,9 @@
 package incus
 
 import (
+	"archive/zip"
+	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -213,20 +216,62 @@ func (b *incusBackend) RemoveImageAlias(_ context.Context, alias string) error {
 	return nil
 }
 
-// ExportImage streams the image tarball to w. The client demands an
-// io.ReadWriteSeeker target, so the download spools through a temp file before
-// being copied out (cancelable via ctx, like ExportInstance). Split images
-// (separate metadata + rootfs; the client refuses them when no rootfs target
-// is given) are ErrUnsupported — a browser download is a single file.
-func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string, w io.Writer) error {
-	tmp, err := os.CreateTemp("", "lxcon-image-export-*")
-	if err != nil {
-		return fmt.Errorf("export image %q: %w", fingerprint, err)
+// spoolReadCloser streams a spooled export; Close releases the temp files.
+type spoolReadCloser struct {
+	io.Reader
+
+	temps []*os.File
+}
+
+func (s spoolReadCloser) Close() error {
+	for _, tmp := range s.temps {
+		cleanupExportTemp(tmp)
 	}
-	defer cleanupExportTemp(tmp)
+	return nil
+}
+
+// ExportImage downloads the image into temp spools (the client demands
+// io.ReadWriteSeeker targets) and returns a reader over the result: the meta
+// tarball as-is for unified images, or a metadata+rootfs zip for split images
+// (RootfsName on the response is only set when a rootfs part arrived). The
+// format is known before the first payload byte so callers can pick headers;
+// the download is cancelable via ctx, like ExportInstance.
+func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string) (backend.ImageExportFormat, io.ReadCloser, error) {
+	// The image type names the zip rootfs entry (rootfs vs rootfs.img — the
+	// daemon's own import naming); the GET also 404s a ghost fingerprint
+	// before any download work.
+	img, _, err := b.srv.GetImage(fingerprint)
+	if err != nil {
+		return "", nil, fmt.Errorf("get image %q: %w", fingerprint, mapErr(err))
+	}
+
+	var temps []*os.File
+	cleanup := func() {
+		for _, tmp := range temps {
+			cleanupExportTemp(tmp)
+		}
+	}
+	newTemp := func(pattern string) (*os.File, error) {
+		tmp, err := os.CreateTemp("", pattern)
+		if err == nil {
+			temps = append(temps, tmp)
+		}
+		return tmp, err
+	}
+
+	meta, err := newTemp("lxcon-image-export-meta-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("export image %q: %w", fingerprint, err)
+	}
+	rootfs, err := newTemp("lxcon-image-export-rootfs-*")
+	if err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("export image %q: %w", fingerprint, err)
+	}
 
 	if err := ctx.Err(); err != nil {
-		return err
+		cleanup()
+		return "", nil, err
 	}
 	canceler := cancel.NewHTTPRequestCanceller()
 	stopCancel := context.AfterFunc(ctx, func() {
@@ -236,29 +281,172 @@ func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string, w io
 	})
 	defer stopCancel()
 
-	if _, err := b.srv.GetImageFile(fingerprint, incusclient.ImageFileRequest{
-		MetaFile: contextReadWriteSeeker{ctx: ctx, ReadWriteSeeker: tmp},
-		Canceler: canceler,
-	}); err != nil {
-		if strings.Contains(err.Error(), "Multi-part image") {
-			return fmt.Errorf("image %q is a split image (metadata + rootfs) and cannot be downloaded as one file: %w", fingerprint, backend.ErrUnsupported)
-		}
-		return fmt.Errorf("export image %q: %w", fingerprint, mapErr(err))
+	resp, err := b.srv.GetImageFile(fingerprint, incusclient.ImageFileRequest{
+		MetaFile:   contextReadWriteSeeker{ctx: ctx, ReadWriteSeeker: meta},
+		RootfsFile: contextReadWriteSeeker{ctx: ctx, ReadWriteSeeker: rootfs},
+		Canceler:   canceler,
+	})
+	if err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("export image %q: %w", fingerprint, mapErr(err))
 	}
-	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
-		return fmt.Errorf("export image %q: %w", fingerprint, err)
+	if _, err := meta.Seek(0, io.SeekStart); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("export image %q: %w", fingerprint, err)
 	}
-	if _, err := io.Copy(w, tmp); err != nil {
-		return fmt.Errorf("export image %q: %w", fingerprint, err)
+
+	if resp.RootfsName == "" {
+		// Unified: the rootfs spool is unused; the reader owns both temps.
+		return backend.ImageExportUnified, spoolReadCloser{Reader: meta, temps: temps}, nil
 	}
-	return nil
+
+	zipped, err := b.zipSplitImage(fingerprint, img.Type, meta, rootfs, newTemp)
+	if err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	return backend.ImageExportSplitZip, spoolReadCloser{Reader: zipped, temps: temps}, nil
 }
 
-// ImportImage creates a local image from a unified tarball, tagging it with
-// alias when given (a failed alias rolls the import back, like PublishImage).
-// The upload reader is context-aware so an aborted request stops mid-stream.
+// zipSplitImage assembles the lxcon split-image packaging: a zip (spooled to
+// another temp file) with a "metadata" entry plus "rootfs" or "rootfs.img"
+// per the image type. Entries are stored, not deflated — the payloads are
+// already compressed, and ImportImage rejects compressed entries as a
+// zip-bomb guard.
+func (b *incusBackend) zipSplitImage(fingerprint, imgType string, meta, rootfs *os.File, newTemp func(string) (*os.File, error)) (*os.File, error) {
+	if _, err := rootfs.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("export image %q: %w", fingerprint, err)
+	}
+	zipTmp, err := newTemp("lxcon-image-export-zip-*")
+	if err != nil {
+		return nil, fmt.Errorf("export image %q: %w", fingerprint, err)
+	}
+
+	rootfsEntry := "rootfs"
+	if imgType == "virtual-machine" {
+		rootfsEntry = "rootfs.img"
+	}
+	zw := zip.NewWriter(zipTmp)
+	for _, e := range []struct {
+		name string
+		src  io.Reader
+	}{{"metadata", meta}, {rootfsEntry, rootfs}} {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: e.name, Method: zip.Store})
+		if err != nil {
+			return nil, fmt.Errorf("export image %q: %w", fingerprint, err)
+		}
+		if _, err := io.Copy(w, e.src); err != nil {
+			return nil, fmt.Errorf("export image %q: %w", fingerprint, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return nil, fmt.Errorf("export image %q: %w", fingerprint, err)
+	}
+	if _, err := zipTmp.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("export image %q: %w", fingerprint, err)
+	}
+	return zipTmp, nil
+}
+
+// zipMagic is the local-file-header signature every zip stream starts with.
+var zipMagic = []byte("PK\x03\x04")
+
+// splitImageArgs spools a split-image zip to a temp file (zip reading needs
+// io.ReaderAt) and returns CreateImage args streaming its metadata and rootfs
+// entries, with the type the rootfs entry name encodes. Entries must be the
+// exact lxcon packaging and stored uncompressed (zip-bomb guard: stored
+// entries cannot expand past the upload cap). The release func frees the
+// spool; call it once CreateImage has consumed the readers.
+func (b *incusBackend) splitImageArgs(ctx context.Context, r io.Reader) (*incusclient.ImageCreateArgs, func(), error) {
+	tmp, err := os.CreateTemp("", "lxcon-image-import-*")
+	if err != nil {
+		return nil, nil, fmt.Errorf("import image: %w", err)
+	}
+	release := func() { cleanupExportTemp(tmp) }
+
+	size, err := io.Copy(tmp, contextReader{ctx: ctx, Reader: r})
+	if err != nil {
+		release()
+		return nil, nil, fmt.Errorf("import image: %w", err)
+	}
+	zr, err := zip.NewReader(tmp, size)
+	if err != nil {
+		release()
+		return nil, nil, fmt.Errorf("import image: corrupt split-image zip: %w", backend.ErrInvalid)
+	}
+
+	var metaEntry, rootfsEntry *zip.File
+	imgType := ""
+	for _, zf := range zr.File {
+		if zf.Method != zip.Store {
+			release()
+			return nil, nil, fmt.Errorf("import image: split-image zip entry %q is compressed: %w", zf.Name, backend.ErrInvalid)
+		}
+		switch zf.Name {
+		case "metadata":
+			metaEntry = zf
+		case "rootfs":
+			rootfsEntry, imgType = zf, "container"
+		case "rootfs.img":
+			rootfsEntry, imgType = zf, "virtual-machine"
+		default:
+			release()
+			return nil, nil, fmt.Errorf("import image: unexpected split-image zip entry %q: %w", zf.Name, backend.ErrInvalid)
+		}
+	}
+	if metaEntry == nil || rootfsEntry == nil {
+		release()
+		return nil, nil, fmt.Errorf("import image: split-image zip is missing metadata or rootfs: %w", backend.ErrInvalid)
+	}
+
+	metaRC, err := metaEntry.Open()
+	if err != nil {
+		release()
+		return nil, nil, fmt.Errorf("import image: corrupt split-image zip: %w", backend.ErrInvalid)
+	}
+	rootfsRC, err := rootfsEntry.Open()
+	if err != nil {
+		closeAndLogFile("split-image metadata entry", metaRC)
+		release()
+		return nil, nil, fmt.Errorf("import image: corrupt split-image zip: %w", backend.ErrInvalid)
+	}
+	releaseAll := func() {
+		closeAndLogFile("split-image metadata entry", metaRC)
+		closeAndLogFile("split-image rootfs entry", rootfsRC)
+		release()
+	}
+	return &incusclient.ImageCreateArgs{
+		MetaFile:   contextReader{ctx: ctx, Reader: metaRC},
+		MetaName:   "metadata",
+		RootfsFile: contextReader{ctx: ctx, Reader: rootfsRC},
+		RootfsName: rootfsEntry.Name,
+		Type:       imgType,
+	}, releaseAll, nil
+}
+
+// ImportImage creates a local image from a unified tarball or a lxcon
+// split-image zip (detected by the zip signature; the rootfs entry name
+// carries the image type), tagging it with alias when given (a failed alias
+// rolls the import back, like PublishImage). The upload reader is
+// context-aware so an aborted request stops mid-stream.
 func (b *incusBackend) ImportImage(ctx context.Context, r io.Reader, alias string) error {
-	op, err := b.srv.CreateImage(api.ImagesPost{}, &incusclient.ImageCreateArgs{MetaFile: contextReader{ctx: ctx, Reader: r}})
+	br := bufio.NewReader(r)
+	sig, err := br.Peek(len(zipMagic))
+	if err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("import image: %w", err)
+	}
+
+	args := &incusclient.ImageCreateArgs{MetaFile: contextReader{ctx: ctx, Reader: br}}
+	if bytes.Equal(sig, zipMagic) {
+		splitArgs, release, err := b.splitImageArgs(ctx, br)
+		if err != nil {
+			return err
+		}
+		defer release()
+		args = splitArgs
+	}
+
+	op, err := b.srv.CreateImage(api.ImagesPost{}, args)
 	if err := waitOp(ctx, op, err, "import image"); err != nil {
 		return err
 	}

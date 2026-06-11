@@ -1,8 +1,10 @@
 package fake
 
 import (
+	"archive/zip"
 	"bytes"
 	"errors"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -208,16 +210,34 @@ func TestRemoveImageAliasGhost(t *testing.T) {
 	}
 }
 
+// exportImageBlob exports through the new spool-then-stream shape and returns
+// the format plus the payload bytes.
+func exportImageBlob(t *testing.T, b *Fake, fp string) (backend.ImageExportFormat, []byte) {
+	t.Helper()
+	format, rc, err := b.ExportImage(ctx(), fp)
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	blob, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read export: %v", err)
+	}
+	if err := rc.Close(); err != nil {
+		t.Fatalf("close export: %v", err)
+	}
+	return format, blob
+}
+
 func TestExportImportImageRoundTrip(t *testing.T) {
 	b := New()
 	imgs := mustLocal(t, b)
 	fp := imgs[0].Fingerprint
 
-	var buf bytes.Buffer
-	if err := b.ExportImage(ctx(), fp, &buf); err != nil {
-		t.Fatalf("export: %v", err)
+	format, blob := exportImageBlob(t, b, fp)
+	if format != backend.ImageExportUnified {
+		t.Fatalf("want unified export for a container image, got %q", format)
 	}
-	if err := b.ImportImage(ctx(), &buf, "restored"); err != nil {
+	if err := b.ImportImage(ctx(), bytes.NewReader(blob), "restored"); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 
@@ -237,9 +257,89 @@ func TestExportImportImageRoundTrip(t *testing.T) {
 }
 
 func TestExportImageGhostIs404(t *testing.T) {
-	err := New().ExportImage(ctx(), "ghost", &bytes.Buffer{})
+	_, _, err := New().ExportImage(ctx(), "ghost")
 	if !errors.Is(err, backend.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+}
+
+func TestSplitImageExportImportRoundTrip(t *testing.T) {
+	b := New()
+	b.SeedSplitImage("fake-vm-img", "VM image")
+
+	format, blob := exportImageBlob(t, b, "fake-vm-img")
+	if format != backend.ImageExportSplitZip {
+		t.Fatalf("want split-zip export for a VM image, got %q", format)
+	}
+
+	// The zip carries exactly metadata + rootfs.img, both stored uncompressed.
+	zr, err := zip.NewReader(bytes.NewReader(blob), int64(len(blob)))
+	if err != nil {
+		t.Fatalf("open export zip: %v", err)
+	}
+	var names []string
+	for _, zf := range zr.File {
+		names = append(names, zf.Name)
+		if zf.Method != zip.Store {
+			t.Fatalf("entry %q is compressed", zf.Name)
+		}
+	}
+	if !slices.Equal(names, []string{"metadata", "rootfs.img"}) {
+		t.Fatalf("want [metadata rootfs.img], got %v", names)
+	}
+
+	// Importing the zip recovers a VM-type image under the derived fingerprint.
+	if err := b.ImportImage(ctx(), bytes.NewReader(blob), "restored-vm"); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+	for _, img := range mustLocal(t, b) {
+		if img.Fingerprint == "imported-fake-vm-img" {
+			if img.Type != "virtual-machine" {
+				t.Fatalf("imported type = %q, want virtual-machine", img.Type)
+			}
+			return
+		}
+	}
+	t.Fatal("imported split image not found")
+}
+
+func TestImportImageRejectsBadZips(t *testing.T) {
+	b := New()
+
+	// A zip that isn't ours (wrong entry name).
+	var foreign bytes.Buffer
+	zw := zip.NewWriter(&foreign)
+	w, err := zw.CreateHeader(&zip.FileHeader{Name: "evil", Method: zip.Store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.Write([]byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ImportImage(ctx(), bytes.NewReader(foreign.Bytes()), ""); !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("foreign zip: want ErrInvalid, got %v", err)
+	}
+
+	// A compressed (Deflate) entry is refused even with the right names.
+	var deflated bytes.Buffer
+	zw = zip.NewWriter(&deflated)
+	for _, name := range []string{"metadata", "rootfs.img"} {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: zip.Deflate})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(fakeImageMagic + "x")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.ImportImage(ctx(), bytes.NewReader(deflated.Bytes()), ""); !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("deflated zip: want ErrInvalid, got %v", err)
 	}
 }
 
@@ -256,11 +356,8 @@ func TestImportImageAliasConflict(t *testing.T) {
 	fp := imgs[0].Fingerprint
 	taken := imgs[0].Aliases[0]
 
-	var buf bytes.Buffer
-	if err := b.ExportImage(ctx(), fp, &buf); err != nil {
-		t.Fatalf("export: %v", err)
-	}
-	err := b.ImportImage(ctx(), &buf, taken)
+	_, blob := exportImageBlob(t, b, fp)
+	err := b.ImportImage(ctx(), bytes.NewReader(blob), taken)
 	if !errors.Is(err, backend.ErrConflict) {
 		t.Fatalf("want ErrConflict for taken alias, got %v", err)
 	}

@@ -1,11 +1,15 @@
 package incus
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
+	"github.com/adam/lxcon/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -170,4 +174,97 @@ func TestRemoveImageAliasPassesName(t *testing.T) {
 	require.NoError(t, b.RemoveImageAlias(context.Background(), "extra"))
 
 	assert.Equal(t, "extra", srv.deletedAlias)
+}
+
+func TestExportImageUnifiedStreamsMeta(t *testing.T) {
+	s := &instanceServerStub{
+		image:         &api.Image{Type: "container"},
+		imageFileMeta: []byte("meta-tarball-bytes"),
+	}
+	b := &incusBackend{srv: s}
+
+	format, rc, err := b.ExportImage(t.Context(), "fp")
+	require.NoError(t, err)
+	blob, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	require.NoError(t, rc.Close())
+
+	assert.Equal(t, backend.ImageExportUnified, format)
+	assert.Equal(t, "meta-tarball-bytes", string(blob))
+	require.NotNil(t, s.imageFileReq.Canceler, "image download should be cancelable")
+}
+
+func TestExportImageSplitBuildsZip(t *testing.T) {
+	s := &instanceServerStub{
+		image:           &api.Image{Type: "virtual-machine"},
+		imageFileMeta:   []byte("meta-bytes"),
+		imageFileRootfs: []byte("rootfs-bytes"),
+	}
+	b := &incusBackend{srv: s}
+
+	format, rc, err := b.ExportImage(t.Context(), "fp")
+	require.NoError(t, err)
+	blob, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	require.NoError(t, rc.Close())
+
+	assert.Equal(t, backend.ImageExportSplitZip, format)
+	zr, err := zip.NewReader(bytes.NewReader(blob), int64(len(blob)))
+	require.NoError(t, err)
+	require.Len(t, zr.File, 2)
+	want := map[string]string{"metadata": "meta-bytes", "rootfs.img": "rootfs-bytes"}
+	for _, zf := range zr.File {
+		assert.Equal(t, zip.Store, zf.Method, zf.Name)
+		f, err := zf.Open()
+		require.NoError(t, err)
+		got, err := io.ReadAll(f)
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+		assert.Equal(t, want[zf.Name], string(got), zf.Name)
+	}
+}
+
+func TestExportImageGhostFingerprintFailsBeforeDownload(t *testing.T) {
+	b := &incusBackend{srv: &instanceServerStub{}}
+	_, _, err := b.ExportImage(t.Context(), "ghost")
+	require.ErrorIs(t, err, backend.ErrNotFound)
+}
+
+func TestImportImageSplitZipUploadsBothParts(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, e := range []struct{ name, payload string }{
+		{"metadata", "meta-bytes"}, {"rootfs.img", "rootfs-bytes"},
+	} {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: e.name, Method: zip.Store})
+		require.NoError(t, err)
+		_, err = w.Write([]byte(e.payload))
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+
+	s := &instanceServerStub{createImageOp: &operationStub{}}
+	b := &incusBackend{srv: s}
+	require.NoError(t, b.ImportImage(t.Context(), bytes.NewReader(buf.Bytes()), ""))
+
+	require.NotNil(t, s.createImageArgs)
+	assert.Equal(t, "virtual-machine", s.createImageArgs.Type, "rootfs.img entry carries the VM type")
+	assert.Equal(t, "meta-bytes", string(s.createImageMeta))
+	assert.Equal(t, "rootfs-bytes", string(s.createImageRootfs))
+}
+
+func TestImportImageRejectsForeignZip(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	w, err := zw.CreateHeader(&zip.FileHeader{Name: "evil", Method: zip.Store})
+	require.NoError(t, err)
+	_, err = w.Write([]byte("x"))
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+
+	s := &instanceServerStub{createImageOp: &operationStub{}}
+	b := &incusBackend{srv: s}
+	err = b.ImportImage(t.Context(), bytes.NewReader(buf.Bytes()), "")
+	require.ErrorIs(t, err, backend.ErrInvalid)
+	assert.Nil(t, s.createImageArgs, "foreign zips must be rejected before any upload")
 }

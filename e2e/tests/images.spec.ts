@@ -87,3 +87,36 @@ test("edit image details, export, and re-import", async ({ page }) => {
     await expect(table.getByText("e2e-restored")).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 });
+
+test("export a split (VM) image as a zip and re-import it", async ({ page }) => {
+  await page.goto("/images");
+  const table = page.locator("#images-table");
+  const vmRow = table.getByRole("row", { name: /Ubuntu Noble VM image/ }).first();
+  await expect(vmRow).toBeVisible();
+
+  // A split image downloads as a zip, not a tarball.
+  const downloadPromise = page.waitForEvent("download");
+  await vmRow.getByRole("link", { name: "Export" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/\.zip$/);
+
+  // Re-importing the zip restores a VM image under a fresh alias.
+  const path = await download.path();
+  await page.locator('form[action="/images/import"] input[name="image"]').setInputFiles({
+    name: "image.zip",
+    mimeType: "application/octet-stream",
+    buffer: readFileSync(path!),
+  });
+  await page.locator('form[action="/images/import"] input[name="alias"]').fill("e2e-vm-restored");
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page).toHaveURL(/\/images$/);
+  const restored = table.getByRole("row", { name: /e2e-vm-restored/ });
+  await expect(restored).toBeVisible();
+  await expect(restored.getByText("virtual-machine")).toBeVisible();
+
+  // Clean up the imported image (shared server state).
+  await expect(async () => {
+    await restored.getByRole("button", { name: "Delete" }).click();
+    await expect(table.getByText("e2e-vm-restored")).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});

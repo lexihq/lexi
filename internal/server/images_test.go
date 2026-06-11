@@ -218,3 +218,26 @@ func TestImportImageForeignBlobIs400(t *testing.T) {
 	res := importImageRequest(t, New(fake.New()), "garbage", "")
 	assertStatus(t, res, http.StatusBadRequest)
 }
+
+func TestExportSplitImageDownloadsZip(t *testing.T) {
+	b := fake.New()
+	b.SeedSplitImage("fake-vm-img", "VM image")
+
+	res := request(t, New(b), "GET", "/images/fake-vm-img/export", "", false)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Header().Get("Content-Disposition"), ".zip")
+	assert.True(t, bytes.HasPrefix(res.Body.Bytes(), []byte("PK\x03\x04")), "split export is a zip")
+}
+
+func TestImportSplitImageRoundTrip(t *testing.T) {
+	b := fake.New()
+	b.SeedSplitImage("fake-vm-img", "VM image")
+	srv := New(b)
+
+	export := request(t, srv, "GET", "/images/fake-vm-img/export", "", false)
+	assertStatus(t, export, http.StatusOK)
+
+	res := importImageRequest(t, srv, export.Body.String(), "restored-vm")
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Contains(t, localAliases(t, b), "restored-vm")
+}

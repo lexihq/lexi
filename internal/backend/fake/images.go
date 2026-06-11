@@ -1,6 +1,8 @@
 package fake
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -139,30 +141,73 @@ func (f *Fake) RemoveImageAlias(_ context.Context, alias string) error {
 // instance backup round-trip.
 const fakeImageMagic = "lxcon-fake-image\n"
 
-// ExportImage writes a deterministic blob carrying the fingerprint so the
-// export→import round-trip is observable.
-func (f *Fake) ExportImage(_ context.Context, fingerprint string, w io.Writer) error {
+// fakeRootfsMagic prefixes the rootfs entry of a fake split-image zip.
+const fakeRootfsMagic = "lxcon-fake-rootfs\n"
+
+// SeedSplitImage adds a VM-type local image for tests and the e2e fakeserver
+// (PublishImage only makes container images). VM images export as split zips,
+// like the daemon stores them.
+func (f *Fake) SeedSplitImage(fingerprint, description string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if _, ok := f.images[fingerprint]; !ok {
-		return notFoundf("image %q", fingerprint)
+	f.images[fingerprint] = &backend.LocalImage{
+		Fingerprint: fingerprint,
+		Description: description,
+		Arch:        "aarch64",
+		Type:        "virtual-machine",
+		CreatedAt:   f.now(),
 	}
-	_, err := io.WriteString(w, fakeImageMagic+fingerprint)
-	return err
 }
 
-// ImportImage recreates an image from a blob ExportImage wrote, rejecting
-// foreign data with ErrInvalid and prefixing the recovered fingerprint so the
-// original can coexist.
+// ExportImage returns a deterministic blob carrying the fingerprint so the
+// export→import round-trip is observable: a plain magic blob for container
+// images, a metadata+rootfs.img zip for VM (split) images.
+func (f *Fake) ExportImage(_ context.Context, fingerprint string) (backend.ImageExportFormat, io.ReadCloser, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	img, ok := f.images[fingerprint]
+	if !ok {
+		return "", nil, notFoundf("image %q", fingerprint)
+	}
+	if img.Type != "virtual-machine" {
+		return backend.ImageExportUnified, io.NopCloser(strings.NewReader(fakeImageMagic + fingerprint)), nil
+	}
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, e := range []struct{ name, payload string }{
+		{"metadata", fakeImageMagic + fingerprint},
+		{"rootfs.img", fakeRootfsMagic + fingerprint},
+	} {
+		// Store, not Deflate: the real payloads are already compressed, and
+		// ImportImage rejects compressed entries as a zip-bomb guard.
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: e.name, Method: zip.Store})
+		if err != nil {
+			return "", nil, err
+		}
+		if _, err := io.WriteString(w, e.payload); err != nil {
+			return "", nil, err
+		}
+	}
+	if err := zw.Close(); err != nil {
+		return "", nil, err
+	}
+	return backend.ImageExportSplitZip, io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+}
+
+// ImportImage recreates an image from a blob ExportImage wrote — unified
+// magic blob or split zip — rejecting foreign data with ErrInvalid and
+// prefixing the recovered fingerprint so the original can coexist.
 func (f *Fake) ImportImage(_ context.Context, r io.Reader, alias string) error {
 	blob, err := io.ReadAll(r)
 	if err != nil {
 		return err
 	}
-	orig, ok := strings.CutPrefix(string(blob), fakeImageMagic)
-	if !ok {
-		return fmt.Errorf("not a lxcon image tarball: %w", backend.ErrInvalid)
+	orig, imgType, err := parseFakeImageBlob(blob)
+	if err != nil {
+		return err
 	}
 
 	f.mu.Lock()
@@ -181,7 +226,7 @@ func (f *Fake) ImportImage(_ context.Context, r io.Reader, alias string) error {
 		Fingerprint: fingerprint,
 		Description: "Imported image",
 		Arch:        "aarch64",
-		Type:        "container",
+		Type:        imgType,
 		CreatedAt:   f.now(),
 	}
 	if alias != "" {
@@ -190,6 +235,54 @@ func (f *Fake) ImportImage(_ context.Context, r io.Reader, alias string) error {
 	f.images[fingerprint] = img
 	f.logOp(fmt.Sprintf("Importing image %q", fingerprint))
 	return nil
+}
+
+// parseFakeImageBlob recognizes the two export shapes and recovers the
+// original fingerprint plus the image type. Split zips must carry exactly a
+// "metadata" entry and a "rootfs"/"rootfs.img" entry (the name encodes the
+// type), both stored uncompressed — the same contract the incus driver
+// enforces.
+func parseFakeImageBlob(blob []byte) (fingerprint, imgType string, err error) {
+	if orig, ok := strings.CutPrefix(string(blob), fakeImageMagic); ok {
+		return orig, "container", nil
+	}
+	if !bytes.HasPrefix(blob, []byte("PK\x03\x04")) {
+		return "", "", fmt.Errorf("not a lxcon image tarball: %w", backend.ErrInvalid)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(blob), int64(len(blob)))
+	if err != nil {
+		return "", "", fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
+	}
+	var meta []byte
+	imgType = ""
+	for _, zf := range zr.File {
+		if zf.Method != zip.Store {
+			return "", "", fmt.Errorf("split-image zip entry %q is compressed: %w", zf.Name, backend.ErrInvalid)
+		}
+		switch zf.Name {
+		case "metadata":
+			rc, err := zf.Open()
+			if err != nil {
+				return "", "", fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
+			}
+			meta, err = io.ReadAll(rc)
+			closeErr := rc.Close()
+			if err != nil || closeErr != nil {
+				return "", "", fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
+			}
+		case "rootfs":
+			imgType = "container"
+		case "rootfs.img":
+			imgType = "virtual-machine"
+		default:
+			return "", "", fmt.Errorf("unexpected split-image zip entry %q: %w", zf.Name, backend.ErrInvalid)
+		}
+	}
+	orig, ok := strings.CutPrefix(string(meta), fakeImageMagic)
+	if !ok || imgType == "" {
+		return "", "", fmt.Errorf("split-image zip is missing metadata or rootfs: %w", backend.ErrInvalid)
+	}
+	return orig, imgType, nil
 }
 
 // UpdateImage sets the image's description and public flag.

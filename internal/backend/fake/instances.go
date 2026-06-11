@@ -138,6 +138,17 @@ func (f *Fake) setStatus(ctx context.Context, name, status, verb string) error {
 		return notFound(name)
 	}
 	in.Status = status
+	// DHCP parity: a started instance gets an address (stable per start), a
+	// stopped one releases it. The network leases view derives from this.
+	switch status {
+	case "Running":
+		if len(in.IPv4) == 0 {
+			sp.ipSeq++
+			in.IPv4 = []string{fmt.Sprintf("10.0.3.%d", 20+sp.ipSeq%200)}
+		}
+	case "Stopped":
+		in.IPv4 = nil
+	}
 	// Incus parity: the instance etag covers the whole object, so lifecycle
 	// changes invalidate config/device edit forms too.
 	in.configVersion++

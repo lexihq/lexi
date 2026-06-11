@@ -80,6 +80,9 @@ type Capabilities struct {
 	// Migrate is cross-remote instance migration (stopped move). Like
 	// Remotes, only set when there is another reachable remote to target.
 	Migrate bool
+	// NetworkForwards is port-forward management on managed networks (Incus
+	// extension "network_forward").
+	NetworkForwards bool
 }
 
 // Instance is a system container or virtual machine.
@@ -361,6 +364,45 @@ type Project struct {
 	Version string
 }
 
+// NetworkForward is a port forward on a managed network: traffic to the
+// listen address (and its port mappings) is redirected into instances.
+type NetworkForward struct {
+	ListenAddress string
+	Description   string
+	// DefaultTarget receives traffic for unmapped ports when set (the
+	// daemon's target_address config key).
+	DefaultTarget string
+	Ports         []ForwardPort
+	// Version is the concurrency token (daemon etag): Get and pass back on
+	// update; a stale token is ErrConflict.
+	Version string
+}
+
+// ForwardPort is one port mapping in a forward. Port fields carry the
+// daemon's comma-and-range syntax (e.g. "80,8080-8090") verbatim.
+type ForwardPort struct {
+	Description   string
+	Protocol      string // "tcp" or "udp"
+	ListenPort    string
+	TargetAddress string
+	TargetPort    string // empty means same as ListenPort
+}
+
+// NetworkLease is one DHCP lease on a managed network.
+type NetworkLease struct {
+	Hostname string
+	MAC      string
+	Address  string
+	Type     string // "dynamic", "static", or "gateway"
+}
+
+// NetworkState is the live interface state of a managed network.
+type NetworkState struct {
+	State     string // e.g. "up"
+	MTU       int
+	Addresses []string
+}
+
 // Remote is a configured Incus server lxcon can scope requests to. The list
 // is read from the CLI config; lxcon does not add or trust remotes itself.
 type Remote struct {
@@ -537,6 +579,21 @@ type Backend interface {
 	RenameNetworkACL(ctx context.Context, name, newName string) error
 	// DeleteNetworkACL refuses ACLs that are in use (ErrConflict).
 	DeleteNetworkACL(ctx context.Context, name string) error
+
+	// ListNetworkLeases reports the DHCP leases of a managed network.
+	ListNetworkLeases(ctx context.Context, network string) ([]NetworkLease, error)
+	// GetNetworkState reports a managed network's live interface state.
+	GetNetworkState(ctx context.Context, network string) (NetworkState, error)
+	// ListNetworkForwards lists a managed network's port forwards.
+	ListNetworkForwards(ctx context.Context, network string) ([]NetworkForward, error)
+	// CreateNetworkForward adds a forward; the listen address is its identity
+	// (a duplicate is ErrConflict).
+	CreateNetworkForward(ctx context.Context, network string, f NetworkForward) error
+	// UpdateNetworkForward replaces a forward's description, default target,
+	// and port set; f.Version is the concurrency token.
+	UpdateNetworkForward(ctx context.Context, network string, f NetworkForward) error
+	// DeleteNetworkForward removes the forward at the listen address.
+	DeleteNetworkForward(ctx context.Context, network, listenAddress string) error
 
 	// ListRemotes returns the reachable configured remotes, marking the one
 	// the request context selects (or the default) as Current.

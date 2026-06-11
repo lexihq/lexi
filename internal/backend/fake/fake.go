@@ -73,9 +73,14 @@ type space struct {
 	networkVersions map[string]int
 	acls            map[string]backend.NetworkACL
 	aclVersions     map[string]int
+	// forwards are port forwards keyed by network, then listen address;
+	// forwardVersions tracks the network+"/"+address concurrency tokens.
+	forwards        map[string]map[string]backend.NetworkForward
+	forwardVersions map[string]int
 	images          map[string]*backend.LocalImage // keyed by fingerprint
 	ops             []backend.Operation            // newest first, capped at maxOps
 	opSeq           int
+	ipSeq           int // DHCP-ish counter for addresses handed to started instances
 }
 
 // newSpace returns an empty project space.
@@ -88,6 +93,8 @@ func newSpace() *space {
 		networkVersions: map[string]int{},
 		acls:            map[string]backend.NetworkACL{},
 		aclVersions:     map[string]int{},
+		forwards:        map[string]map[string]backend.NetworkForward{},
+		forwardVersions: map[string]int{},
 		images:          map[string]*backend.LocalImage{},
 	}
 }
@@ -376,6 +383,7 @@ func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 		Events:          true,
 		Remotes:         true,
 		Migrate:         true,
+		NetworkForwards: true,
 	}
 }
 

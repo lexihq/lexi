@@ -16,7 +16,7 @@ func (f *Fake) ListNetworks(ctx context.Context) ([]backend.Network, error) {
 
 	out := make([]backend.Network, 0, len(sp.networks))
 	for name := range sp.networks {
-		out = append(out, f.networkView(sp, name))
+		out = append(out, f.networkView(ctx, sp, name))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
@@ -30,7 +30,7 @@ func (f *Fake) GetNetwork(ctx context.Context, name string) (backend.Network, er
 	if _, ok := sp.networks[name]; !ok {
 		return backend.Network{}, notFoundf("network %q", name)
 	}
-	n := f.networkView(sp, name)
+	n := f.networkView(ctx, sp, name)
 	n.Version = strconv.Itoa(sp.networkVersions[name])
 	return n, nil
 }
@@ -90,12 +90,11 @@ func (f *Fake) DeleteNetwork(ctx context.Context, name string) error {
 		return invalid("network %q is unmanaged", name)
 	}
 	// Incus parity: a network referenced by an instance cannot be deleted.
-	// Any project sharing this network space counts.
-	for _, spc := range f.spaces {
-		for _, in := range spc.instances {
-			if instanceUsesNetwork(spc, in, name) {
-				return invalid("network %q is in use", name)
-			}
+	// Only projects sharing this network namespace count — isolated projects
+	// can reuse the name freely.
+	for _, in := range f.networkUsers(ctx) {
+		if f.instanceUsesNetworkOf(ctx, in, name) {
+			return invalid("network %q is in use", name)
 		}
 	}
 	delete(sp.networks, name)
@@ -105,20 +104,39 @@ func (f *Fake) DeleteNetwork(ctx context.Context, name string) error {
 
 // networkView returns a copy with a fresh UsedBy derived from instances whose
 // (expanded) nic devices reference the network. Callers must hold the mutex.
-func (f *Fake) networkView(owner *space, name string) backend.Network {
+func (f *Fake) networkView(ctx context.Context, owner *space, name string) backend.Network {
 	n := owner.networks[name]
 	n.Config = maps.Clone(n.Config)
 	var usedBy []string
-	for _, spc := range f.spaces {
-		for instName, in := range spc.instances {
-			if instanceUsesNetwork(spc, in, name) {
-				usedBy = append(usedBy, instName)
-			}
+	for instName, in := range f.networkUsers(ctx) {
+		if f.instanceUsesNetworkOf(ctx, in, name) {
+			usedBy = append(usedBy, instName)
 		}
 	}
 	sort.Strings(usedBy)
 	n.UsedBy = usedBy
 	return n
+}
+
+// networkUsers collects the instances of every project whose effective
+// network namespace is the request's, keyed by instance name. Callers must
+// hold the mutex.
+func (f *Fake) networkUsers(ctx context.Context) map[string]*instance {
+	owner := f.featureProject(ctx, "features.networks")
+	out := map[string]*instance{}
+	for project, spc := range f.spaces {
+		if f.featureProjectName(project, "features.networks") != owner {
+			continue
+		}
+		maps.Copy(out, spc.instances)
+	}
+	return out
+}
+
+// instanceUsesNetworkOf is instanceUsesNetwork with the instance's profile
+// devices resolved through its own project's profile namespace.
+func (f *Fake) instanceUsesNetworkOf(ctx context.Context, in *instance, network string) bool {
+	return instanceUsesNetwork(f.featureSpace(ctx, "features.profiles"), in, network)
 }
 
 func instanceUsesNetwork(sp *space, in *instance, network string) bool {

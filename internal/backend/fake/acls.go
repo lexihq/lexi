@@ -18,7 +18,7 @@ func (f *Fake) ListNetworkACLs(ctx context.Context) ([]backend.NetworkACL, error
 
 	out := make([]backend.NetworkACL, 0, len(sp.acls))
 	for name := range sp.acls {
-		out = append(out, f.aclView(sp, name))
+		out = append(out, f.aclView(ctx, sp, name))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
@@ -32,7 +32,7 @@ func (f *Fake) GetNetworkACL(ctx context.Context, name string) (backend.NetworkA
 	if _, ok := sp.acls[name]; !ok {
 		return backend.NetworkACL{}, notFoundf("network ACL %q", name)
 	}
-	acl := f.aclView(sp, name)
+	acl := f.aclView(ctx, sp, name)
 	acl.Version = strconv.Itoa(sp.aclVersions[name])
 	return acl, nil
 }
@@ -84,7 +84,7 @@ func (f *Fake) RenameNetworkACL(ctx context.Context, name, newName string) error
 		return notFoundf("network ACL %q", name)
 	}
 	// Incus parity: the daemon refuses renaming an attached ACL.
-	if used := f.aclUsedBy(sp, name); len(used) > 0 {
+	if used := f.aclUsedBy(ctx, sp, name); len(used) > 0 {
 		return conflict("network ACL %q is in use", name)
 	}
 	if !validACLName(newName) {
@@ -109,7 +109,7 @@ func (f *Fake) DeleteNetworkACL(ctx context.Context, name string) error {
 	if _, ok := sp.acls[name]; !ok {
 		return notFoundf("network ACL %q", name)
 	}
-	if used := f.aclUsedBy(sp, name); len(used) > 0 {
+	if used := f.aclUsedBy(ctx, sp, name); len(used) > 0 {
 		return conflict("network ACL %q is in use", name)
 	}
 	delete(sp.acls, name)
@@ -118,11 +118,11 @@ func (f *Fake) DeleteNetworkACL(ctx context.Context, name string) error {
 }
 
 // aclView materializes an ACL with a fresh UsedBy. Callers must hold the mutex.
-func (f *Fake) aclView(sp *space, name string) backend.NetworkACL {
+func (f *Fake) aclView(ctx context.Context, sp *space, name string) backend.NetworkACL {
 	acl := sp.acls[name]
 	acl.Ingress = append([]backend.NetworkACLRule(nil), acl.Ingress...)
 	acl.Egress = append([]backend.NetworkACLRule(nil), acl.Egress...)
-	acl.UsedBy = f.aclUsedBy(sp, name)
+	acl.UsedBy = f.aclUsedBy(ctx, sp, name)
 	return acl
 }
 
@@ -131,7 +131,7 @@ func (f *Fake) aclView(sp *space, name string) backend.NetworkACL {
 // the daemon's UsedBy: instances are scanned with profile-expanded devices,
 // only nics bound to a network count, and every matching NIC appends its
 // owner's path (no dedup). Callers must hold the mutex.
-func (f *Fake) aclUsedBy(owner *space, name string) []string {
+func (f *Fake) aclUsedBy(ctx context.Context, owner *space, name string) []string {
 	var used []string
 	for netName, n := range owner.networks {
 		if slices.Contains(splitCommaList(n.Config["security.acls"]), name) {
@@ -139,11 +139,16 @@ func (f *Fake) aclUsedBy(owner *space, name string) []string {
 		}
 	}
 	// NIC references can come from any project sharing this network space;
-	// scan all spaces (a shared ACL must not be deletable while any project
-	// references it).
-	for _, sp := range f.spaces {
+	// projects with their own network namespace can reuse the ACL name
+	// without touching this one.
+	ownerProject := f.featureProject(ctx, "features.networks")
+	for project, sp := range f.spaces {
+		if f.featureProjectName(project, "features.networks") != ownerProject {
+			continue
+		}
+		profSp := f.spaceFor(f.featureProjectName(project, "features.profiles"))
 		for instName, inst := range sp.instances {
-			for range aclNICMatches(expandedDevices(sp, inst), name) {
+			for range aclNICMatches(expandedDevices(profSp, inst), name) {
 				used = append(used, "/1.0/instances/"+instName)
 			}
 		}

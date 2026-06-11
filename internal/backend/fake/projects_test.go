@@ -1,6 +1,7 @@
 package fake
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -119,4 +120,48 @@ func TestProjectScopingIsolatesResources(t *testing.T) {
 	require.NoError(t, f.DeleteInstance(dev, "c-default"))
 	require.NoError(t, f.DeleteVolume(dev, "default", "v1"))
 	require.NoError(t, f.DeleteProject(ctx(), "dev"))
+}
+
+// Checkpoint regressions: feature flips are frozen on non-empty projects,
+// and isolated namespaces don't cross-guard same-named resources.
+func TestProjectFeatureAndNamespaceGuards(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateProject(ctx(), "dev", "", nil))
+	dev := backend.WithProject(ctx(), "dev")
+
+	// Feature flip on the (non-empty: has an instance) project is refused;
+	// non-feature config edits still pass.
+	require.NoError(t, f.CreateInstance(dev, backend.CreateOptions{Name: "c1", Image: "alpine/edge"}))
+	p, err := f.GetProject(ctx(), "dev")
+	require.NoError(t, err)
+	flipped := maps.Clone(p.Config)
+	flipped["features.images"] = "false"
+	require.ErrorIs(t, f.UpdateProject(ctx(), "dev", "", flipped, p.Version), backend.ErrInvalid)
+	same := maps.Clone(p.Config)
+	same["user.note"] = "ok"
+	require.NoError(t, f.UpdateProject(ctx(), "dev", "", same, p.Version))
+
+	// dev shares default's profiles (features.profiles injected true — but
+	// c1 uses dev's own default profile). A second project owning its
+	// networks can reuse the shared network's name without blocking it.
+	require.NoError(t, f.CreateProject(ctx(), "netty", "", map[string]string{"features.networks": "true"}))
+	netty := backend.WithProject(ctx(), "netty")
+	require.NoError(t, f.CreateNetwork(netty, backend.Network{Name: "incusbr0", Type: "bridge", Managed: true}))
+	// Deleting netty's incusbr0 must not be blocked by default-project
+	// instances attached to the shared incusbr0.
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "attached", Image: "alpine/edge"}))
+	require.NoError(t, f.AddDevice(ctx(), "attached", "eth9", map[string]string{"type": "nic", "network": "incusbr0"}))
+	require.NoError(t, f.DeleteNetwork(netty, "incusbr0"))
+
+	// Publishing a scoped instance stores the image in dev's own space.
+	require.NoError(t, f.StopInstance(dev, "c1"))
+	require.NoError(t, f.PublishImage(dev, "c1", "dev-img"))
+	imgs, err := f.ListLocalImages(dev)
+	require.NoError(t, err)
+	require.Len(t, imgs, 1)
+	defImgs, err := f.ListLocalImages(ctx())
+	require.NoError(t, err)
+	for _, img := range defImgs {
+		assert.NotContains(t, img.Aliases, "dev-img", "published image leaked into default")
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 )
@@ -83,6 +84,14 @@ func (f *Fake) UpdateProject(_ context.Context, name, description string, config
 	if version != "" && version != strconv.Itoa(f.projectVersions[name]) {
 		return conflict("project %q version %s", name, version)
 	}
+	// Incus parity: features cannot change once the project holds resources
+	// (flipping one would re-route existing resources to another namespace).
+	if f.projectFeatureChanged(p.Config, config) {
+		used := slices.DeleteFunc(f.projectUsedBy(name), func(u string) bool { return u == "/1.0/profiles/default" })
+		if len(used) > 0 {
+			return invalid("features can only be changed on empty projects")
+		}
+	}
 	p.Description = description
 	p.Config = maps.Clone(config)
 	f.projects[name] = p
@@ -152,6 +161,29 @@ func (f *Fake) DeleteProject(_ context.Context, name string) error {
 		delete(pool.volumes, name)
 	}
 	return nil
+}
+
+// projectFeatureChanged reports whether any features.* key differs between
+// the configs (missing keys read as "false", matching the daemon's effective
+// view). Callers must hold the mutex.
+func (f *Fake) projectFeatureChanged(oldCfg, newCfg map[string]string) bool {
+	keys := map[string]bool{}
+	for k := range oldCfg {
+		if strings.HasPrefix(k, "features.") {
+			keys[k] = true
+		}
+	}
+	for k := range newCfg {
+		if strings.HasPrefix(k, "features.") {
+			keys[k] = true
+		}
+	}
+	for k := range keys {
+		if (oldCfg[k] == "true") != (newCfg[k] == "true") {
+			return true
+		}
+	}
+	return false
 }
 
 // validProjectName mirrors the daemon's full IsAPIName for projects: the

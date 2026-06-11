@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -23,11 +24,16 @@ func (h handlers) withProject(next http.Handler) http.Handler {
 			return
 		}
 		c, err := r.Cookie(projectCookie)
-		if err != nil || c.Value == "" || c.Value == "default" {
+		if err != nil || c.Value == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
-		if _, err := h.backend.GetProject(r.Context(), c.Value); err != nil {
+		name, err := url.QueryUnescape(c.Value)
+		if err != nil || name == "" || name == "default" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if _, err := h.backend.GetProject(r.Context(), name); err != nil {
 			if errors.Is(err, backend.ErrNotFound) {
 				expireProjectCookie(w)
 				next.ServeHTTP(w, r)
@@ -36,7 +42,7 @@ func (h handlers) withProject(next http.Handler) http.Handler {
 			http.Error(w, err.Error(), statusFor(err))
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(backend.WithProject(r.Context(), c.Value)))
+		next.ServeHTTP(w, r.WithContext(backend.WithProject(r.Context(), name)))
 	})
 }
 
@@ -66,11 +72,14 @@ func (h handlers) selectProject(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// setProjectCookie pins the project selection. No Secure attribute: lxcon
-// routinely serves plain HTTP (dev, LAN), where a Secure cookie silently
-// breaks selection; the value is a non-secret UI preference.
+// setProjectCookie pins the project selection. The name is query-escaped:
+// the daemon allows characters in project names (e.g. ";") that Go silently
+// strips from cookie values, which could otherwise scope requests to a
+// different existing project. No Secure attribute: lxcon routinely serves
+// plain HTTP (dev, LAN), where a Secure cookie silently breaks selection;
+// the value is a non-secret UI preference.
 func setProjectCookie(w http.ResponseWriter, name string) {
-	http.SetCookie(w, &http.Cookie{Name: projectCookie, Value: name, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124: see above.
+	http.SetCookie(w, &http.Cookie{Name: projectCookie, Value: url.QueryEscape(name), Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124: see above.
 }
 
 func expireProjectCookie(w http.ResponseWriter) {

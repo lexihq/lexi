@@ -18,7 +18,7 @@ func (f *Fake) ListProfiles(ctx context.Context) ([]backend.Profile, error) {
 
 	out := make([]backend.Profile, 0, len(sp.profiles))
 	for name := range sp.profiles {
-		out = append(out, profileView(sp, name))
+		out = append(out, f.profileView(ctx, sp, name))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
@@ -32,7 +32,7 @@ func (f *Fake) GetProfile(ctx context.Context, name string) (backend.Profile, er
 	if _, ok := sp.profiles[name]; !ok {
 		return backend.Profile{}, notFoundf("profile %q", name)
 	}
-	p := profileView(sp, name)
+	p := f.profileView(ctx, sp, name)
 	p.Version = strconv.Itoa(sp.profileVersions[name])
 	return p, nil
 }
@@ -92,7 +92,7 @@ func (f *Fake) DeleteProfile(ctx context.Context, name string) error {
 	if name == "default" {
 		return invalid("the default profile cannot be deleted")
 	}
-	for instName, in := range sp.instances {
+	for instName, in := range f.profileUsers(ctx) {
 		if slices.Contains(in.Profiles, name) {
 			return conflict("profile %q is in use by %q", name, instName)
 		}
@@ -126,8 +126,9 @@ func (f *Fake) RenameProfile(ctx context.Context, name, newName string) error {
 	delete(sp.profiles, name)
 	delete(sp.profileVersions, name)
 	// Assigned instances follow the rename, as the daemon's DB-level rename
-	// does (instances reference profiles by ID there).
-	for _, in := range sp.instances {
+	// does (instances reference profiles by ID there) — across every project
+	// sharing this profile namespace.
+	for _, in := range f.profileUsers(ctx) {
 		for i, pn := range in.Profiles {
 			if pn == name {
 				in.Profiles[i] = newName
@@ -135,6 +136,22 @@ func (f *Fake) RenameProfile(ctx context.Context, name, newName string) error {
 		}
 	}
 	return nil
+}
+
+// profileUsers collects the instances of every project whose effective
+// profile namespace is the request's, keyed by instance name — the daemon
+// tracks profile usage across all projects sharing the owner. Callers must
+// hold the mutex.
+func (f *Fake) profileUsers(ctx context.Context) map[string]*instance {
+	owner := f.featureProject(ctx, "features.profiles")
+	out := map[string]*instance{}
+	for project, spc := range f.spaces {
+		if f.featureProjectName(project, "features.profiles") != owner {
+			continue
+		}
+		maps.Copy(out, spc.instances)
+	}
+	return out
 }
 
 func (f *Fake) AddProfileDevice(ctx context.Context, profile, device string, config map[string]string) error {
@@ -199,7 +216,7 @@ func (f *Fake) SetInstanceProfiles(ctx context.Context, name string, profiles []
 	defer f.mu.Unlock()
 	sp := f.featureSpace(ctx, "features.profiles")
 
-	in, ok := sp.instances[name]
+	in, ok := f.space(ctx).instances[name]
 	if !ok {
 		return notFound(name)
 	}
@@ -212,12 +229,12 @@ func (f *Fake) SetInstanceProfiles(ctx context.Context, name string, profiles []
 	return nil
 }
 
-// profileView materializes a profile with a fresh UsedBy from current instances.
-// Callers must hold the mutex.
-func profileView(sp *space, name string) backend.Profile {
+// profileView materializes a profile with a fresh UsedBy from the instances
+// of every project sharing the profile namespace. Callers must hold the mutex.
+func (f *Fake) profileView(ctx context.Context, sp *space, name string) backend.Profile {
 	p := sp.profiles[name]
 	var usedBy []string
-	for instName, in := range sp.instances {
+	for instName, in := range f.profileUsers(ctx) {
 		for _, pn := range in.Profiles {
 			if pn == name {
 				usedBy = append(usedBy, instName)

@@ -47,9 +47,10 @@ func (f *Fake) ListLocalImages(ctx context.Context) ([]backend.LocalImage, error
 func (f *Fake) PublishImage(ctx context.Context, instance, alias string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// The source instance lives in the request's project; the image lands in
+	// the image-owning space (default when features.images is off).
 	sp := f.featureSpace(ctx, "features.images")
-
-	if _, ok := sp.instances[instance]; !ok {
+	if _, ok := f.space(ctx).instances[instance]; !ok {
 		return notFound(instance)
 	}
 	if alias != "" {

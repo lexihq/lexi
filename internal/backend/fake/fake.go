@@ -148,7 +148,13 @@ func (f *Fake) featureSpace(ctx context.Context, feature string) *space {
 // featureProject names the project owning a feature-routed resource kind for
 // this request. Callers must hold the mutex.
 func (f *Fake) featureProject(ctx context.Context, feature string) string {
-	project := projectOf(ctx)
+	return f.featureProjectName(projectOf(ctx), feature)
+}
+
+// featureProjectName is featureProject for an explicit project name; usage
+// scans use it to decide which projects share a resource owner's namespace.
+// Callers must hold the mutex.
+func (f *Fake) featureProjectName(project, feature string) string {
 	if project == "default" || f.projects[project].Config[feature] == "true" {
 		return project
 	}

@@ -209,7 +209,13 @@ func (f *Fake) RenameVolume(ctx context.Context, pool, name, newName string) err
 	// Incus parity: the daemon refuses renaming a volume a running instance
 	// has attached; stopped instances' disk-device references follow the
 	// rename.
-	for _, spc := range f.spaces {
+	// Only projects sharing this volume namespace can reference the volume;
+	// same-named volumes in isolated projects must not block or be rewritten.
+	owner := f.featureProject(ctx, "features.storage.volumes")
+	for project, spc := range f.spaces {
+		if f.featureProjectName(project, "features.storage.volumes") != owner {
+			continue
+		}
 		for instName, in := range spc.instances {
 			for _, dev := range in.devices {
 				if dev["pool"] == pool && dev["source"] == name {
@@ -220,7 +226,10 @@ func (f *Fake) RenameVolume(ctx context.Context, pool, name, newName string) err
 			}
 		}
 	}
-	for _, spc := range f.spaces {
+	for project, spc := range f.spaces {
+		if f.featureProjectName(project, "features.storage.volumes") != owner {
+			continue
+		}
 		for _, in := range spc.instances {
 			for _, dev := range in.devices {
 				if dev["pool"] == pool && dev["source"] == name {

@@ -104,11 +104,14 @@ func (b *incusBackend) CloneInstance(ctx context.Context, src, dst string) error
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	source, _, err := b.project(ctx).GetInstance(src)
+	// The copy source must be the scoped client too: the daemon resolves the
+	// source from its project, not the target's.
+	srv := b.project(ctx)
+	source, _, err := srv.GetInstance(src)
 	if err != nil {
 		return fmt.Errorf("get source instance %q: %w", src, mapErr(err))
 	}
-	op, err := b.project(ctx).CopyInstance(b.srv, *source, &incusclient.InstanceCopyArgs{Name: dst})
+	op, err := srv.CopyInstance(srv, *source, &incusclient.InstanceCopyArgs{Name: dst})
 	if err != nil {
 		return fmt.Errorf("clone %q to %q: %w", src, dst, mapErr(err))
 	}

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"net/url"
+	"time"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
@@ -60,13 +61,13 @@ templ ImagesPage(caps backend.Capabilities, images []backend.LocalImage, instanc
 				</div>
 			</form>
 		</div>
-		@ImagesTable(images)
+		@ImagesTable(caps, images)
 	}
 }
 
 // ImagesTable is the swappable local-image list (re-rendered in place by the
 // copy/publish/delete/alias actions).
-templ ImagesTable(images []backend.LocalImage) {
+templ ImagesTable(caps backend.Capabilities, images []backend.LocalImage) {
 	<div id="images-table">
 		@table.Table() {
 			@table.Header() {
@@ -118,6 +119,12 @@ templ ImagesTable(images []backend.LocalImage) {
 								if img.Public {
 									<span class="rounded bg-accent px-1.5 py-0.5 text-xs">public</span>
 								}
+								if img.AutoUpdate {
+									<span class="rounded bg-accent px-1.5 py-0.5 text-xs">auto-update</span>
+								}
+								if !img.ExpiresAt.IsZero() {
+									<span class="text-xs text-muted-foreground" title="Expires (UTC)">expires { img.ExpiresAt.UTC().Format("2006-01-02") }</span>
+								}
 							</div>
 							<details class="mt-1">
 								<summary class="cursor-pointer text-xs text-muted-foreground">Edit details</summary>
@@ -126,6 +133,15 @@ templ ImagesTable(images []backend.LocalImage) {
 									<label class="flex items-center gap-1.5 text-xs">
 										<input type="checkbox" name="public" checked?={ img.Public }/>
 										Public
+									</label>
+									if img.HasUpdateSource {
+										<label class="flex items-center gap-1.5 text-xs" title="The daemon re-pulls the image when the source updates">
+											<input type="checkbox" name="auto_update" checked?={ img.AutoUpdate }/>
+											Auto-update
+										</label>
+									}
+									<label class="flex items-center gap-1 text-xs text-muted-foreground">
+										<input type="datetime-local" name="expires_at" value={ imageExpiryValue(img.ExpiresAt) } class="h-7 rounded border bg-background px-1 text-xs" title="Expiry in UTC (empty clears)"/> UTC
 									</label>
 									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
 										Save
@@ -144,6 +160,12 @@ templ ImagesTable(images []backend.LocalImage) {
 						}
 						@table.Cell() {
 							<div class="flex gap-2">
+								if caps.ImageRefresh && img.HasUpdateSource {
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/images/" + url.PathEscape(img.Fingerprint) + "/refresh", "hx-target": "#images-table", "hx-swap": "outerHTML"}}) {
+										@icon.Icon("refresh-cw")(icon.Props{Class: "size-4"})
+										Refresh
+									}
+								}
 								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/images/" + url.PathEscape(img.Fingerprint) + "/export", Attributes: templ.Attributes{"hx-boost": "false", "download": ""}}) {
 									@icon.Icon("download")(icon.Props{Class: "size-4"})
 									Export
@@ -168,6 +190,15 @@ templ ImagesTable(images []backend.LocalImage) {
 // travel in the request body rather than the URL).
 func aliasVals(alias string) string {
 	return fmt.Sprintf(`{"alias": %q}`, alias)
+}
+
+// imageExpiryValue renders an expiry for a datetime-local input; zero (never
+// expires) renders empty.
+func imageExpiryValue(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format("2006-01-02T15:04")
 }
 
 // imageLabel names an image for confirmation prompts: first alias, falling

@@ -87,6 +87,9 @@ type Capabilities struct {
 	// "container_backup"): list/create/download/restore/delete without
 	// streaming through the browser.
 	StoredBackups bool
+	// ImageRefresh is on-demand re-pull of images from their update source
+	// (Incus extension "image_force_refresh").
+	ImageRefresh bool
 }
 
 // Instance is a system container or virtual machine.
@@ -465,7 +468,21 @@ type LocalImage struct {
 	SizeBytes   int64
 	Type        string // "container" | "virtual-machine"
 	CreatedAt   time.Time
-	Public      bool // visible to unauthenticated clients
+	Public      bool      // visible to unauthenticated clients
+	AutoUpdate  bool      // daemon re-pulls from the update source
+	ExpiresAt   time.Time // zero means never expires
+	// HasUpdateSource marks images that can refresh (copied from a remote);
+	// locally published or imported images have nothing to re-pull from.
+	HasUpdateSource bool
+}
+
+// ImageEdit is the whole-object image edit: every field is applied (the
+// daemon's ImagePut semantics). Deliberately unversioned — last write wins.
+type ImageEdit struct {
+	Description string
+	Public      bool
+	AutoUpdate  bool
+	ExpiresAt   time.Time // zero clears the expiry
 }
 
 // CreateOptions parameterizes CreateInstance. The zero value of every optional
@@ -736,7 +753,11 @@ type Backend interface {
 	// UpdateImage sets the image's description and public visibility,
 	// preserving its other properties and flags (GET-preserve-PUT; the small
 	// two-field edit is deliberately unversioned — last write wins).
-	UpdateImage(ctx context.Context, fingerprint, description string, public bool) error
+	UpdateImage(ctx context.Context, fingerprint string, edit ImageEdit) error
+	// RefreshImage re-pulls an image from its update source (Incus extension
+	// "image_force_refresh"). An image without one — e.g. published locally —
+	// is ErrInvalid.
+	RefreshImage(ctx context.Context, fingerprint string) error
 
 	// ListOperations returns running and recently finished daemon tasks,
 	// newest first.

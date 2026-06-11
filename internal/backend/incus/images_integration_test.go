@@ -103,7 +103,7 @@ func TestImageUpdateExportImportRoundTrip(t *testing.T) {
 	t.Cleanup(func() { _ = b.DeleteImage(ctx, fingerprint) })
 
 	// Update description + public and read both back.
-	require.NoError(t, b.UpdateImage(ctx, fingerprint, "edited by lxcon", true))
+	require.NoError(t, b.UpdateImage(ctx, fingerprint, backend.ImageEdit{Description: "edited by lxcon", Public: true}))
 	imgs, err = b.ListLocalImages(ctx)
 	require.NoError(t, err)
 	idx := slices.IndexFunc(imgs, func(i backend.LocalImage) bool { return i.Fingerprint == fingerprint })

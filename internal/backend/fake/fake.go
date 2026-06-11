@@ -383,6 +383,7 @@ func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 		Remotes:         true,
 		Migrate:         true,
 		NetworkForwards: true,
+		ImageRefresh:    true,
 		StoredBackups:   true,
 	}
 }

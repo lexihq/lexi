@@ -124,3 +124,33 @@ test("export a split (VM) image as a zip and re-import it", async ({ page }) => 
     await expect(table.getByText("e2e-vm-restored")).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 });
+
+test("image lifecycle: auto-update, expiry, and refresh on a copied image", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
+  await page.goto("/images");
+  const table = page.locator("#images-table");
+
+  // Copy a catalog image so there is an update source to manage.
+  await page.locator('form[hx-post="/images/copy"] input[name="alias"]').fill("alpine/edge");
+  await page.getByRole("button", { name: "Copy", exact: true }).click();
+  const row = table.getByRole("row", { name: /alpine\/edge/ });
+  await expect(row).toBeVisible();
+
+  // Enable auto-update with an expiry via Edit details.
+  await row.getByText("Edit details").click();
+  await row.locator('input[name="auto_update"]').check();
+  await row.locator('input[name="expires_at"]').fill("2027-03-01T00:00");
+  await row.getByRole("button", { name: "Save" }).click();
+  await expect(table.getByRole("row", { name: /alpine\/edge/ }).getByText("auto-update")).toBeVisible();
+  await expect(table.getByRole("row", { name: /alpine\/edge/ }).getByText("expires 2027-03-01")).toBeVisible();
+
+  // Refresh re-pulls from the source (fake logs the operation).
+  await table.getByRole("row", { name: /alpine\/edge/ }).getByRole("button", { name: "Refresh" }).click();
+  await expect(table.getByRole("row", { name: /alpine\/edge/ })).toBeVisible();
+
+  // Clean up for reruns against a reused server.
+  await expect(async () => {
+    await table.getByRole("row", { name: /alpine\/edge/ }).getByRole("button", { name: "Delete" }).click();
+    await expect(table.getByRole("row", { name: /alpine\/edge/ })).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});

@@ -121,14 +121,17 @@ func (b *incusBackend) ListLocalImages(ctx context.Context) ([]backend.LocalImag
 			aliases = append(aliases, al.Name)
 		}
 		out = append(out, backend.LocalImage{
-			Fingerprint: img.Fingerprint,
-			Aliases:     aliases,
-			Description: img.Properties["description"],
-			Arch:        img.Architecture,
-			SizeBytes:   img.Size,
-			Type:        img.Type,
-			CreatedAt:   img.CreatedAt,
-			Public:      img.Public,
+			Fingerprint:     img.Fingerprint,
+			Aliases:         aliases,
+			Description:     img.Properties["description"],
+			Arch:            img.Architecture,
+			SizeBytes:       img.Size,
+			Type:            img.Type,
+			CreatedAt:       img.CreatedAt,
+			Public:          img.Public,
+			AutoUpdate:      img.AutoUpdate,
+			ExpiresAt:       normalizeImageExpiry(img.ExpiresAt),
+			HasUpdateSource: img.UpdateSource != nil,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Fingerprint < out[j].Fingerprint })
@@ -484,7 +487,16 @@ func (b *incusBackend) ImportImage(ctx context.Context, r io.Reader, alias strin
 // UpdateImage sets the description property and the public flag via
 // GET-preserve-PUT with the fresh etag, so AutoUpdate/ExpiresAt/Profiles and
 // the other properties survive (a PUT silently clears omitted fields).
-func (b *incusBackend) UpdateImage(ctx context.Context, fingerprint, description string, public bool) error {
+// normalizeImageExpiry maps the daemon sentinel for "never expires" (epoch
+// or earlier) to the zero time the domain uses.
+func normalizeImageExpiry(t time.Time) time.Time {
+	if t.Unix() <= 0 {
+		return time.Time{}
+	}
+	return t
+}
+
+func (b *incusBackend) UpdateImage(ctx context.Context, fingerprint string, edit backend.ImageEdit) error {
 	img, etag, err := b.project(ctx).GetImage(fingerprint)
 	if err != nil {
 		return fmt.Errorf("get image %q: %w", fingerprint, mapErr(err))
@@ -493,10 +505,25 @@ func (b *incusBackend) UpdateImage(ctx context.Context, fingerprint, description
 	if put.Properties == nil {
 		put.Properties = map[string]string{}
 	}
-	put.Properties["description"] = description
-	put.Public = public
+	put.Properties["description"] = edit.Description
+	put.Public = edit.Public
+	put.AutoUpdate = edit.AutoUpdate
+	put.ExpiresAt = edit.ExpiresAt
 	if err := b.project(ctx).UpdateImage(fingerprint, put, etag); err != nil {
 		return fmt.Errorf("update image %q: %w", fingerprint, mapErr(err))
+	}
+	return nil
+}
+
+// RefreshImage asks the daemon to re-pull the image from its update source;
+// the daemon rejects images without one (mapped to ErrInvalid).
+func (b *incusBackend) RefreshImage(ctx context.Context, fingerprint string) error {
+	op, err := b.project(ctx).RefreshImage(fingerprint)
+	if err != nil {
+		return fmt.Errorf("refresh image %q: %w", fingerprint, mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		return fmt.Errorf("refresh image %q: %w", fingerprint, mapErr(err))
 	}
 	return nil
 }

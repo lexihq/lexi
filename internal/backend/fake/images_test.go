@@ -368,7 +368,7 @@ func TestUpdateImageSetsDescriptionAndPublic(t *testing.T) {
 	imgs := mustLocal(t, b)
 	fp := imgs[0].Fingerprint
 
-	if err := b.UpdateImage(ctx(), fp, "edited", true); err != nil {
+	if err := b.UpdateImage(ctx(), fp, backend.ImageEdit{Description: "edited", Public: true}); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	after := mustLocal(t, b)
@@ -384,7 +384,7 @@ func TestUpdateImageSetsDescriptionAndPublic(t *testing.T) {
 }
 
 func TestUpdateImageGhostIs404(t *testing.T) {
-	err := New().UpdateImage(ctx(), "ghost", "x", false)
+	err := New().UpdateImage(ctx(), "ghost", backend.ImageEdit{Description: "x"})
 	if !errors.Is(err, backend.ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got %v", err)
 	}

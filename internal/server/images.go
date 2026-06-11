@@ -43,7 +43,7 @@ func (h handlers) imageAction(w http.ResponseWriter, r *http.Request, action fun
 			h.fail(w, err)
 			return
 		}
-		h.render(w, r, http.StatusOK, ui.ImagesTable(images))
+		h.render(w, r, http.StatusOK, ui.ImagesTable(h.backend.Capabilities(r.Context()), images))
 		return
 	}
 	http.Redirect(w, r, "/images", http.StatusSeeOther)
@@ -81,17 +81,32 @@ func (h handlers) deleteImage(w http.ResponseWriter, r *http.Request) {
 	h.imageAction(w, r, func() error { return h.backend.DeleteImage(r.Context(), fingerprint) })
 }
 
-// updateImage applies the per-image details form: description and the public
-// visibility flag.
+// updateImage applies the per-image details form: description, the public
+// visibility flag, auto-update, and expiry.
 func (h handlers) updateImage(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	fingerprint := r.PathValue("fingerprint")
-	description := strings.TrimSpace(r.Form.Get("description"))
-	public := r.Form.Get("public") != ""
-	h.imageAction(w, r, func() error { return h.backend.UpdateImage(r.Context(), fingerprint, description, public) })
+	expiresAt, err := parseSnapshotExpiry(r.Form.Get("expires_at"))
+	if err != nil {
+		h.fail(w, err)
+		return
+	}
+	edit := backend.ImageEdit{
+		Description: strings.TrimSpace(r.Form.Get("description")),
+		Public:      r.Form.Get("public") != "",
+		AutoUpdate:  r.Form.Get("auto_update") != "",
+		ExpiresAt:   expiresAt,
+	}
+	h.imageAction(w, r, func() error { return h.backend.UpdateImage(r.Context(), fingerprint, edit) })
+}
+
+// refreshImage re-pulls an image from its update source.
+func (h handlers) refreshImage(w http.ResponseWriter, r *http.Request) {
+	fingerprint := r.PathValue("fingerprint")
+	h.imageAction(w, r, func() error { return h.backend.RefreshImage(r.Context(), fingerprint) })
 }
 
 // exportImage streams an image as a file download: a tarball for unified

@@ -87,13 +87,14 @@ func (f *Fake) CopyImage(ctx context.Context, alias string) error {
 			return conflict("image %q", c.Fingerprint)
 		}
 		sp.images[c.Fingerprint] = &backend.LocalImage{
-			Fingerprint: c.Fingerprint,
-			Aliases:     []string{c.Alias},
-			Description: c.Description,
-			Arch:        c.Arch,
-			SizeBytes:   c.SizeBytes,
-			Type:        c.Type,
-			CreatedAt:   f.now(),
+			Fingerprint:     c.Fingerprint,
+			Aliases:         []string{c.Alias},
+			Description:     c.Description,
+			Arch:            c.Arch,
+			SizeBytes:       c.SizeBytes,
+			Type:            c.Type,
+			HasUpdateSource: true,
+			CreatedAt:       f.now(),
 		}
 		f.logOp(sp, fmt.Sprintf("Copying image %q", alias))
 		return nil
@@ -310,7 +311,7 @@ func parseFakeImageBlob(blob []byte) (fingerprint, imgType string, err error) {
 }
 
 // UpdateImage sets the image's description and public flag.
-func (f *Fake) UpdateImage(ctx context.Context, fingerprint, description string, public bool) error {
+func (f *Fake) UpdateImage(ctx context.Context, fingerprint string, edit backend.ImageEdit) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.featureSpace(ctx, "features.images")
@@ -319,8 +320,28 @@ func (f *Fake) UpdateImage(ctx context.Context, fingerprint, description string,
 	if !ok {
 		return notFoundf("image %q", fingerprint)
 	}
-	img.Description = description
-	img.Public = public
+	img.Description = edit.Description
+	img.Public = edit.Public
+	img.AutoUpdate = edit.AutoUpdate
+	img.ExpiresAt = edit.ExpiresAt
+	return nil
+}
+
+// RefreshImage re-pulls an image from its update source; the fake just logs
+// the operation. Locally published or imported images have no source.
+func (f *Fake) RefreshImage(ctx context.Context, fingerprint string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	sp := f.featureSpace(ctx, "features.images")
+
+	img, ok := sp.images[fingerprint]
+	if !ok {
+		return notFoundf("image %q", fingerprint)
+	}
+	if !img.HasUpdateSource {
+		return invalid("image %q has no update source to refresh from", fingerprint)
+	}
+	f.logOp(f.space(ctx), fmt.Sprintf("Refreshing image %q", fingerprint))
 	return nil
 }
 

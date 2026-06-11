@@ -45,6 +45,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("GET /images/{fingerprint}/export", h.exportImage)
 	mux.HandleFunc("POST /images/{fingerprint}/config", h.updateImage)
 	mux.HandleFunc("POST /images/{fingerprint}/delete", h.deleteImage)
+	mux.HandleFunc("POST /images/{fingerprint}/refresh", h.refreshImage)
 	mux.HandleFunc("POST /images/{fingerprint}/aliases", h.addImageAlias)
 	mux.HandleFunc("POST /images/aliases/delete", h.removeImageAlias)
 	mux.HandleFunc("GET /profiles", h.profiles)

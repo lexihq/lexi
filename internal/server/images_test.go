@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -240,4 +241,33 @@ func TestImportSplitImageRoundTrip(t *testing.T) {
 	res := importImageRequest(t, srv, export.Body.String(), "restored-vm")
 	assertStatus(t, res, http.StatusSeeOther)
 	assert.Contains(t, localAliases(t, b), "restored-vm")
+}
+
+func TestUpdateImageLifecycleFieldsAndRefresh(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CopyImage(context.Background(), "ubuntu/24.04"))
+	imgs, err := b.ListLocalImages(context.Background())
+	require.NoError(t, err)
+	var fp string
+	for _, img := range imgs {
+		if img.HasUpdateSource {
+			fp = img.Fingerprint
+		}
+	}
+	require.NotEmpty(t, fp)
+	srv := New(b)
+
+	res := formRequest(t, srv, "/images/"+fp+"/config", url.Values{
+		"description": {"lts"}, "auto_update": {"on"}, "expires_at": {"2027-03-01T00:00"},
+	}, true)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "auto-update")
+	assert.Contains(t, res.Body.String(), "expires 2027-03-01")
+
+	res = formRequest(t, srv, "/images/"+fp+"/refresh", url.Values{}, true)
+	assertStatus(t, res, http.StatusOK)
+
+	// A published-style image (the seeded one) has no source: refresh 400s.
+	res = formRequest(t, srv, "/images/fake-debian-12-aarch64/refresh", url.Values{}, true)
+	assertStatus(t, res, http.StatusBadRequest)
 }

@@ -390,7 +390,7 @@ func TestImagesPageRendersFormsAndTable(t *testing.T) {
 }
 
 func TestImagesTableEmptyState(t *testing.T) {
-	html := render(t, ImagesTable(nil))
+	html := render(t, ImagesTable(testCaps(), nil))
 	assertContains(t, html, "No local images yet")
 }
 
@@ -830,4 +830,26 @@ func TestBackupsPanelRendersRows(t *testing.T) {
 
 	empty := render(t, BackupsPanel("demo", nil))
 	assertContains(t, empty, "No backups yet")
+}
+
+func TestImageRowLifecycleControls(t *testing.T) {
+	caps := testCaps()
+	caps.ImageRefresh = true
+	withSource := []backend.LocalImage{{Fingerprint: "abc123def456", Aliases: []string{"debian/12"}, AutoUpdate: true, HasUpdateSource: true, ExpiresAt: time.Date(2027, time.March, 1, 0, 0, 0, 0, time.UTC)}}
+	html := render(t, ImagesTable(caps, withSource))
+	assertContains(t, html, "auto-update")
+	assertContains(t, html, "expires 2027-03-01")
+	assertContains(t, html, `hx-post="/images/abc123def456/refresh"`)
+	assertContains(t, html, `name="auto_update"`)
+
+	// Published images have no update source: no refresh, no auto-update box.
+	published := []backend.LocalImage{{Fingerprint: "abc123def456", Aliases: []string{"web"}}}
+	html = render(t, ImagesTable(caps, published))
+	assertNotContains(t, html, "/refresh")
+	assertNotContains(t, html, `name="auto_update"`)
+
+	// Capability off hides refresh even with a source.
+	caps.ImageRefresh = false
+	html = render(t, ImagesTable(caps, withSource))
+	assertNotContains(t, html, "/refresh")
 }

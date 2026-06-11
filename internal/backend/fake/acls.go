@@ -2,6 +2,7 @@ package fake
 
 import (
 	"context"
+	"maps"
 	"slices"
 	"sort"
 	"strconv"
@@ -121,7 +122,9 @@ func (f *Fake) aclView(name string) backend.NetworkACL {
 
 // aclUsedBy lists API paths of networks, instances, and profiles referencing
 // the ACL via security.acls (network config or NIC device config), mirroring
-// the daemon's UsedBy. Callers must hold the mutex.
+// the daemon's UsedBy: instances are scanned with profile-expanded devices,
+// only nics bound to a network count, and every matching NIC appends its
+// owner's path (no dedup). Callers must hold the mutex.
 func (f *Fake) aclUsedBy(name string) []string {
 	var used []string
 	for netName, n := range f.networks {
@@ -130,12 +133,12 @@ func (f *Fake) aclUsedBy(name string) []string {
 		}
 	}
 	for instName, inst := range f.instances {
-		if devicesReferenceACL(inst.devices, name) {
+		for range aclNICMatches(f.expandedDevices(inst), name) {
 			used = append(used, "/1.0/instances/"+instName)
 		}
 	}
 	for profName, p := range f.profiles {
-		if devicesReferenceACL(p.Devices, name) {
+		for range aclNICMatches(p.Devices, name) {
 			used = append(used, "/1.0/profiles/"+profName)
 		}
 	}
@@ -143,15 +146,31 @@ func (f *Fake) aclUsedBy(name string) []string {
 	return used
 }
 
-// devicesReferenceACL reports whether any nic device lists the ACL in its
-// security.acls config.
-func devicesReferenceACL(devices map[string]map[string]string, name string) bool {
-	for _, dev := range devices {
-		if dev["type"] == "nic" && slices.Contains(splitCommaList(dev["security.acls"]), name) {
-			return true
+// expandedDevices merges the instance's profile devices (in profile order)
+// under its local devices (locals shadow by device name), mirroring the
+// daemon's ExpandInstanceDevices. Callers must hold the mutex.
+func (f *Fake) expandedDevices(inst *instance) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	for _, profName := range inst.Profiles {
+		maps.Copy(out, f.profiles[profName].Devices)
+	}
+	maps.Copy(out, inst.devices)
+	return out
+}
+
+// aclNICMatches lists the devices that count as ACL usage: nics bound to a
+// network whose security.acls lists the ACL (daemon's isInUseByDevice).
+func aclNICMatches(devices map[string]map[string]string, name string) []string {
+	var matched []string
+	for dn, dev := range devices {
+		if dev["type"] != "nic" || dev["network"] == "" {
+			continue
+		}
+		if slices.Contains(splitCommaList(dev["security.acls"]), name) {
+			matched = append(matched, dn)
 		}
 	}
-	return false
+	return matched
 }
 
 // validACLName mirrors the daemon's acl.ValidName: an API name that does not

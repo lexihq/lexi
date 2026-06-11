@@ -85,7 +85,7 @@ func TestNetworkACLNICAttachmentGuardsDelete(t *testing.T) {
 	if err := b.AddProfileDevice(ctx, profName, "eth0", map[string]string{
 		"type": "nic", "network": netName, "security.acls": aclName,
 	}); err != nil {
-		if strings.Contains(err.Error(), "nftables") {
+		if strings.Contains(err.Error(), "Security ACLs are only supported when using nftables firewall") {
 			t.Skipf("NIC ACLs unsupported on this host (ok): %v", err)
 		}
 		t.Fatalf("add profile nic with security.acls: %v", err)

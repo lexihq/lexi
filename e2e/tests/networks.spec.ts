@@ -80,11 +80,14 @@ test("network ACLs: attach to an instance NIC, in-use guard, detach", async ({ p
   await expect(page.getByText(/In use by 1 object/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Delete", exact: true })).toBeDisabled();
 
-  // Detach (remove the device), then the delete goes through.
+  // Detach (remove the device), then the delete goes through. Scope the
+  // Remove click to the aclnic row: reused dev servers can carry leftover
+  // devices from interrupted runs, and demo must keep its other devices.
   await page.goto("/instances/demo");
   await page.getByRole("link", { name: "Devices" }).click();
+  const aclnicRow = devices.locator("div.flex.items-start", { hasText: "aclnic" });
   await expect(async () => {
-    await devices.getByRole("button", { name: "Remove" }).click();
+    await aclnicRow.getByRole("button", { name: "Remove" }).click();
     await expect(devices.getByText("aclnic", { exact: true })).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 

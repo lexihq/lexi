@@ -59,28 +59,52 @@ func TestNetworkACLUsedByIncludesNICAttachments(t *testing.T) {
 	require.NoError(t, f.CreateNetworkACL(ctx(), "web", ""))
 
 	// Attach via an instance NIC device and a profile NIC device; both count
-	// as users, like the daemon's UsedBy.
-	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "c1", Image: "alpine/edge"}))
+	// as users, like the daemon's UsedBy. c1 carries the gpu profile so the
+	// profile attachment also shows up as the instance (the daemon scans
+	// profile-expanded devices).
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "c1", Image: "alpine/edge", Profiles: []string{"gpu"}}))
 	require.NoError(t, f.AddDevice(ctx(), "c1", "eth1", map[string]string{
 		"type": "nic", "network": "incusbr0", "security.acls": "web,other",
 	}))
-	require.NoError(t, f.AddProfileDevice(ctx(), "gpu", "eth1", map[string]string{
+	require.NoError(t, f.AddProfileDevice(ctx(), "gpu", "eth9", map[string]string{
 		"type": "nic", "network": "incusbr0", "security.acls": "web",
 	}))
 
 	acl, err := f.GetNetworkACL(ctx(), "web")
 	require.NoError(t, err)
-	assert.Contains(t, acl.UsedBy, "/1.0/instances/c1")
 	assert.Contains(t, acl.UsedBy, "/1.0/profiles/gpu")
+	// Two matching NICs in c1's expanded devices (local eth1 + inherited
+	// eth9) → the instance appears once per NIC, daemon parity (no dedup).
+	assert.Equal(t, 2, countOf(acl.UsedBy, "/1.0/instances/c1"))
+
+	// A nic without a managed-network reference does not count as usage,
+	// like the daemon's isInUseByDevice.
+	require.NoError(t, f.AddDevice(ctx(), "c1", "ethx", map[string]string{
+		"type": "nic", "security.acls": "web",
+	}))
+	got, err := f.GetNetworkACL(ctx(), "web")
+	require.NoError(t, err)
+	assert.Equal(t, 2, countOf(got.UsedBy, "/1.0/instances/c1"))
 
 	// NIC attachments block rename and delete, mirroring network attachments.
 	require.ErrorIs(t, f.RenameNetworkACL(ctx(), "web", "web2"), backend.ErrConflict)
 	require.ErrorIs(t, f.DeleteNetworkACL(ctx(), "web"), backend.ErrConflict)
 
-	// Detaching both frees the ACL.
+	// Detaching everywhere frees the ACL.
 	require.NoError(t, f.RemoveDevice(ctx(), "c1", "eth1"))
-	require.NoError(t, f.RemoveProfileDevice(ctx(), "gpu", "eth1"))
+	require.NoError(t, f.RemoveDevice(ctx(), "c1", "ethx"))
+	require.NoError(t, f.RemoveProfileDevice(ctx(), "gpu", "eth9"))
 	require.NoError(t, f.DeleteNetworkACL(ctx(), "web"))
+}
+
+func countOf(list []string, want string) int {
+	n := 0
+	for _, s := range list {
+		if s == want {
+			n++
+		}
+	}
+	return n
 }
 
 func TestNetworkACLDeleteRefusedWhenReferenced(t *testing.T) {

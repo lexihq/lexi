@@ -113,7 +113,11 @@ func mapErr(err error) error {
 	case strings.Contains(msg, "not found"):
 		return fmt.Errorf("%w: %w", backend.ErrNotFound, err)
 	case strings.Contains(msg, "already exists"),
-		strings.Contains(msg, "precondition failed"):
+		strings.Contains(msg, "precondition failed"),
+		// The daemon skips an existence pre-check on some create paths
+		// (projects, raced volume imports) and surfaces the database
+		// constraint directly.
+		strings.Contains(msg, "unique constraint failed"):
 		return fmt.Errorf("%w: %w", backend.ErrConflict, err)
 	case strings.Contains(msg, "bad request"),
 		strings.Contains(msg, "invalid value"),

@@ -357,12 +357,9 @@ func (b *incusBackend) ImportVolume(ctx context.Context, pool, volume string, r 
 				slog.Warn("cancel volume import operation", "pool", pool, "volume", volume, "err", cancelErr)
 			}
 		}
-		// Two concurrent imports of the same new name can both pass the
-		// daemon's existence pre-check; the loser fails on the database
-		// unique constraint, whose message lacks "already exists".
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			return fmt.Errorf("import volume %q/%q: %w: %w", pool, volume, backend.ErrConflict, err)
-		}
+		// A concurrent same-name import race loses on the database unique
+		// constraint, whose message lacks "already exists"; mapErr turns it
+		// into ErrConflict.
 		return fmt.Errorf("import volume %q/%q: %w", pool, volume, mapErr(err))
 	}
 	return nil

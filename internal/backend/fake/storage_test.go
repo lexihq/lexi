@@ -266,3 +266,33 @@ func TestVolumeSnapshotRenameAndExpiry(t *testing.T) {
 	// Incus parity: a malformed target name is rejected before the daemon op.
 	require.ErrorIs(t, f.RenameVolumeSnapshot(ctx(), "default", "vol1", "snap1", "bad name"), backend.ErrInvalid)
 }
+
+func TestVolumeExportImportRoundTrip(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{
+		Name: "vol-x", Description: "scratch data", Config: map[string]string{"size": "1GiB"},
+	}))
+
+	var buf strings.Builder
+	require.NoError(t, f.ExportVolume(ctx(), "default", "vol-x", &buf))
+	require.NotEmpty(t, buf.String())
+
+	// Ghosts are not found.
+	require.ErrorIs(t, f.ExportVolume(ctx(), "default", "ghost", &strings.Builder{}), backend.ErrNotFound)
+	require.ErrorIs(t, f.ExportVolume(ctx(), "ghost", "vol-x", &strings.Builder{}), backend.ErrNotFound)
+
+	// Import collides with the existing volume, succeeds after delete, and
+	// recovers description + config so the round-trip is observable.
+	require.ErrorIs(t, f.ImportVolume(ctx(), "default", "vol-x", strings.NewReader(buf.String())), backend.ErrConflict)
+	require.NoError(t, f.DeleteVolume(ctx(), "default", "vol-x"))
+	require.NoError(t, f.ImportVolume(ctx(), "default", "vol-x", strings.NewReader(buf.String())))
+
+	got, err := f.GetVolume(ctx(), "default", "vol-x")
+	require.NoError(t, err)
+	assert.Equal(t, "scratch data", got.Description)
+	assert.Equal(t, "1GiB", got.Config["size"])
+
+	// Foreign blobs are invalid; ghost target pools are not found.
+	require.ErrorIs(t, f.ImportVolume(ctx(), "default", "other", strings.NewReader("garbage")), backend.ErrInvalid)
+	require.ErrorIs(t, f.ImportVolume(ctx(), "ghost", "other", strings.NewReader(buf.String())), backend.ErrNotFound)
+}

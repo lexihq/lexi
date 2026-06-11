@@ -1,6 +1,8 @@
 package incus
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -94,4 +96,33 @@ func TestDeleteVolumeSnapshotCallsThrough(t *testing.T) {
 	b := &incusBackend{srv: s}
 	require.NoError(t, b.DeleteVolumeSnapshot(t.Context(), "default", "vol1", "snap0"))
 	assert.Equal(t, "snap0", s.deletedSnap)
+}
+
+func TestExportVolumeStreamsBackupThenDeletesIt(t *testing.T) {
+	s := &instanceServerStub{
+		volBackupOp:       &operationStub{},
+		volBackupDeleteOp: &operationStub{},
+		volBackupBytes:    []byte("volume-tarball-bytes"),
+	}
+	b := &incusBackend{srv: s}
+
+	var buf bytes.Buffer
+	require.NoError(t, b.ExportVolume(t.Context(), "default", "vol1", &buf))
+
+	assert.Equal(t, "volume-tarball-bytes", buf.String(), "spooled backup should stream to the writer")
+	require.NotNil(t, s.createdVolBackup)
+	assert.Equal(t, "gzip", s.createdVolBackup.CompressionAlgorithm)
+	require.NotNil(t, s.volBackupRequest.Canceler, "backup download should be cancelable")
+	assert.Equal(t, s.createdVolBackup.Name, s.deletedVolBackup, "the temporary backup should be deleted afterwards")
+}
+
+func TestImportVolumeCreatesFromBackup(t *testing.T) {
+	s := &instanceServerStub{volImportOp: &operationStub{}}
+	b := &incusBackend{srv: s}
+
+	require.NoError(t, b.ImportVolume(t.Context(), "default", "restored", strings.NewReader("tarball-bytes")))
+
+	require.NotNil(t, s.volImportArgs)
+	assert.Equal(t, "restored", s.volImportArgs.Name, "destination volume name should be passed through")
+	assert.Equal(t, "tarball-bytes", string(s.volImportedBytes), "the reader should stream to the backup file")
 }

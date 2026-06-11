@@ -80,6 +80,7 @@ func New() (*incusBackend, error) {
 			FileMkdir:       srv.HasExtension("directory_manipulation"),
 			ServerAdmin:     true,
 			NetworkACLs:     srv.HasExtension("network_acl"),
+			VolumeBackups:   srv.HasExtension("custom_volume_backup") && srv.HasExtension("backup_override_name"),
 		},
 		cpuSamples: make(map[string]cpuSample),
 	}, nil

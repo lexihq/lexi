@@ -63,6 +63,10 @@ type Capabilities struct {
 	ServerAdmin bool
 	// NetworkACLs is network ACL management (Incus extension "network_acl").
 	NetworkACLs bool
+	// VolumeBackups is custom-volume export/import (Incus extensions
+	// "custom_volume_backup" + "backup_override_name" — the import names the
+	// new volume, which needs the override).
+	VolumeBackups bool
 }
 
 // Instance is a system container or virtual machine.
@@ -491,6 +495,14 @@ type Backend interface {
 	// time clears it.
 	UpdateVolumeSnapshotExpiry(ctx context.Context, pool, volume, snapshot string, expiresAt time.Time) error
 	DeleteVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error
+
+	// ExportVolume streams a portable backup tarball of the custom volume
+	// (snapshots included) to w.
+	ExportVolume(ctx context.Context, pool, volume string, w io.Writer) error
+	// ImportVolume creates custom volume volume in pool from a backup tarball
+	// read from r (as produced by ExportVolume). The name must be free
+	// (ErrConflict) and the pool must exist (ErrNotFound).
+	ImportVolume(ctx context.Context, pool, volume string, r io.Reader) error
 
 	// ExportInstance streams a portable backup tarball of the instance to w.
 	ExportInstance(ctx context.Context, name string, w io.Writer) error

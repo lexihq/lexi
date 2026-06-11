@@ -175,6 +175,7 @@ func (f *Fake) Capabilities() backend.Capabilities {
 		FileMkdir:       true,
 		ServerAdmin:     true,
 		NetworkACLs:     true,
+		VolumeBackups:   true,
 	}
 }
 

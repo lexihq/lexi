@@ -2,6 +2,9 @@ package fake
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"maps"
 	"slices"
 	"sort"
@@ -258,6 +261,70 @@ func (f *Fake) DeleteVolume(_ context.Context, pool, name string) error {
 		return notFoundf("volume %q", name)
 	}
 	delete(p.volumes, name)
+	return nil
+}
+
+// fakeVolumeBackupMagic prefixes the blob ExportVolume writes so ImportVolume
+// can recognize a lxcon-produced volume backup, mirroring fakeBackupMagic.
+const fakeVolumeBackupMagic = "lxcon-fake-volume-backup\n"
+
+// volumeBackupBlob is the JSON payload after the magic: just enough state to
+// make the export→import round-trip observable in tests.
+type volumeBackupBlob struct {
+	Description string            `json:"description"`
+	Config      map[string]string `json:"config"`
+}
+
+func (f *Fake) ExportVolume(_ context.Context, pool, volume string, w io.Writer) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	p, ok := f.pools[pool]
+	if !ok {
+		return notFoundf("storage pool %q", pool)
+	}
+	v, ok := p.volumes[volume]
+	if !ok {
+		return notFoundf("volume %q", volume)
+	}
+	payload, err := json.Marshal(volumeBackupBlob{Description: v.Description, Config: v.Config})
+	if err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, fakeVolumeBackupMagic+string(payload))
+	return err
+}
+
+func (f *Fake) ImportVolume(_ context.Context, pool, volume string, r io.Reader) error {
+	blob, err := io.ReadAll(r)
+	if err != nil {
+		return err
+	}
+	payload, ok := strings.CutPrefix(string(blob), fakeVolumeBackupMagic)
+	if !ok {
+		return fmt.Errorf("not a lxcon volume backup: %w", backend.ErrInvalid)
+	}
+	var vb volumeBackupBlob
+	if err := json.Unmarshal([]byte(payload), &vb); err != nil {
+		return fmt.Errorf("corrupt volume backup: %w", backend.ErrInvalid)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	p, ok := f.pools[pool]
+	if !ok {
+		return notFoundf("storage pool %q", pool)
+	}
+	if _, ok := p.volumes[volume]; ok {
+		return conflict("volume %q already exists", volume)
+	}
+	p.volumes[volume] = &storageVolume{
+		StorageVolume: backend.StorageVolume{
+			Name: volume, Type: "custom", ContentType: "filesystem",
+			Pool: pool, Description: vb.Description, Config: maps.Clone(vb.Config),
+		},
+	}
 	return nil
 }
 

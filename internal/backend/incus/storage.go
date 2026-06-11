@@ -2,12 +2,18 @@ package incus
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/adam/lxcon/internal/backend"
+	incusclient "github.com/lxc/incus/v6/client"
 	"github.com/lxc/incus/v6/shared/api"
+	"github.com/lxc/incus/v6/shared/cancel"
 )
 
 func (b *incusBackend) ListStoragePools(_ context.Context) ([]backend.StoragePool, error) {
@@ -257,4 +263,105 @@ func toVolumeSnapshot(s *api.StorageVolumeSnapshot) backend.StorageVolumeSnapsho
 		out.ExpiresAt = *s.ExpiresAt
 	}
 	return out
+}
+
+// ExportVolume creates a server-side volume backup, spools it to a temp file
+// (the client API needs an io.WriteSeeker), then streams it to w — the same
+// flow as ExportInstance, one level down. The temporary backup is removed via
+// deferred best-effort cleanup on every path.
+func (b *incusBackend) ExportVolume(ctx context.Context, pool, volume string, w io.Writer) error {
+	backupName := fmt.Sprintf("lxcon-export-%d", time.Now().UnixNano())
+
+	op, err := b.srv.CreateStorageVolumeBackup(pool, volume, api.StorageVolumeBackupsPost{
+		Name:                 backupName,
+		CompressionAlgorithm: "gzip",
+	})
+	if err != nil {
+		return fmt.Errorf("create backup of volume %q/%q: %w", pool, volume, mapErr(err))
+	}
+	// Once the operation exists, clean up on every return path; a missing
+	// backup is a no-op inside deleteVolumeBackup.
+	defer b.deleteVolumeBackup(pool, volume, backupName)
+	if err := op.WaitContext(ctx); err != nil {
+		// A canceled wait leaves the server operation running; cancel it so
+		// the backup does not finish and leak after we have given up.
+		if ctx.Err() != nil {
+			if cancelErr := op.Cancel(); cancelErr != nil {
+				slog.Warn("cancel volume backup operation", "pool", pool, "volume", volume, "err", cancelErr)
+			}
+		}
+		return fmt.Errorf("create backup of volume %q/%q: %w", pool, volume, mapErr(err))
+	}
+
+	tmp, err := os.CreateTemp("", "lxcon-volume-export-*.tar.gz")
+	if err != nil {
+		return fmt.Errorf("spool backup of volume %q/%q: %w", pool, volume, err)
+	}
+	defer cleanupExportTemp(tmp)
+
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	canceler := cancel.NewHTTPRequestCanceller()
+	stopCancel := context.AfterFunc(ctx, func() {
+		if err := canceler.Cancel(); err != nil && canceler.Cancelable() {
+			slog.Warn("cancel volume backup download", "pool", pool, "volume", volume, "err", err)
+		}
+	})
+	defer stopCancel()
+
+	if _, err := b.srv.GetStorageVolumeBackupFile(pool, volume, backupName, &incusclient.BackupFileRequest{
+		BackupFile: contextWriteSeeker{ctx: ctx, WriteSeeker: tmp},
+		Canceler:   canceler,
+	}); err != nil {
+		return fmt.Errorf("download backup of volume %q/%q: %w", pool, volume, mapErr(err))
+	}
+	if _, err := tmp.Seek(0, io.SeekStart); err != nil {
+		return fmt.Errorf("rewind backup of volume %q/%q: %w", pool, volume, err)
+	}
+	if _, err := io.Copy(w, tmp); err != nil {
+		return fmt.Errorf("stream backup of volume %q/%q: %w", pool, volume, err)
+	}
+	return nil
+}
+
+// ImportVolume creates custom volume volume in pool from a backup tarball
+// streamed from r (as produced by ExportVolume). Naming the new volume needs
+// the daemon's backup_override_name extension (gated by caps.VolumeBackups).
+func (b *incusBackend) ImportVolume(ctx context.Context, pool, volume string, r io.Reader) error {
+	op, err := b.srv.CreateStoragePoolVolumeFromBackup(pool, incusclient.StorageVolumeBackupArgs{
+		BackupFile: contextReader{ctx: ctx, Reader: r},
+		Name:       volume,
+	})
+	if err != nil {
+		return fmt.Errorf("import volume %q/%q: %w", pool, volume, mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		if ctx.Err() != nil {
+			if cancelErr := op.Cancel(); cancelErr != nil {
+				slog.Warn("cancel volume import operation", "pool", pool, "volume", volume, "err", cancelErr)
+			}
+		}
+		return fmt.Errorf("import volume %q/%q: %w", pool, volume, mapErr(err))
+	}
+	return nil
+}
+
+// deleteVolumeBackup removes the temporary server-side backup created during
+// export — deleteBackup's volume sibling: best-effort, detached context,
+// log-only (a failure cannot change the already-streamed result).
+func (b *incusBackend) deleteVolumeBackup(pool, volume, backupName string) {
+	ctx, cancel := context.WithTimeout(context.Background(), backupDeleteTimeout)
+	defer cancel()
+
+	op, err := b.srv.DeleteStorageVolumeBackup(pool, volume, backupName)
+	if err != nil {
+		if !errors.Is(mapErr(err), backend.ErrNotFound) {
+			slog.Warn("delete volume export backup", "backup", backupName, "pool", pool, "volume", volume, "err", err)
+		}
+		return
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		slog.Warn("await deletion of volume export backup", "backup", backupName, "pool", pool, "volume", volume, "err", err)
+	}
 }

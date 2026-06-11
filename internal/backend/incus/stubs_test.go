@@ -57,6 +57,16 @@ type instanceServerStub struct {
 	createdVol *api.StorageVolumesPost // captured by CreateStoragePoolVolume
 	deletedVol [3]string               // pool/volType/name captured by DeleteStoragePoolVolume
 
+	volBackupOp       incusclient.Operation                // returned by CreateStorageVolumeBackup
+	volBackupDeleteOp incusclient.Operation                // returned by DeleteStorageVolumeBackup
+	volBackupBytes    []byte                               // written by GetStorageVolumeBackupFile
+	volBackupRequest  *incusclient.BackupFileRequest       // captured by GetStorageVolumeBackupFile
+	createdVolBackup  *api.StorageVolumeBackupsPost        // captured by CreateStorageVolumeBackup
+	deletedVolBackup  string                               // captured by DeleteStorageVolumeBackup
+	volImportArgs     *incusclient.StorageVolumeBackupArgs // captured by CreateStoragePoolVolumeFromBackup
+	volImportOp       incusclient.Operation                // returned by CreateStoragePoolVolumeFromBackup
+	volImportedBytes  []byte                               // drained from the import reader
+
 	volumeSnapshots []api.StorageVolumeSnapshot // returned by GetStoragePoolVolumeSnapshots
 	createdSnap     string                      // name captured by CreateStoragePoolVolumeSnapshot
 	deletedSnap     string                      // name captured by DeleteStoragePoolVolumeSnapshot
@@ -334,6 +344,34 @@ func (s *instanceServerStub) GetInstanceBackupFile(_ string, name string, req *i
 func (s *instanceServerStub) DeleteInstanceBackup(_ string, name string) (incusclient.Operation, error) {
 	s.deletedBackup = name
 	return s.backupDeleteOp, nil
+}
+
+func (s *instanceServerStub) CreateStorageVolumeBackup(_ string, _ string, backup api.StorageVolumeBackupsPost) (incusclient.Operation, error) {
+	s.createdVolBackup = &backup
+	return s.volBackupOp, nil
+}
+
+func (s *instanceServerStub) GetStorageVolumeBackupFile(_ string, _ string, _ string, req *incusclient.BackupFileRequest) (*incusclient.BackupFileResponse, error) {
+	s.volBackupRequest = req
+	if _, err := req.BackupFile.Write(s.volBackupBytes); err != nil {
+		return nil, err
+	}
+	return &incusclient.BackupFileResponse{Size: int64(len(s.volBackupBytes))}, nil
+}
+
+func (s *instanceServerStub) DeleteStorageVolumeBackup(_ string, _ string, name string) (incusclient.Operation, error) {
+	s.deletedVolBackup = name
+	return s.volBackupDeleteOp, nil
+}
+
+func (s *instanceServerStub) CreateStoragePoolVolumeFromBackup(_ string, args incusclient.StorageVolumeBackupArgs) (incusclient.Operation, error) {
+	s.volImportArgs = &args
+	var err error
+	s.volImportedBytes, err = io.ReadAll(args.BackupFile)
+	if err != nil {
+		return nil, err
+	}
+	return s.volImportOp, nil
 }
 
 func (s *instanceServerStub) CreateInstanceFromBackup(args incusclient.InstanceBackupArgs) (incusclient.Operation, error) {

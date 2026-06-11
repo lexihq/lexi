@@ -637,3 +637,22 @@ func TestProfileDetailEscapesNameInActionURLs(t *testing.T) {
 	assertContains(t, html, `action="/profiles/a%23b/config"`)
 	assertContains(t, html, `action="/profiles/a%23b/delete"`)
 }
+
+func TestListPagesRenderEmptyStates(t *testing.T) {
+	cases := []struct {
+		name string
+		page templ.Component
+		want string
+	}{
+		{"instances", InstancesPage(testCaps(), nil, nil), "No instances yet"},
+		{"projects", ProjectsPage(testCaps(), nil, "default"), "No projects yet"},
+		{"networks", NetworksPage(testCaps(), nil), "No networks yet"},
+		{"storage", StoragePoolsPage(testCaps(), nil), "No storage pools yet"},
+		{"profiles", ProfilesPage(testCaps(), nil), "No profiles yet"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertContains(t, render(t, tc.page), tc.want)
+		})
+	}
+}

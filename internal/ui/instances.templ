@@ -54,6 +54,13 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, poo
 				}
 			}
 			@table.Body() {
+				if len(instances) == 0 {
+					@table.Row() {
+						@table.Cell(table.CellProps{Attributes: templ.Attributes{"colspan": "5"}}) {
+							<span class="text-muted-foreground">No instances yet — create one to get started.</span>
+						}
+					}
+				}
 				for _, inst := range instances {
 					@InstanceRow(caps, inst)
 				}

@@ -29,6 +29,8 @@ test("projects: create, switch scope, edit, rename, and delete", async ({ page }
   });
   await expect(page).toHaveURL(/\/$/);
   await expect(page.locator('select[name="project"]')).toHaveValue("e2e-proj");
+  // A fresh project has no instances; the list says so instead of rendering bare headers.
+  await expect(page.getByText("No instances yet")).toBeVisible();
 
   // Resources made while scoped land in the project: create an instance.
   await page.goto("/instances/new");

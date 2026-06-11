@@ -32,6 +32,13 @@ templ StoragePoolsPage(caps backend.Capabilities, pools []backend.StoragePool) {
 				}
 			}
 			@table.Body() {
+				if len(pools) == 0 {
+					@table.Row() {
+						@table.Cell(table.CellProps{Attributes: templ.Attributes{"colspan": "3"}}) {
+							<span class="text-muted-foreground">No storage pools yet.</span>
+						}
+					}
+				}
 				for _, p := range pools {
 					@table.Row() {
 						@table.Cell() {

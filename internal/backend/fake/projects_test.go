@@ -26,6 +26,11 @@ func TestProjectCRUDRoundTrip(t *testing.T) {
 	require.NotEmpty(t, p.Version)
 	assert.Equal(t, "true", p.Config["features.profiles"])
 	assert.Equal(t, "dev project", p.Description)
+	// Daemon parity: omitted default-enabled features are injected at create;
+	// networks stays absent (= shared from default).
+	assert.Equal(t, "true", p.Config["features.images"])
+	assert.Equal(t, "true", p.Config["features.storage.volumes"])
+	assert.NotContains(t, p.Config, "features.networks")
 
 	// Update replaces description + config, conditionally on the version.
 	require.NoError(t, f.UpdateProject(ctx(), "dev", "edited", map[string]string{"features.images": "false"}, p.Version))

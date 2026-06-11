@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
@@ -67,6 +68,11 @@ func (b *incusBackend) DeleteProject(_ context.Context, name string) error {
 		return fmt.Errorf("the default project cannot be deleted: %w", backend.ErrInvalid)
 	}
 	if err := b.srv.DeleteProject(name); err != nil {
+		// The daemon refuses non-empty projects with a plain 500 ("Only
+		// empty projects can be removed."), which mapErr cannot classify.
+		if strings.Contains(err.Error(), "Only empty projects") {
+			return fmt.Errorf("delete project %q: %w: %w", name, backend.ErrConflict, err)
+		}
 		return fmt.Errorf("delete project %q: %w", name, mapErr(err))
 	}
 	return nil

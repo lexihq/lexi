@@ -43,7 +43,19 @@ func (f *Fake) CreateProject(_ context.Context, name, description string, config
 	if _, ok := f.projects[name]; ok {
 		return conflict("project %q already exists", name)
 	}
-	f.projects[name] = backend.Project{Name: name, Description: description, Config: maps.Clone(config)}
+	// Daemon parity: omitted default-enabled features are injected as "true"
+	// at create (images/profiles/storage.volumes; buckets exist daemon-side
+	// but lxcon doesn't model them). Networks stay absent = shared.
+	cfg := maps.Clone(config)
+	if cfg == nil {
+		cfg = map[string]string{}
+	}
+	for _, feature := range []string{"features.images", "features.profiles", "features.storage.volumes"} {
+		if _, ok := cfg[feature]; !ok {
+			cfg[feature] = "true"
+		}
+	}
+	f.projects[name] = backend.Project{Name: name, Description: description, Config: cfg}
 	return nil
 }
 

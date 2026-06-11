@@ -87,7 +87,7 @@ templ ProfileDetailPage(caps backend.Capabilities, p backend.Profile) {
 						}
 					</form>
 					<form method="post" action={ templ.SafeURL(fmt.Sprintf("/profiles/%s/delete", url.PathEscape(p.Name))) }>
-						@button.Button(button.Props{Variant: button.VariantDestructive, Type: button.TypeSubmit}) {
+						@button.Button(button.Props{Variant: button.VariantOutline, Class: "text-destructive", Type: button.TypeSubmit}) {
 							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 							Delete
 						}

@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 // All tests run against the shared fake-backed server (instance "demo" seeded).
 
 test("manage local images: copy, publish, alias add/remove, delete", async ({ page }) => {
+  // Image delete asks via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
   await page.goto("/");
   await page.getByRole("link", { name: "Images" }).click();
   await expect(page).toHaveURL(/\/images$/);
@@ -47,6 +49,7 @@ test("manage local images: copy, publish, alias add/remove, delete", async ({ pa
 });
 
 test("edit image details, export, and re-import", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
   await page.goto("/images");
   const table = page.locator("#images-table");
   const row = table.getByRole("row", { name: /debian\/12/ }).first();
@@ -89,6 +92,7 @@ test("edit image details, export, and re-import", async ({ page }) => {
 });
 
 test("export a split (VM) image as a zip and re-import it", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
   await page.goto("/images");
   const table = page.locator("#images-table");
   const vmRow = table.getByRole("row", { name: /Ubuntu Noble VM image/ }).first();

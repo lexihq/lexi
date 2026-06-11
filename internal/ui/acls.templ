@@ -84,13 +84,13 @@ templ NetworkACLDetailPage(caps backend.Capabilities, acl backend.NetworkACL) {
 					}
 				</form>
 				if len(acl.UsedBy) > 0 {
-					@button.Button(button.Props{Variant: button.VariantDestructive, Disabled: true, Attributes: templ.Attributes{"title": "in use; detach it from security.acls first"}}) {
+					@button.Button(button.Props{Variant: button.VariantOutline, Class: "text-destructive", Disabled: true, Attributes: templ.Attributes{"title": "in use; detach it from security.acls first"}}) {
 						@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 						Delete
 					}
 				} else {
 					<form method="post" action={ templ.URL(base + "/delete") } hx-confirm={ "Delete ACL " + acl.Name + "?" }>
-						@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantDestructive}) {
+						@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline, Class: "text-destructive"}) {
 							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 							Delete
 						}
@@ -161,7 +161,7 @@ templ aclRulesSection(base, direction, title string, rules []backend.NetworkACLR
 									<input type="hidden" name="direction" value={ direction }/>
 									<input type="hidden" name="index" value={ fmt.Sprint(i) }/>
 									<input type="hidden" name="version" value={ version }/>
-									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Type: button.TypeSubmit}) {
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Type: button.TypeSubmit}) {
 										@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 										Remove
 									}

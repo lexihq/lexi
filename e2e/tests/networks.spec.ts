@@ -4,6 +4,8 @@ import { test, expect } from "@playwright/test";
 // All tests run against the shared fake-backed server (instance "demo" seeded).
 
 test("create and delete a network in the Networks section", async ({ page }) => {
+  // Network delete asks via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
   await page.goto("/");
   await page.getByRole("link", { name: "Networks" }).click();
   await expect(page).toHaveURL(/\/networks$/);

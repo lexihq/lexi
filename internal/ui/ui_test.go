@@ -676,3 +676,10 @@ func TestInstanceHeaderShowsStatusBadge(t *testing.T) {
 	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "summary"))
 	assertContains(t, html, "bg-green-500")
 }
+
+func TestImageAndNetworkDeletesAskForConfirmation(t *testing.T) {
+	images := render(t, ImagesPage(testCaps(), []backend.LocalImage{{Fingerprint: "abc123def", Aliases: []string{"debian/12"}}}, nil))
+	assertContains(t, images, `hx-confirm="Delete image debian/12?"`)
+	networks := render(t, NetworksPage(testCaps(), []backend.Network{{Name: "br0", Managed: true}}))
+	assertContains(t, networks, `hx-confirm="Delete network br0?"`)
+}

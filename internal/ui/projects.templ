@@ -81,13 +81,13 @@ templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, curren
 						@table.Cell() {
 							if p.Name != "default" {
 								if projectBlockers(p) > 0 {
-									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Disabled: true, Attributes: templ.Attributes{"title": "not empty; delete its resources first"}}) {
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Disabled: true, Attributes: templ.Attributes{"title": "not empty; delete its resources first"}}) {
 										@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 										Delete
 									}
 								} else {
 									<form method="post" action={ templ.URL("/projects/" + url.PathEscape(p.Name) + "/delete") } hx-confirm={ "Delete project " + p.Name + "?" }>
-										@button.Button(button.Props{Size: button.SizeSm, Type: button.TypeSubmit, Variant: button.VariantDestructive}) {
+										@button.Button(button.Props{Size: button.SizeSm, Type: button.TypeSubmit, Variant: button.VariantOutline, Class: "text-destructive"}) {
 											@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 											Delete
 										}
@@ -159,13 +159,13 @@ templ ProjectDetailPage(caps backend.Capabilities, p backend.Project) {
 						}
 					</form>
 					if blockers > 0 {
-						@button.Button(button.Props{Variant: button.VariantDestructive, Disabled: true, Attributes: templ.Attributes{"title": "not empty; delete its resources first"}}) {
+						@button.Button(button.Props{Variant: button.VariantOutline, Class: "text-destructive", Disabled: true, Attributes: templ.Attributes{"title": "not empty; delete its resources first"}}) {
 							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 							Delete
 						}
 					} else {
 						<form method="post" action={ templ.URL(base + "/delete") } hx-confirm={ "Delete project " + p.Name + "?" }>
-							@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantDestructive}) {
+							@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline, Class: "text-destructive"}) {
 								@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 								Delete
 							}

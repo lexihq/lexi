@@ -664,3 +664,15 @@ func TestProjectsPageCreateFormIsLabeledCard(t *testing.T) {
 	assertContains(t, html, ">Description</label>")
 	assertContains(t, html, "shared from default")
 }
+
+func TestInstanceHeaderRestartIsStatusAware(t *testing.T) {
+	stopped := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Stopped"}, nil, nil, "summary"))
+	assertNotContains(t, stopped, `hx-post="/instances/demo/restart?from=header"`)
+	running := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "summary"))
+	assertContains(t, running, `hx-post="/instances/demo/restart?from=header"`)
+}
+
+func TestInstanceHeaderShowsStatusBadge(t *testing.T) {
+	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "summary"))
+	assertContains(t, html, "bg-green-500")
+}

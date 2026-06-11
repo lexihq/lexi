@@ -8,6 +8,8 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/badge"
 	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/dialog"
+	"github.com/adam/lxcon/internal/components/dropdown"
 	"github.com/adam/lxcon/internal/components/icon"
 	"github.com/adam/lxcon/internal/components/table"
 )
@@ -57,6 +59,8 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, poo
 				}
 			}
 		}
+		@dropdown.Script()
+		@dialog.Script()
 	}
 }
 
@@ -66,87 +70,165 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 			<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/instances/" + inst.Name) }>{ inst.Name }</a>
 		}
 		@table.Cell() {
-			@badge.Badge(badge.Props{Variant: statusVariant(inst.Status)}) {
+			@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+				<span class={ "size-2 rounded-full " + statusDotClass(inst.Status) }></span>
 				{ inst.Status }
 			}
 		}
-		@table.Cell() { { strings.Join(inst.IPv4, ", ") } }
+		@table.Cell() {
+			if len(inst.IPv4) > 0 {
+				{ strings.Join(inst.IPv4, ", ") }
+			} else {
+				<span class="text-muted-foreground">—</span>
+			}
+		}
 		@table.Cell() { { fmt.Sprint(inst.Snapshots) } }
 		@table.Cell() {
-			<div class="flex flex-wrap gap-2">
-				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/start", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
-					@icon.Icon("circle-play")(icon.Props{Class: "size-4"})
-					Start
-				}
-				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/stop", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
-					@icon.Icon("circle-stop")(icon.Props{Class: "size-4"})
-					Stop
-				}
-				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/restart", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
-					@icon.Icon("rotate-cw")(icon.Props{Class: "size-4"})
-					Restart
-				}
-				if caps.Pause && inst.Status == "Running" {
-					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/pause", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
-						@icon.Icon("pause")(icon.Props{Class: "size-4"})
-						Pause
-					}
-				}
-				if caps.Pause && inst.Status == "Frozen" {
-					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/resume", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
-						@icon.Icon("play")(icon.Props{Class: "size-4"})
-						Resume
-					}
-				}
-				if caps.Clone {
-					<form method="post" action={ templ.URL("/instances/" + inst.Name + "/clone") } hx-boost="false" class="flex gap-2">
-						<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="dst" placeholder="clone name"/>
-						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
-							@icon.Icon("copy")(icon.Props{Class: "size-4"})
-							Clone
-						}
-					</form>
-				}
-				if caps.Move {
-					<form method="post" action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/rename") } hx-boost="false" class="flex gap-2">
-						<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="new_name" placeholder="rename to"/>
-						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
-							@icon.Icon("pencil")(icon.Props{Class: "size-4"})
-							Rename
-						}
-					</form>
-					<form method="post" action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/move") } hx-boost="false" class="flex gap-2">
-						<input class="h-8 w-32 rounded-md border bg-background px-2 text-sm" name="pool" list="pool-options" placeholder="move to pool"/>
-						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
-							@icon.Icon("move")(icon.Props{Class: "size-4"})
-							Move
-						}
-					</form>
-				}
-				if caps.Console {
-					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
-						@icon.Icon("square-terminal")(icon.Props{Class: "size-4"})
-						Console
-					}
-				}
-				if caps.Backup {
-					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/export", Attributes: templ.Attributes{"hx-boost": "false"}}) {
-						@icon.Icon("download")(icon.Props{Class: "size-4"})
-						Export
-					}
-				}
-				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantDestructive, Attributes: templ.Attributes{"hx-post": "/instances/" + inst.Name + "/delete", "hx-target": "#instance-" + inst.Name, "hx-swap": "outerHTML"}}) {
-					@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
-					Delete
-				}
+			<div class="flex items-center gap-2">
+				@instancePrimaryAction(caps, inst)
+				@instanceMenu(caps, inst)
 			</div>
+			@instanceDialogs(caps, inst)
 		}
 	}
 }
 
-func statusVariant(status string) badge.Variant {
-	if status == "Running" {
-		return badge.VariantDefault
+// instancePrimaryAction renders the one lifecycle button that makes sense for
+// the instance's current state; everything else lives in the kebab menu.
+templ instancePrimaryAction(caps backend.Capabilities, inst backend.Instance) {
+	if inst.Status == "Running" {
+		@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: instanceActionAttrs(inst.Name, "stop")}) {
+			@icon.Icon("circle-stop")(icon.Props{Class: "size-4"})
+			Stop
+		}
+	} else if inst.Status == "Frozen" && caps.Pause {
+		@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: instanceActionAttrs(inst.Name, "resume")}) {
+			@icon.Icon("play")(icon.Props{Class: "size-4"})
+			Resume
+		}
+	} else if inst.Status == "Frozen" {
+		@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: instanceActionAttrs(inst.Name, "stop")}) {
+			@icon.Icon("circle-stop")(icon.Props{Class: "size-4"})
+			Stop
+		}
+	} else {
+		@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: instanceActionAttrs(inst.Name, "start")}) {
+			@icon.Icon("circle-play")(icon.Props{Class: "size-4"})
+			Start
+		}
 	}
-	return badge.VariantSecondary
+}
+
+templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
+	@dropdown.Dropdown() {
+		@dropdown.Trigger() {
+			@button.Button(button.Props{Size: button.SizeIcon, Variant: button.VariantOutline, Attributes: templ.Attributes{"aria-label": "Actions for " + inst.Name}}) {
+				@icon.Icon("ellipsis")(icon.Props{Class: "size-4"})
+			}
+		}
+		@dropdown.Content(dropdown.ContentProps{Placement: dropdown.PlacementBottomEnd, Class: "w-44"}) {
+			if inst.Status == "Running" {
+				@dropdown.Item(dropdown.ItemProps{Attributes: instanceActionAttrs(inst.Name, "restart")}) {
+					Restart
+				}
+				if caps.Pause {
+					@dropdown.Item(dropdown.ItemProps{Attributes: instanceActionAttrs(inst.Name, "pause")}) {
+						Pause
+					}
+				}
+			}
+			if caps.Console {
+				@dropdown.Item(dropdown.ItemProps{Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+					Console
+				}
+			}
+			if caps.Backup {
+				@dropdown.Item(dropdown.ItemProps{Href: "/instances/" + inst.Name + "/export", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+					Export
+				}
+			}
+			if caps.Clone || caps.Move {
+				@dropdown.Separator()
+			}
+			if caps.Clone {
+				@dialog.Trigger(dialog.TriggerProps{For: "clone-" + inst.Name}) {
+					@dropdown.Item() { Clone… }
+				}
+			}
+			if caps.Move {
+				@dialog.Trigger(dialog.TriggerProps{For: "rename-" + inst.Name}) {
+					@dropdown.Item() { Rename… }
+				}
+				@dialog.Trigger(dialog.TriggerProps{For: "move-" + inst.Name}) {
+					@dropdown.Item() { Move… }
+				}
+			}
+			@dropdown.Separator()
+			@dropdown.Item(dropdown.ItemProps{Class: "text-destructive", Attributes: deleteAttrs(inst.Name)}) {
+				Delete
+			}
+		}
+	}
+}
+
+// instanceDialogs renders the modal forms behind the Clone…/Rename…/Move… menu
+// items. Forms post the same endpoints as the old inline forms (hx-boost off →
+// full-page POST), so handler and redirect behavior are unchanged.
+templ instanceDialogs(caps backend.Capabilities, inst backend.Instance) {
+	if caps.Clone {
+		@instanceActionDialog("clone-"+inst.Name, "Clone "+inst.Name, "/instances/"+inst.Name+"/clone", "dst", "New instance name", "Clone", nil)
+	}
+	if caps.Move {
+		@instanceActionDialog("rename-"+inst.Name, "Rename "+inst.Name, "/instances/"+url.PathEscape(inst.Name)+"/rename", "new_name", "New name", "Rename", nil)
+		@instanceActionDialog("move-"+inst.Name, "Move "+inst.Name, "/instances/"+url.PathEscape(inst.Name)+"/move", "pool", "Target storage pool", "Move", templ.Attributes{"list": "pool-options"})
+	}
+}
+
+templ instanceActionDialog(id, title, action, field, label, submit string, inputAttrs templ.Attributes) {
+	@dialog.Dialog(dialog.Props{ID: id}) {
+		@dialog.Content() {
+			@dialog.Header() {
+				@dialog.Title() { { title } }
+			}
+			<form method="post" action={ templ.URL(action) } hx-boost="false" class="flex flex-col gap-4">
+				<label class="flex flex-col gap-2 text-sm font-medium">
+					{ label }
+					<input class="h-9 rounded-md border bg-background px-3 text-sm font-normal" name={ field } required { inputAttrs... }/>
+				</label>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+					}
+					@button.Button(button.Props{Type: button.TypeSubmit}) { { submit } }
+				}
+			</form>
+		}
+	}
+}
+
+func instanceActionAttrs(name, action string) templ.Attributes {
+	return templ.Attributes{
+		"hx-post":   "/instances/" + name + "/" + action,
+		"hx-target": "#instance-" + name,
+		"hx-swap":   "outerHTML",
+	}
+}
+
+func deleteAttrs(name string) templ.Attributes {
+	attrs := instanceActionAttrs(name, "delete")
+	attrs["hx-confirm"] = "Delete instance " + name + "?"
+	return attrs
+}
+
+func statusDotClass(status string) string {
+	switch status {
+	case "Running":
+		return "bg-green-500"
+	case "Frozen":
+		return "bg-blue-500"
+	case "Error":
+		return "bg-red-500"
+	default:
+		return "bg-gray-400"
+	}
 }

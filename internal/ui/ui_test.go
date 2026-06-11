@@ -169,6 +169,37 @@ func TestInstanceRowShowsRestartAlwaysAndPauseResumeByStatus(t *testing.T) {
 	}
 }
 
+func TestInstanceRowPrimaryActionFollowsStatus(t *testing.T) {
+	caps := testCaps()
+
+	stopped := render(t, InstanceRow(caps, backend.Instance{Name: "demo", Status: "Stopped"}))
+	assertContains(t, stopped, "/instances/demo/start")
+	if strings.Contains(stopped, "/instances/demo/stop") {
+		t.Fatalf("stopped instance must not offer Stop, got %q", stopped)
+	}
+
+	running := render(t, InstanceRow(caps, backend.Instance{Name: "demo", Status: "Running"}))
+	assertContains(t, running, "/instances/demo/stop")
+	if strings.Contains(running, "/instances/demo/start") {
+		t.Fatalf("running instance must not offer Start, got %q", running)
+	}
+}
+
+func TestInstanceRowDeleteRequiresConfirmation(t *testing.T) {
+	html := render(t, InstanceRow(testCaps(), backend.Instance{Name: "demo", Status: "Stopped"}))
+	assertContains(t, html, "hx-confirm")
+}
+
+func TestInstanceRowRendersActionDialogs(t *testing.T) {
+	html := render(t, InstanceRow(backend.Capabilities{Clone: true, Move: true}, backend.Instance{Name: "demo", Status: "Stopped"}))
+	assertContains(t, html, `id="clone-demo"`)
+	assertContains(t, html, `id="rename-demo"`)
+	assertContains(t, html, `id="move-demo"`)
+	assertContains(t, html, `name="dst"`)
+	assertContains(t, html, `name="new_name"`)
+	assertContains(t, html, `name="pool"`)
+}
+
 func TestSidebarGatesProfilesLinkOnCapability(t *testing.T) {
 	withProfiles := render(t, Sidebar(backend.Capabilities{Profiles: true}, Nav{Section: NavProfiles}))
 	assertContains(t, withProfiles, "/profiles")

@@ -15,7 +15,7 @@ func TestCPUPercentZeroOnFirstSampleThenDeltaBased(t *testing.T) {
 
 	// Pre-seed a sample one second in the past with 1e9 fewer nanos so the next
 	// reading reflects ~one core fully busy over the elapsed second (≈100%).
-	b.cpuSamples["demo"] = cpuSample{nanos: 1_000_000_000, at: time.Now().Add(-time.Second)}
+	b.cpuSamples["/demo"] = cpuSample{nanos: 1_000_000_000, at: time.Now().Add(-time.Second)}
 	assert.Greater(t, b.cpuPercent("demo", 2_000_000_000, b.cpuEpochSnapshot()), 0.0)
 }
 
@@ -34,12 +34,12 @@ func TestCPUPercentPrunesStaleSamples(t *testing.T) {
 
 func TestCPUPercentDoesNotRecreateSampleAfterDeletion(t *testing.T) {
 	b := &incusBackend{
-		cpuSamples: map[string]cpuSample{"demo": {}},
+		cpuSamples: map[string]cpuSample{"/demo": {}},
 	}
 	epoch := b.cpuEpochSnapshot()
 
-	b.clearCPUSample("demo")
+	b.clearCPUSample("/demo")
 	b.cpuPercent("demo", 1, epoch)
 
-	assert.NotContains(t, b.cpuSamples, "demo")
+	assert.NotContains(t, b.cpuSamples, "/demo")
 }

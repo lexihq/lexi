@@ -18,9 +18,9 @@ type cpuSample struct {
 // Metrics reads a point-in-time resource snapshot from the instance state.
 // Disk usage is summed across devices and network counters across every
 // interface except loopback. CPUPercent reads 0 until a prior sample exists.
-func (b *incusBackend) Metrics(_ context.Context, name string) (backend.Metrics, error) {
+func (b *incusBackend) Metrics(ctx context.Context, name string) (backend.Metrics, error) {
 	epoch := b.cpuEpochSnapshot()
-	state, _, err := b.srv.GetInstanceState(name)
+	state, _, err := b.project(ctx).GetInstanceState(name)
 	if err != nil {
 		return backend.Metrics{}, fmt.Errorf("get state of %q: %w", name, mapErr(err))
 	}
@@ -28,7 +28,7 @@ func (b *incusBackend) Metrics(_ context.Context, name string) (backend.Metrics,
 		MemoryUsage: state.Memory.Usage,
 		MemoryTotal: state.Memory.Total,
 		Processes:   state.Processes,
-		CPUPercent:  b.cpuPercent(name, state.CPU.Usage, epoch),
+		CPUPercent:  b.cpuPercent(cpuSampleKey(ctx, name), state.CPU.Usage, epoch),
 	}
 	for _, d := range state.Disk {
 		m.DiskUsage += d.Usage
@@ -52,7 +52,14 @@ func (b *incusBackend) cpuEpochSnapshot() uint64 {
 	return b.cpuEpoch
 }
 
-func (b *incusBackend) cpuPercent(name string, cpuNanos int64, epoch uint64) float64 {
+// cpuSampleKey qualifies the instance name with the request's project:
+// instances in different projects share names, and a delta computed across
+// projects would be garbage.
+func cpuSampleKey(ctx context.Context, name string) string {
+	return backend.ProjectFromContext(ctx) + "/" + name
+}
+
+func (b *incusBackend) cpuPercent(key string, cpuNanos int64, epoch uint64) float64 {
 	now := time.Now()
 	b.cpuMu.Lock()
 	defer b.cpuMu.Unlock()
@@ -64,8 +71,8 @@ func (b *incusBackend) cpuPercent(name string, cpuNanos int64, epoch uint64) flo
 	if epoch != b.cpuEpoch {
 		return 0
 	}
-	prev, ok := b.cpuSamples[name]
-	b.cpuSamples[name] = cpuSample{nanos: cpuNanos, at: now}
+	prev, ok := b.cpuSamples[key]
+	b.cpuSamples[key] = cpuSample{nanos: cpuNanos, at: now}
 	if !ok {
 		return 0
 	}
@@ -77,9 +84,9 @@ func (b *incusBackend) cpuPercent(name string, cpuNanos int64, epoch uint64) flo
 	return float64(delta) / float64(elapsed) * 100
 }
 
-func (b *incusBackend) clearCPUSample(name string) {
+func (b *incusBackend) clearCPUSample(key string) {
 	b.cpuMu.Lock()
 	defer b.cpuMu.Unlock()
-	delete(b.cpuSamples, name)
+	delete(b.cpuSamples, key)
 	b.cpuEpoch++
 }

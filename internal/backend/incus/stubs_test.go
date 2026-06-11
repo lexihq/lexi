@@ -104,6 +104,7 @@ type instanceServerStub struct {
 	operations    []api.Operation // returned by GetOperations
 	operationsErr error           // error for GetOperations
 
+	usedProject    string                // captured by UseProject
 	projectsList   []api.Project         // returned by GetProjects
 	project        *api.Project          // returned by GetProject
 	createdProject *api.ProjectsPost     // captured by CreateProject
@@ -153,6 +154,13 @@ func (s *instanceServerStub) GetWarnings() ([]api.Warning, error) {
 func (s *instanceServerStub) DeleteWarning(uuid string) error {
 	s.deletedWarning = uuid
 	return s.serverErr
+}
+
+// UseProject records the scoping request and returns the same stub, so tests
+// can assert a verb went through the project-scoped client.
+func (s *instanceServerStub) UseProject(name string) incusclient.InstanceServer {
+	s.usedProject = name
+	return s
 }
 
 func (s *instanceServerStub) GetProjects() ([]api.Project, error) {

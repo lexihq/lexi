@@ -21,8 +21,8 @@ import (
 	"github.com/lxc/incus/v6/shared/cancel"
 )
 
-func (b *incusBackend) ListStoragePools(_ context.Context) ([]backend.StoragePool, error) {
-	ps, err := b.srv.GetStoragePools()
+func (b *incusBackend) ListStoragePools(ctx context.Context) ([]backend.StoragePool, error) {
+	ps, err := b.project(ctx).GetStoragePools()
 	if err != nil {
 		return nil, fmt.Errorf("list storage pools: %w", mapErr(err))
 	}
@@ -33,8 +33,8 @@ func (b *incusBackend) ListStoragePools(_ context.Context) ([]backend.StoragePoo
 	return out, nil
 }
 
-func (b *incusBackend) GetStoragePool(_ context.Context, pool string) (backend.StoragePool, error) {
-	p, etag, err := b.srv.GetStoragePool(pool)
+func (b *incusBackend) GetStoragePool(ctx context.Context, pool string) (backend.StoragePool, error) {
+	p, etag, err := b.project(ctx).GetStoragePool(pool)
 	if err != nil {
 		return backend.StoragePool{}, fmt.Errorf("get storage pool %q: %w", pool, mapErr(err))
 	}
@@ -48,25 +48,25 @@ func (b *incusBackend) GetStoragePool(_ context.Context, pool string) (backend.S
 // rejects the PUT with 412 (mapped to ErrConflict) when the pool changed since
 // that read. An empty version updates unconditionally. Immutable config keys
 // (driver-specific, e.g. zfs.pool_name) are rejected by the daemon with a 400.
-func (b *incusBackend) UpdateStoragePool(_ context.Context, name, description string, config map[string]string, version string) error {
-	p, _, err := b.srv.GetStoragePool(name)
+func (b *incusBackend) UpdateStoragePool(ctx context.Context, name, description string, config map[string]string, version string) error {
+	p, _, err := b.project(ctx).GetStoragePool(name)
 	if err != nil {
 		return fmt.Errorf("get storage pool %q: %w", name, mapErr(err))
 	}
 	put := p.Writable()
 	put.Description = description
 	put.Config = config
-	if err := b.srv.UpdateStoragePool(name, put, version); err != nil {
+	if err := b.project(ctx).UpdateStoragePool(name, put, version); err != nil {
 		return fmt.Errorf("update storage pool %q: %w", name, mapErr(err))
 	}
 	return nil
 }
 
-func (b *incusBackend) CreateStoragePool(_ context.Context, p backend.StoragePool) error {
+func (b *incusBackend) CreateStoragePool(ctx context.Context, p backend.StoragePool) error {
 	post := api.StoragePoolsPost{Name: p.Name, Driver: p.Driver}
 	post.Description = p.Description
 	post.Config = p.Config
-	if err := b.srv.CreateStoragePool(post); err != nil {
+	if err := b.project(ctx).CreateStoragePool(post); err != nil {
 		return fmt.Errorf("create storage pool %q: %w", p.Name, mapErr(err))
 	}
 	return nil
@@ -75,22 +75,22 @@ func (b *incusBackend) CreateStoragePool(_ context.Context, p backend.StoragePoo
 // DeleteStoragePool pre-checks UsedBy (profiles count too) so a referenced
 // pool conflicts cleanly; a reference appearing in the stat-then-delete window
 // surfaces as the daemon's own 400, which is acceptable.
-func (b *incusBackend) DeleteStoragePool(_ context.Context, name string) error {
-	p, _, err := b.srv.GetStoragePool(name)
+func (b *incusBackend) DeleteStoragePool(ctx context.Context, name string) error {
+	p, _, err := b.project(ctx).GetStoragePool(name)
 	if err != nil {
 		return fmt.Errorf("delete storage pool %q: %w", name, mapErr(err))
 	}
 	if len(p.UsedBy) > 0 {
 		return fmt.Errorf("delete storage pool %q: in use by %s: %w", name, strings.Join(p.UsedBy, ", "), backend.ErrConflict)
 	}
-	if err := b.srv.DeleteStoragePool(name); err != nil {
+	if err := b.project(ctx).DeleteStoragePool(name); err != nil {
 		return fmt.Errorf("delete storage pool %q: %w", name, mapErr(err))
 	}
 	return nil
 }
 
-func (b *incusBackend) ListVolumes(_ context.Context, pool string) ([]backend.StorageVolume, error) {
-	vs, err := b.srv.GetStoragePoolVolumes(pool)
+func (b *incusBackend) ListVolumes(ctx context.Context, pool string) ([]backend.StorageVolume, error) {
+	vs, err := b.project(ctx).GetStoragePoolVolumes(pool)
 	if err != nil {
 		return nil, fmt.Errorf("list volumes in %q: %w", pool, mapErr(err))
 	}
@@ -103,8 +103,8 @@ func (b *incusBackend) ListVolumes(_ context.Context, pool string) ([]backend.St
 	return out, nil
 }
 
-func (b *incusBackend) GetVolume(_ context.Context, pool, name string) (backend.StorageVolume, error) {
-	v, etag, err := b.srv.GetStoragePoolVolume(pool, "custom", name)
+func (b *incusBackend) GetVolume(ctx context.Context, pool, name string) (backend.StorageVolume, error) {
+	v, etag, err := b.project(ctx).GetStoragePoolVolume(pool, "custom", name)
 	if err != nil {
 		return backend.StorageVolume{}, fmt.Errorf("get volume %q/%q: %w", pool, name, mapErr(err))
 	}
@@ -119,15 +119,15 @@ func (b *incusBackend) GetVolume(_ context.Context, pool, name string) (backend.
 // unconditionally. The daemon computes the volume etag from name/type/config
 // only — description is excluded — so concurrent description-only edits cannot
 // conflict and are last-write-wins.
-func (b *incusBackend) UpdateVolume(_ context.Context, pool, name, description string, config map[string]string, version string) error {
-	v, _, err := b.srv.GetStoragePoolVolume(pool, "custom", name)
+func (b *incusBackend) UpdateVolume(ctx context.Context, pool, name, description string, config map[string]string, version string) error {
+	v, _, err := b.project(ctx).GetStoragePoolVolume(pool, "custom", name)
 	if err != nil {
 		return fmt.Errorf("get volume %q/%q: %w", pool, name, mapErr(err))
 	}
 	put := v.Writable()
 	put.Description = description
 	put.Config = config
-	if err := b.srv.UpdateStoragePoolVolume(pool, "custom", name, put, version); err != nil {
+	if err := b.project(ctx).UpdateStoragePoolVolume(pool, "custom", name, put, version); err != nil {
 		return fmt.Errorf("update volume %q/%q: %w", pool, name, mapErr(err))
 	}
 	return nil
@@ -155,23 +155,23 @@ func (b *incusBackend) RenameVolume(ctx context.Context, pool, name, newName str
 	if targetTaken {
 		return fmt.Errorf("volume %q already exists: %w", newName, backend.ErrConflict)
 	}
-	if err := b.srv.RenameStoragePoolVolume(pool, "custom", name, api.StorageVolumePost{Name: newName}); err != nil {
+	if err := b.project(ctx).RenameStoragePoolVolume(pool, "custom", name, api.StorageVolumePost{Name: newName}); err != nil {
 		return fmt.Errorf("rename volume %q/%q: %w", pool, name, mapErr(err))
 	}
 	return nil
 }
 
-func (b *incusBackend) CreateVolume(_ context.Context, pool string, v backend.StorageVolume) error {
+func (b *incusBackend) CreateVolume(ctx context.Context, pool string, v backend.StorageVolume) error {
 	post := api.StorageVolumesPost{Name: v.Name, Type: "custom", ContentType: v.ContentType}
 	post.Config = v.Config
-	if err := b.srv.CreateStoragePoolVolume(pool, post); err != nil {
+	if err := b.project(ctx).CreateStoragePoolVolume(pool, post); err != nil {
 		return fmt.Errorf("create volume %q/%q: %w", pool, v.Name, mapErr(err))
 	}
 	return nil
 }
 
-func (b *incusBackend) DeleteVolume(_ context.Context, pool, name string) error {
-	if err := b.srv.DeleteStoragePoolVolume(pool, "custom", name); err != nil {
+func (b *incusBackend) DeleteVolume(ctx context.Context, pool, name string) error {
+	if err := b.project(ctx).DeleteStoragePoolVolume(pool, "custom", name); err != nil {
 		return fmt.Errorf("delete volume %q/%q: %w", pool, name, mapErr(err))
 	}
 	return nil
@@ -185,8 +185,8 @@ func toVolume(pool string, v *api.StorageVolume) backend.StorageVolume {
 	return backend.StorageVolume{Name: v.Name, Type: v.Type, ContentType: v.ContentType, Pool: pool, Description: v.Description, Config: v.Config, UsedBy: v.UsedBy}
 }
 
-func (b *incusBackend) ListVolumeSnapshots(_ context.Context, pool, volume string) ([]backend.StorageVolumeSnapshot, error) {
-	ss, err := b.srv.GetStoragePoolVolumeSnapshots(pool, "custom", volume)
+func (b *incusBackend) ListVolumeSnapshots(ctx context.Context, pool, volume string) ([]backend.StorageVolumeSnapshot, error) {
+	ss, err := b.project(ctx).GetStoragePoolVolumeSnapshots(pool, "custom", volume)
 	if err != nil {
 		return nil, fmt.Errorf("list snapshots %q/%q: %w", pool, volume, mapErr(err))
 	}
@@ -198,12 +198,12 @@ func (b *incusBackend) ListVolumeSnapshots(_ context.Context, pool, volume strin
 }
 
 func (b *incusBackend) CreateVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error {
-	op, err := b.srv.CreateStoragePoolVolumeSnapshot(pool, "custom", volume, api.StorageVolumeSnapshotsPost{Name: snapshot})
+	op, err := b.project(ctx).CreateStoragePoolVolumeSnapshot(pool, "custom", volume, api.StorageVolumeSnapshotsPost{Name: snapshot})
 	return waitOp(ctx, op, err, "snapshot volume %q/%q", pool, volume)
 }
 
 func (b *incusBackend) DeleteVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error {
-	op, err := b.srv.DeleteStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot)
+	op, err := b.project(ctx).DeleteStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot)
 	return waitOp(ctx, op, err, "delete snapshot %q/%q/%q", pool, volume, snapshot)
 }
 
@@ -222,14 +222,14 @@ func (b *incusBackend) RenameVolumeSnapshot(ctx context.Context, pool, volume, s
 			return fmt.Errorf("snapshot %q already exists: %w", newName, backend.ErrConflict)
 		}
 	}
-	op, err := b.srv.RenameStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot, api.StorageVolumeSnapshotPost{Name: newName})
+	op, err := b.project(ctx).RenameStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot, api.StorageVolumeSnapshotPost{Name: newName})
 	return waitOp(ctx, op, err, "rename snapshot %q/%q/%q", pool, volume, snapshot)
 }
 
 // UpdateVolumeSnapshotExpiry does a GET-preserve-PUT setting ExpiresAt; a zero
 // time clears it (nil pointer). UpdateStoragePoolVolumeSnapshot is synchronous.
-func (b *incusBackend) UpdateVolumeSnapshotExpiry(_ context.Context, pool, volume, snapshot string, expiresAt time.Time) error {
-	s, etag, err := b.srv.GetStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot)
+func (b *incusBackend) UpdateVolumeSnapshotExpiry(ctx context.Context, pool, volume, snapshot string, expiresAt time.Time) error {
+	s, etag, err := b.project(ctx).GetStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot)
 	if err != nil {
 		return fmt.Errorf("get snapshot %q/%q/%q: %w", pool, volume, snapshot, mapErr(err))
 	}
@@ -239,7 +239,7 @@ func (b *incusBackend) UpdateVolumeSnapshotExpiry(_ context.Context, pool, volum
 	} else {
 		put.ExpiresAt = &expiresAt
 	}
-	if err := b.srv.UpdateStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot, put, etag); err != nil {
+	if err := b.project(ctx).UpdateStoragePoolVolumeSnapshot(pool, "custom", volume, snapshot, put, etag); err != nil {
 		return fmt.Errorf("update snapshot expiry %q/%q/%q: %w", pool, volume, snapshot, mapErr(err))
 	}
 	return nil
@@ -247,14 +247,14 @@ func (b *incusBackend) UpdateVolumeSnapshotExpiry(_ context.Context, pool, volum
 
 // RestoreVolumeSnapshot does a GET-then-PUT setting put.Restore.
 // UpdateStoragePoolVolume is synchronous (no operation to wait on).
-func (b *incusBackend) RestoreVolumeSnapshot(_ context.Context, pool, volume, snapshot string) error {
-	v, etag, err := b.srv.GetStoragePoolVolume(pool, "custom", volume)
+func (b *incusBackend) RestoreVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error {
+	v, etag, err := b.project(ctx).GetStoragePoolVolume(pool, "custom", volume)
 	if err != nil {
 		return fmt.Errorf("get volume %q/%q: %w", pool, volume, mapErr(err))
 	}
 	put := v.Writable()
 	put.Restore = snapshot
-	if err := b.srv.UpdateStoragePoolVolume(pool, "custom", volume, put, etag); err != nil {
+	if err := b.project(ctx).UpdateStoragePoolVolume(pool, "custom", volume, put, etag); err != nil {
 		return fmt.Errorf("restore volume %q/%q@%q: %w", pool, volume, snapshot, mapErr(err))
 	}
 	return nil
@@ -277,7 +277,10 @@ func toVolumeSnapshot(s *api.StorageVolumeSnapshot) backend.StorageVolumeSnapsho
 func (b *incusBackend) ExportVolume(ctx context.Context, pool, volume string, w io.Writer) error {
 	backupName := fmt.Sprintf("lxcon-export-%d", time.Now().UnixNano())
 
-	op, err := b.srv.CreateStorageVolumeBackup(pool, volume, api.StorageVolumeBackupsPost{
+	// Capture the scoped client once: the deferred cleanup runs under its own
+	// detached context and must still target the request's project.
+	srv := b.project(ctx)
+	op, err := srv.CreateStorageVolumeBackup(pool, volume, api.StorageVolumeBackupsPost{
 		Name:                 backupName,
 		CompressionAlgorithm: "gzip",
 	})
@@ -286,7 +289,7 @@ func (b *incusBackend) ExportVolume(ctx context.Context, pool, volume string, w 
 	}
 	// Once the operation exists, clean up on every return path; a missing
 	// backup is a no-op inside deleteVolumeBackup.
-	defer b.deleteVolumeBackup(pool, volume, backupName)
+	defer b.deleteVolumeBackup(srv, pool, volume, backupName)
 	if err := op.WaitContext(ctx); err != nil {
 		// A canceled wait leaves the server operation running; cancel it so
 		// the backup does not finish and leak after we have given up.
@@ -315,7 +318,7 @@ func (b *incusBackend) ExportVolume(ctx context.Context, pool, volume string, w 
 	})
 	defer stopCancel()
 
-	if _, err := b.srv.GetStorageVolumeBackupFile(pool, volume, backupName, &incusclient.BackupFileRequest{
+	if _, err := srv.GetStorageVolumeBackupFile(pool, volume, backupName, &incusclient.BackupFileRequest{
 		BackupFile: contextWriteSeeker{ctx: ctx, WriteSeeker: tmp},
 		Canceler:   canceler,
 	}); err != nil {
@@ -344,7 +347,7 @@ func (b *incusBackend) ImportVolume(ctx context.Context, pool, volume string, r 
 	if err != nil {
 		return fmt.Errorf("import volume %q/%q: %w", pool, volume, err)
 	}
-	op, err := b.srv.CreateStoragePoolVolumeFromBackup(pool, incusclient.StorageVolumeBackupArgs{
+	op, err := b.project(ctx).CreateStoragePoolVolumeFromBackup(pool, incusclient.StorageVolumeBackupArgs{
 		BackupFile: contextReader{ctx: ctx, Reader: rest},
 		Name:       volume,
 	})
@@ -435,11 +438,11 @@ func rejectNonCustomBackup(r io.Reader) (io.Reader, error) {
 // deleteVolumeBackup removes the temporary server-side backup created during
 // export — deleteBackup's volume sibling: best-effort, detached context,
 // log-only (a failure cannot change the already-streamed result).
-func (b *incusBackend) deleteVolumeBackup(pool, volume, backupName string) {
+func (b *incusBackend) deleteVolumeBackup(srv incusclient.InstanceServer, pool, volume, backupName string) {
 	ctx, cancel := context.WithTimeout(context.Background(), backupDeleteTimeout)
 	defer cancel()
 
-	op, err := b.srv.DeleteStorageVolumeBackup(pool, volume, backupName)
+	op, err := srv.DeleteStorageVolumeBackup(pool, volume, backupName)
 	if err != nil {
 		if !errors.Is(mapErr(err), backend.ErrNotFound) {
 			slog.Warn("delete volume export backup", "backup", backupName, "pool", pool, "volume", volume, "err", err)

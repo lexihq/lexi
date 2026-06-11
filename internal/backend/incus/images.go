@@ -37,7 +37,7 @@ func (w contextReadWriteSeeker) Write(p []byte) (int, error) {
 
 // ListImages returns the full simplestreams catalog (one entry per alias), served
 // from a lazy, mutex-guarded cache so the search UI can filter without refetching.
-func (b *incusBackend) ListImages(_ context.Context) ([]backend.Image, error) {
+func (b *incusBackend) ListImages(ctx context.Context) ([]backend.Image, error) {
 	b.imgMu.Lock()
 	defer b.imgMu.Unlock()
 
@@ -108,8 +108,8 @@ func distroFromAlias(alias string) string {
 }
 
 // ListLocalImages returns the daemon's local image store.
-func (b *incusBackend) ListLocalImages(_ context.Context) ([]backend.LocalImage, error) {
-	images, err := b.srv.GetImages()
+func (b *incusBackend) ListLocalImages(ctx context.Context) ([]backend.LocalImage, error) {
+	images, err := b.project(ctx).GetImages()
 	if err != nil {
 		return nil, fmt.Errorf("list local images: %w", mapErr(err))
 	}
@@ -138,7 +138,7 @@ func (b *incusBackend) ListLocalImages(_ context.Context) ([]backend.LocalImage,
 // PublishImage creates a local image from the (stopped; Incus enforces it)
 // instance, then tags it with alias when one is given.
 func (b *incusBackend) PublishImage(ctx context.Context, instance, alias string) error {
-	op, err := b.srv.CreateImage(api.ImagesPost{
+	op, err := b.project(ctx).CreateImage(api.ImagesPost{
 		Source: &api.ImagesPostSource{Type: "instance", Name: instance},
 	}, nil)
 	if err := waitOp(ctx, op, err, "publish image from %q", instance); err != nil {
@@ -181,7 +181,7 @@ func (b *incusBackend) copyImageFrom(ctx context.Context, is incusclient.ImageSe
 	if err != nil {
 		return fmt.Errorf("get remote image %q: %w", alias, mapErr(err))
 	}
-	op, err := b.srv.CopyImage(is, *img, &incusclient.ImageCopyArgs{CopyAliases: true})
+	op, err := b.project(ctx).CopyImage(is, *img, &incusclient.ImageCopyArgs{CopyAliases: true})
 	if err != nil {
 		return fmt.Errorf("copy image %q: %w", alias, mapErr(err))
 	}
@@ -192,12 +192,12 @@ func (b *incusBackend) copyImageFrom(ctx context.Context, is incusclient.ImageSe
 }
 
 func (b *incusBackend) DeleteImage(ctx context.Context, fingerprint string) error {
-	op, err := b.srv.DeleteImage(fingerprint)
+	op, err := b.project(ctx).DeleteImage(fingerprint)
 	return waitOp(ctx, op, err, "delete image %q", fingerprint)
 }
 
-func (b *incusBackend) AddImageAlias(_ context.Context, fingerprint, alias string) error {
-	err := b.srv.CreateImageAlias(api.ImageAliasesPost{
+func (b *incusBackend) AddImageAlias(ctx context.Context, fingerprint, alias string) error {
+	err := b.project(ctx).CreateImageAlias(api.ImageAliasesPost{
 		ImageAliasesEntry: api.ImageAliasesEntry{
 			Name:                 alias,
 			ImageAliasesEntryPut: api.ImageAliasesEntryPut{Target: fingerprint},
@@ -209,8 +209,8 @@ func (b *incusBackend) AddImageAlias(_ context.Context, fingerprint, alias strin
 	return nil
 }
 
-func (b *incusBackend) RemoveImageAlias(_ context.Context, alias string) error {
-	if err := b.srv.DeleteImageAlias(alias); err != nil {
+func (b *incusBackend) RemoveImageAlias(ctx context.Context, alias string) error {
+	if err := b.project(ctx).DeleteImageAlias(alias); err != nil {
 		return fmt.Errorf("delete image alias %q: %w", alias, mapErr(err))
 	}
 	return nil
@@ -241,7 +241,7 @@ func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string) (str
 	// The image type names the zip rootfs entry (rootfs vs rootfs.img — the
 	// daemon's own import naming); the GET also 404s a ghost fingerprint
 	// before any download work.
-	img, _, err := b.srv.GetImage(fingerprint)
+	img, _, err := b.project(ctx).GetImage(fingerprint)
 	if err != nil {
 		return "", nil, fmt.Errorf("get image %q: %w", fingerprint, mapErr(err))
 	}
@@ -282,7 +282,7 @@ func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string) (str
 	})
 	defer stopCancel()
 
-	resp, err := b.srv.GetImageFile(fingerprint, incusclient.ImageFileRequest{
+	resp, err := b.project(ctx).GetImageFile(fingerprint, incusclient.ImageFileRequest{
 		MetaFile:   contextReadWriteSeeker{ctx: ctx, ReadWriteSeeker: meta},
 		RootfsFile: contextReadWriteSeeker{ctx: ctx, ReadWriteSeeker: rootfs},
 		Canceler:   canceler,
@@ -461,7 +461,7 @@ func (b *incusBackend) ImportImage(ctx context.Context, r io.Reader, alias strin
 		args = splitArgs
 	}
 
-	op, err := b.srv.CreateImage(api.ImagesPost{}, args)
+	op, err := b.project(ctx).CreateImage(api.ImagesPost{}, args)
 	if err := waitOp(ctx, op, err, "import image"); err != nil {
 		return err
 	}
@@ -484,8 +484,8 @@ func (b *incusBackend) ImportImage(ctx context.Context, r io.Reader, alias strin
 // UpdateImage sets the description property and the public flag via
 // GET-preserve-PUT with the fresh etag, so AutoUpdate/ExpiresAt/Profiles and
 // the other properties survive (a PUT silently clears omitted fields).
-func (b *incusBackend) UpdateImage(_ context.Context, fingerprint, description string, public bool) error {
-	img, etag, err := b.srv.GetImage(fingerprint)
+func (b *incusBackend) UpdateImage(ctx context.Context, fingerprint, description string, public bool) error {
+	img, etag, err := b.project(ctx).GetImage(fingerprint)
 	if err != nil {
 		return fmt.Errorf("get image %q: %w", fingerprint, mapErr(err))
 	}
@@ -495,7 +495,7 @@ func (b *incusBackend) UpdateImage(_ context.Context, fingerprint, description s
 	}
 	put.Properties["description"] = description
 	put.Public = public
-	if err := b.srv.UpdateImage(fingerprint, put, etag); err != nil {
+	if err := b.project(ctx).UpdateImage(fingerprint, put, etag); err != nil {
 		return fmt.Errorf("update image %q: %w", fingerprint, mapErr(err))
 	}
 	return nil

@@ -7,7 +7,7 @@ import (
 )
 
 func (b *incusBackend) RenameInstance(ctx context.Context, name, newName string) error {
-	op, err := b.srv.RenameInstance(name, api.InstancePost{Name: newName})
+	op, err := b.project(ctx).RenameInstance(name, api.InstancePost{Name: newName})
 	return waitOp(ctx, op, err, "rename instance %q to %q", name, newName)
 }
 
@@ -16,6 +16,6 @@ func (b *incusBackend) MoveInstance(ctx context.Context, name, pool string) erro
 	// MigrateInstance with Migration=false ("Can't ask for a rename through
 	// MigrateInstance"). No Target → local pull-mode move (matches `incus move
 	// <name> <name> --storage <pool>`).
-	op, err := b.srv.MigrateInstance(name, api.InstancePost{Name: name, Pool: pool, Migration: true})
+	op, err := b.project(ctx).MigrateInstance(name, api.InstancePost{Name: name, Pool: pool, Migration: true})
 	return waitOp(ctx, op, err, "move instance %q to pool %q", name, pool)
 }

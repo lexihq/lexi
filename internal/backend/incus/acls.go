@@ -10,8 +10,8 @@ import (
 	"github.com/lxc/incus/v6/shared/api"
 )
 
-func (b *incusBackend) ListNetworkACLs(_ context.Context) ([]backend.NetworkACL, error) {
-	acls, err := b.srv.GetNetworkACLs()
+func (b *incusBackend) ListNetworkACLs(ctx context.Context) ([]backend.NetworkACL, error) {
+	acls, err := b.project(ctx).GetNetworkACLs()
 	if err != nil {
 		return nil, fmt.Errorf("list network ACLs: %w", mapErr(err))
 	}
@@ -23,8 +23,8 @@ func (b *incusBackend) ListNetworkACLs(_ context.Context) ([]backend.NetworkACL,
 	return out, nil
 }
 
-func (b *incusBackend) GetNetworkACL(_ context.Context, name string) (backend.NetworkACL, error) {
-	acl, etag, err := b.srv.GetNetworkACL(name)
+func (b *incusBackend) GetNetworkACL(ctx context.Context, name string) (backend.NetworkACL, error) {
+	acl, etag, err := b.project(ctx).GetNetworkACL(name)
 	if err != nil {
 		return backend.NetworkACL{}, fmt.Errorf("get network ACL %q: %w", name, mapErr(err))
 	}
@@ -33,11 +33,11 @@ func (b *incusBackend) GetNetworkACL(_ context.Context, name string) (backend.Ne
 	return out, nil
 }
 
-func (b *incusBackend) CreateNetworkACL(_ context.Context, name, description string) error {
+func (b *incusBackend) CreateNetworkACL(ctx context.Context, name, description string) error {
 	post := api.NetworkACLsPost{}
 	post.Name = name
 	post.Description = description
-	if err := b.srv.CreateNetworkACL(post); err != nil {
+	if err := b.project(ctx).CreateNetworkACL(post); err != nil {
 		// The daemon reports a duplicate as a plain 400 ("The network ACL
 		// already exists"), which mapErr's typed BadRequest branch would turn
 		// into ErrInvalid before the string fallback can see it.
@@ -53,8 +53,8 @@ func (b *incusBackend) CreateNetworkACL(_ context.Context, name, description str
 // GET-preserve-PUT, so the ACL's Config map is never dropped. The version is
 // the GetNetworkACL etag (412 → ErrConflict); an empty version updates
 // unconditionally. UpdateNetworkACL is synchronous.
-func (b *incusBackend) UpdateNetworkACL(_ context.Context, name, description string, ingress, egress []backend.NetworkACLRule, version string) error {
-	acl, _, err := b.srv.GetNetworkACL(name)
+func (b *incusBackend) UpdateNetworkACL(ctx context.Context, name, description string, ingress, egress []backend.NetworkACLRule, version string) error {
+	acl, _, err := b.project(ctx).GetNetworkACL(name)
 	if err != nil {
 		return fmt.Errorf("get network ACL %q: %w", name, mapErr(err))
 	}
@@ -62,7 +62,7 @@ func (b *incusBackend) UpdateNetworkACL(_ context.Context, name, description str
 	put.Description = description
 	put.Ingress = toAPIRules(ingress)
 	put.Egress = toAPIRules(egress)
-	if err := b.srv.UpdateNetworkACL(name, put, version); err != nil {
+	if err := b.project(ctx).UpdateNetworkACL(name, put, version); err != nil {
 		return fmt.Errorf("update network ACL %q: %w", name, mapErr(err))
 	}
 	return nil
@@ -72,7 +72,7 @@ func (b *incusBackend) UpdateNetworkACL(_ context.Context, name, description str
 // daemon refuses renaming an attached ACL with an untyped error) and the
 // target name for collisions, so both surface as clean sentinels.
 func (b *incusBackend) RenameNetworkACL(ctx context.Context, name, newName string) error {
-	acl, _, err := b.srv.GetNetworkACL(name)
+	acl, _, err := b.project(ctx).GetNetworkACL(name)
 	if err != nil {
 		return fmt.Errorf("get network ACL %q: %w", name, mapErr(err))
 	}
@@ -88,7 +88,7 @@ func (b *incusBackend) RenameNetworkACL(ctx context.Context, name, newName strin
 			return fmt.Errorf("network ACL %q already exists: %w", newName, backend.ErrConflict)
 		}
 	}
-	if err := b.srv.RenameNetworkACL(name, api.NetworkACLPost{Name: newName}); err != nil {
+	if err := b.project(ctx).RenameNetworkACL(name, api.NetworkACLPost{Name: newName}); err != nil {
 		return fmt.Errorf("rename network ACL %q: %w", name, mapErr(err))
 	}
 	return nil
@@ -96,15 +96,15 @@ func (b *incusBackend) RenameNetworkACL(ctx context.Context, name, newName strin
 
 // DeleteNetworkACL pre-checks UsedBy so a referenced ACL conflicts cleanly
 // (the daemon's in-use error is an untyped 400).
-func (b *incusBackend) DeleteNetworkACL(_ context.Context, name string) error {
-	acl, _, err := b.srv.GetNetworkACL(name)
+func (b *incusBackend) DeleteNetworkACL(ctx context.Context, name string) error {
+	acl, _, err := b.project(ctx).GetNetworkACL(name)
 	if err != nil {
 		return fmt.Errorf("get network ACL %q: %w", name, mapErr(err))
 	}
 	if n := len(acl.UsedBy); n > 0 {
 		return fmt.Errorf("network ACL %q is in use by %d object(s): %w", name, n, backend.ErrConflict)
 	}
-	if err := b.srv.DeleteNetworkACL(name); err != nil {
+	if err := b.project(ctx).DeleteNetworkACL(name); err != nil {
 		// An attachment racing the UsedBy pre-check surfaces as the daemon's
 		// untyped "Cannot delete an ACL that is in use"; map it like the
 		// pre-check would.

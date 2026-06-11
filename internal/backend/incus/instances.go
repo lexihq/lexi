@@ -11,8 +11,8 @@ import (
 	"github.com/lxc/incus/v6/shared/api"
 )
 
-func (b *incusBackend) ListInstances(_ context.Context) ([]backend.Instance, error) {
-	full, err := b.srv.GetInstancesFull(api.InstanceTypeAny)
+func (b *incusBackend) ListInstances(ctx context.Context) ([]backend.Instance, error) {
+	full, err := b.project(ctx).GetInstancesFull(api.InstanceTypeAny)
 	if err != nil {
 		return nil, fmt.Errorf("list instances: %w", err)
 	}
@@ -24,8 +24,8 @@ func (b *incusBackend) ListInstances(_ context.Context) ([]backend.Instance, err
 	return out, nil
 }
 
-func (b *incusBackend) GetInstance(_ context.Context, name string) (backend.Instance, error) {
-	full, _, err := b.srv.GetInstanceFull(name)
+func (b *incusBackend) GetInstance(ctx context.Context, name string) (backend.Instance, error) {
+	full, _, err := b.project(ctx).GetInstanceFull(name)
 	if err != nil {
 		return backend.Instance{}, fmt.Errorf("get instance %q: %w", name, mapErr(err))
 	}
@@ -37,7 +37,7 @@ func (b *incusBackend) CreateInstance(ctx context.Context, opt backend.CreateOpt
 	// only works for managed networks (unmanaged ones need nictype+parent, a
 	// shape this seam doesn't offer); reject unmanaged up front.
 	if opt.Network != "" {
-		n, _, err := b.srv.GetNetwork(opt.Network)
+		n, _, err := b.project(ctx).GetNetwork(opt.Network)
 		if err != nil {
 			return fmt.Errorf("get network %q: %w", opt.Network, mapErr(err))
 		}
@@ -49,7 +49,7 @@ func (b *incusBackend) CreateInstance(ctx context.Context, opt backend.CreateOpt
 	if err != nil {
 		return err
 	}
-	op, err := b.srv.CreateInstance(req)
+	op, err := b.project(ctx).CreateInstance(req)
 	return waitOp(ctx, op, err, "create instance %q", opt.Name)
 }
 
@@ -74,7 +74,7 @@ func (b *incusBackend) ResumeInstance(ctx context.Context, name string) error {
 }
 
 func (b *incusBackend) changeState(ctx context.Context, name, action string, force bool) error {
-	op, err := b.srv.UpdateInstanceState(name, api.InstanceStatePut{
+	op, err := b.project(ctx).UpdateInstanceState(name, api.InstanceStatePut{
 		Action:  action,
 		Timeout: -1,
 		Force:   force,
@@ -83,7 +83,7 @@ func (b *incusBackend) changeState(ctx context.Context, name, action string, for
 }
 
 func (b *incusBackend) DeleteInstance(ctx context.Context, name string) error {
-	state, _, err := b.srv.GetInstanceState(name)
+	state, _, err := b.project(ctx).GetInstanceState(name)
 	if err != nil {
 		return fmt.Errorf("get state of %q: %w", name, mapErr(err))
 	}
@@ -92,11 +92,11 @@ func (b *incusBackend) DeleteInstance(ctx context.Context, name string) error {
 			return err
 		}
 	}
-	op, err := b.srv.DeleteInstance(name)
+	op, err := b.project(ctx).DeleteInstance(name)
 	if err := waitOp(ctx, op, err, "delete instance %q", name); err != nil {
 		return err
 	}
-	b.clearCPUSample(name)
+	b.clearCPUSample(cpuSampleKey(ctx, name))
 	return nil
 }
 
@@ -104,11 +104,11 @@ func (b *incusBackend) CloneInstance(ctx context.Context, src, dst string) error
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	source, _, err := b.srv.GetInstance(src)
+	source, _, err := b.project(ctx).GetInstance(src)
 	if err != nil {
 		return fmt.Errorf("get source instance %q: %w", src, mapErr(err))
 	}
-	op, err := b.srv.CopyInstance(b.srv, *source, &incusclient.InstanceCopyArgs{Name: dst})
+	op, err := b.project(ctx).CopyInstance(b.srv, *source, &incusclient.InstanceCopyArgs{Name: dst})
 	if err != nil {
 		return fmt.Errorf("clone %q to %q: %w", src, dst, mapErr(err))
 	}
@@ -135,13 +135,13 @@ func waitOp(ctx context.Context, op incusclient.Operation, err error, format str
 // mutate adjust the writable copy, then PUTs and waits. The fetch error is
 // labelled "get instance"; the update/wait error uses format/args.
 func (b *incusBackend) mutateInstance(ctx context.Context, name string, mutate func(*api.InstancePut), format string, args ...any) error {
-	inst, etag, err := b.srv.GetInstance(name)
+	inst, etag, err := b.project(ctx).GetInstance(name)
 	if err != nil {
 		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
 	}
 	put := inst.Writable()
 	mutate(&put)
-	op, err := b.srv.UpdateInstance(name, put, etag)
+	op, err := b.project(ctx).UpdateInstance(name, put, etag)
 	return waitOp(ctx, op, err, format, args...)
 }
 

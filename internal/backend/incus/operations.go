@@ -10,8 +10,8 @@ import (
 
 // ListOperations returns the daemon's running and recently finished
 // operations, newest first.
-func (b *incusBackend) ListOperations(_ context.Context) ([]backend.Operation, error) {
-	ops, err := b.srv.GetOperations()
+func (b *incusBackend) ListOperations(ctx context.Context) ([]backend.Operation, error) {
+	ops, err := b.project(ctx).GetOperations()
 	if err != nil {
 		return nil, fmt.Errorf("list operations: %w", mapErr(err))
 	}
@@ -34,8 +34,8 @@ func (b *incusBackend) ListOperations(_ context.Context) ([]backend.Operation, e
 // CancelOperation asks the daemon to cancel a running operation. The daemon
 // rejects a non-cancelable or finished operation with a 400 (mapped to
 // ErrInvalid); an unknown id is ErrNotFound.
-func (b *incusBackend) CancelOperation(_ context.Context, id string) error {
-	if err := b.srv.DeleteOperation(id); err != nil {
+func (b *incusBackend) CancelOperation(ctx context.Context, id string) error {
+	if err := b.project(ctx).DeleteOperation(id); err != nil {
 		return fmt.Errorf("cancel operation %q: %w", id, mapErr(err))
 	}
 	return nil

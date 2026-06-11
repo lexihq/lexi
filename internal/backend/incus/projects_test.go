@@ -1,6 +1,7 @@
 package incus
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -63,4 +64,56 @@ func TestDeleteProjectCallsThrough(t *testing.T) {
 	b := &incusBackend{srv: s}
 	require.NoError(t, b.DeleteProject(t.Context(), "dev"))
 	assert.Equal(t, "dev", s.deletedProject)
+}
+
+// The scoping contract: a project tagged on the ctx routes the call through
+// the project-scoped client; unset or "default" uses the bare client. The
+// export flows matter most — their downloads and deferred cleanups bypass the
+// generic request builder (plan-review P3).
+func TestContextProjectScopesClient(t *testing.T) {
+	devCtx := backend.WithProject(t.Context(), "dev")
+
+	t.Run("instance list", func(t *testing.T) {
+		s := &instanceServerStub{}
+		b := &incusBackend{srv: s}
+		_, err := b.ListInstances(devCtx)
+		require.NoError(t, err)
+		assert.Equal(t, "dev", s.usedProject)
+	})
+
+	t.Run("instance export backup download and cleanup", func(t *testing.T) {
+		s := &instanceServerStub{
+			backupOp:       &operationStub{},
+			backupDeleteOp: &operationStub{},
+			backupBytes:    []byte("x"),
+		}
+		b := &incusBackend{srv: s}
+		var buf bytes.Buffer
+		require.NoError(t, b.ExportInstance(devCtx, "demo", &buf))
+		assert.Equal(t, "dev", s.usedProject)
+		assert.NotEmpty(t, s.deletedBackup, "scoped cleanup must still run")
+	})
+
+	t.Run("image export download", func(t *testing.T) {
+		s := &instanceServerStub{
+			image:         &api.Image{Type: "container"},
+			imageFileMeta: []byte("meta"),
+		}
+		b := &incusBackend{srv: s}
+		_, rc, err := b.ExportImage(devCtx, "fp")
+		require.NoError(t, err)
+		require.NoError(t, rc.Close())
+		assert.Equal(t, "dev", s.usedProject)
+	})
+
+	t.Run("default project stays on the bare client", func(t *testing.T) {
+		s := &instanceServerStub{}
+		b := &incusBackend{srv: s}
+		_, err := b.ListInstances(backend.WithProject(t.Context(), "default"))
+		require.NoError(t, err)
+		assert.Empty(t, s.usedProject)
+		_, err = b.ListInstances(t.Context())
+		require.NoError(t, err)
+		assert.Empty(t, s.usedProject)
+	})
 }

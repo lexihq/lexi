@@ -23,7 +23,10 @@ import (
 func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Writer) error {
 	backupName := fmt.Sprintf("lxcon-export-%d", time.Now().UnixNano())
 
-	op, err := b.srv.CreateInstanceBackup(name, api.InstanceBackupsPost{
+	// Capture the scoped client once: the deferred cleanup runs under its own
+	// detached context and must still target the request's project.
+	srv := b.project(ctx)
+	op, err := srv.CreateInstanceBackup(name, api.InstanceBackupsPost{
 		Name:                 backupName,
 		CompressionAlgorithm: "gzip",
 	})
@@ -32,7 +35,7 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 	}
 	// Once the operation exists, clean up on every return path. deleteBackup
 	// treats a missing backup as a no-op, so this is harmless if creation failed.
-	defer b.deleteBackup(name, backupName)
+	defer b.deleteBackup(srv, name, backupName)
 	if err := op.WaitContext(ctx); err != nil {
 		// A canceled wait leaves the server operation running; cancel it so the
 		// backup does not finish and leak after we have given up. The deferred
@@ -62,7 +65,7 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 	})
 	defer stopCancel()
 
-	if _, err := b.srv.GetInstanceBackupFile(name, backupName, &incusclient.BackupFileRequest{
+	if _, err := srv.GetInstanceBackupFile(name, backupName, &incusclient.BackupFileRequest{
 		BackupFile: contextWriteSeeker{ctx: ctx, WriteSeeker: tmp},
 		Canceler:   canceler,
 	}); err != nil {
@@ -80,7 +83,7 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 // ImportInstance creates an instance named name from a backup tarball streamed
 // from r (as produced by ExportInstance).
 func (b *incusBackend) ImportInstance(ctx context.Context, name string, r io.Reader) error {
-	op, err := b.srv.CreateInstanceFromBackup(incusclient.InstanceBackupArgs{
+	op, err := b.project(ctx).CreateInstanceFromBackup(incusclient.InstanceBackupArgs{
 		BackupFile: contextReader{ctx: ctx, Reader: r},
 		Name:       name,
 	})
@@ -144,11 +147,11 @@ func cleanupExportTemp(tmp *os.File) {
 // must not abort cleanup and leak the backup. A failure cannot change the
 // already-streamed result, so it is logged (not returned) to keep leaked backups
 // discoverable; a missing backup means there was nothing to clean and is ignored.
-func (b *incusBackend) deleteBackup(name, backupName string) {
+func (b *incusBackend) deleteBackup(srv incusclient.InstanceServer, name, backupName string) {
 	ctx, cancel := context.WithTimeout(context.Background(), backupDeleteTimeout)
 	defer cancel()
 
-	op, err := b.srv.DeleteInstanceBackup(name, backupName)
+	op, err := srv.DeleteInstanceBackup(name, backupName)
 	if err != nil {
 		if !errors.Is(mapErr(err), backend.ErrNotFound) {
 			slog.Warn("delete export backup", "backup", backupName, "instance", name, "err", err)

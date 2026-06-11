@@ -19,8 +19,8 @@ import (
 // names only, so each entry is statted (opened and immediately closed) for its
 // type and mode; a stat failure (e.g. a dangling symlink) yields the entry
 // with an empty Mode rather than failing the whole listing.
-func (b *incusBackend) ListFiles(_ context.Context, instance, path string) ([]backend.FileEntry, error) {
-	content, resp, err := b.srv.GetInstanceFile(instance, path)
+func (b *incusBackend) ListFiles(ctx context.Context, instance, path string) ([]backend.FileEntry, error) {
+	content, resp, err := b.project(ctx).GetInstanceFile(instance, path)
 	if err != nil {
 		return nil, fmt.Errorf("list files %q: %w", path, mapErr(err))
 	}
@@ -36,7 +36,7 @@ func (b *incusBackend) ListFiles(_ context.Context, instance, path string) ([]ba
 	entries := make([]backend.FileEntry, 0, len(resp.Entries))
 	for _, name := range resp.Entries {
 		entry := backend.FileEntry{Name: name}
-		if c, r, err := b.srv.GetInstanceFile(instance, prefix+name); err == nil {
+		if c, r, err := b.project(ctx).GetInstanceFile(instance, prefix+name); err == nil {
 			closeAndLogFile(prefix+name, c)
 			entry.Dir = r.Type == "directory"
 			entry.Mode = fmt.Sprintf("%04o", r.Mode)
@@ -53,8 +53,8 @@ func (b *incusBackend) ListFiles(_ context.Context, instance, path string) ([]ba
 }
 
 // PullFile streams the instance file at path to w.
-func (b *incusBackend) PullFile(_ context.Context, instance, path string, w io.Writer) error {
-	content, resp, err := b.srv.GetInstanceFile(instance, path)
+func (b *incusBackend) PullFile(ctx context.Context, instance, path string, w io.Writer) error {
+	content, resp, err := b.project(ctx).GetInstanceFile(instance, path)
 	if err != nil {
 		return fmt.Errorf("pull file %q: %w", path, mapErr(err))
 	}
@@ -71,7 +71,7 @@ func (b *incusBackend) PullFile(_ context.Context, instance, path string, w io.W
 // PushFile creates (or overwrites) the instance file at path from r with the
 // given ownership and mode (zero opts: root:root 0644). The file API needs a
 // ReadSeeker, so the content is buffered; the HTTP handler caps the upload size.
-func (b *incusBackend) PushFile(_ context.Context, instance, path string, r io.Reader, opts backend.FileWriteOptions) error {
+func (b *incusBackend) PushFile(ctx context.Context, instance, path string, r io.Reader, opts backend.FileWriteOptions) error {
 	mode := 0o644
 	if opts.Mode != "" {
 		m, err := strconv.ParseInt(opts.Mode, 8, 32)
@@ -84,7 +84,7 @@ func (b *incusBackend) PushFile(_ context.Context, instance, path string, r io.R
 	if err != nil {
 		return fmt.Errorf("push file %q: %w", path, err)
 	}
-	err = b.srv.CreateInstanceFile(instance, path, incusclient.InstanceFileArgs{
+	err = b.project(ctx).CreateInstanceFile(instance, path, incusclient.InstanceFileArgs{
 		Content:   bytes.NewReader(content),
 		Mode:      mode,
 		UID:       opts.UID,
@@ -101,8 +101,8 @@ func (b *incusBackend) PushFile(_ context.Context, instance, path string, r io.R
 // PullFileInfo streams the file at path to w and returns its metadata.
 // Directories and symlinks report their type without content; a limit > 0
 // rejects larger files with ErrInvalid instead of streaming them fully.
-func (b *incusBackend) PullFileInfo(_ context.Context, instance, path string, w io.Writer, limit int64) (backend.FileInfo, error) {
-	content, resp, err := b.srv.GetInstanceFile(instance, path)
+func (b *incusBackend) PullFileInfo(ctx context.Context, instance, path string, w io.Writer, limit int64) (backend.FileInfo, error) {
+	content, resp, err := b.project(ctx).GetInstanceFile(instance, path)
 	if err != nil {
 		return backend.FileInfo{}, fmt.Errorf("pull file %q: %w", path, mapErr(err))
 	}
@@ -130,8 +130,8 @@ func (b *incusBackend) PullFileInfo(_ context.Context, instance, path string, w 
 // reads at most limit+1 bytes from the daemon stream before closing, so a huge
 // log is not downloaded in full. Directories and symlinks report their type
 // without content.
-func (b *incusBackend) PullFileHead(_ context.Context, instance, path string, w io.Writer, limit int64) (backend.FileInfo, bool, error) {
-	content, resp, err := b.srv.GetInstanceFile(instance, path)
+func (b *incusBackend) PullFileHead(ctx context.Context, instance, path string, w io.Writer, limit int64) (backend.FileInfo, bool, error) {
+	content, resp, err := b.project(ctx).GetInstanceFile(instance, path)
 	if err != nil {
 		return backend.FileInfo{}, false, fmt.Errorf("pull file %q: %w", path, mapErr(err))
 	}
@@ -153,11 +153,11 @@ func (b *incusBackend) PullFileHead(_ context.Context, instance, path string, w 
 
 // DeleteFile removes the instance file at path. The daemon API is
 // non-recursive: directories must be empty, and deleting "/" is rejected.
-func (b *incusBackend) DeleteFile(_ context.Context, instance, path string) error {
+func (b *incusBackend) DeleteFile(ctx context.Context, instance, path string) error {
 	if path == "/" {
 		return fmt.Errorf("delete file: cannot delete %q: %w", path, backend.ErrInvalid)
 	}
-	if err := b.srv.DeleteInstanceFile(instance, path); err != nil {
+	if err := b.project(ctx).DeleteInstanceFile(instance, path); err != nil {
 		// The daemon reports a non-empty directory as a generic sftp failure;
 		// surface it as a user error, not a 500.
 		if strings.Contains(err.Error(), "directory not empty") {
@@ -172,12 +172,12 @@ func (b *incusBackend) DeleteFile(_ context.Context, instance, path string) erro
 // exist). The daemon silently succeeds when anything — even a regular file —
 // already exists at path, so existence is pre-checked to surface a conflict
 // like the fake does; the stat-then-create race window is accepted.
-func (b *incusBackend) MakeDirectory(_ context.Context, instance, path string) error {
-	if content, _, err := b.srv.GetInstanceFile(instance, path); err == nil {
+func (b *incusBackend) MakeDirectory(ctx context.Context, instance, path string) error {
+	if content, _, err := b.project(ctx).GetInstanceFile(instance, path); err == nil {
 		closeAndLogFile(path, content)
 		return fmt.Errorf("make directory: %q already exists: %w", path, backend.ErrConflict)
 	}
-	err := b.srv.CreateInstanceFile(instance, path, incusclient.InstanceFileArgs{
+	err := b.project(ctx).CreateInstanceFile(instance, path, incusclient.InstanceFileArgs{
 		Type: "directory",
 		Mode: 0o755,
 	})

@@ -14,8 +14,8 @@ import (
 )
 
 // ConsoleLog reads the instance's console log buffer into a string.
-func (b *incusBackend) ConsoleLog(_ context.Context, name string) (string, error) {
-	rc, err := b.srv.GetInstanceConsoleLog(name, &incusclient.InstanceConsoleLogArgs{})
+func (b *incusBackend) ConsoleLog(ctx context.Context, name string) (string, error) {
+	rc, err := b.project(ctx).GetInstanceConsoleLog(name, &incusclient.InstanceConsoleLogArgs{})
 	if err != nil {
 		return "", fmt.Errorf("get console log of %q: %w", name, mapErr(err))
 	}
@@ -39,7 +39,7 @@ func (b *incusBackend) Exec(ctx context.Context, name string, req backend.ExecRe
 	}
 
 	dataDone := make(chan bool)
-	op, err := b.srv.ExecInstance(name, api.InstanceExecPost{
+	op, err := b.project(ctx).ExecInstance(name, api.InstanceExecPost{
 		Command:     command,
 		WaitForWS:   true,
 		Interactive: true,

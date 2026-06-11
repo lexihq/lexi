@@ -1,6 +1,7 @@
 package incus
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strings"
@@ -89,6 +90,18 @@ func New() (*incusBackend, error) {
 
 // Capabilities reports the server info and feature flags probed at New().
 func (b *incusBackend) Capabilities() backend.Capabilities { return b.caps }
+
+// project returns the client scoped to the request's project (the Backend
+// interface contract: WithProject tags the ctx, unset means default), or the
+// bare client. UseProject is a cheap struct copy sharing the HTTP client;
+// the daemon routes shared resource kinds (per the project's features.*) to
+// the default project itself, so scoping every call is safe.
+func (b *incusBackend) project(ctx context.Context) incusclient.InstanceServer {
+	if name := backend.ProjectFromContext(ctx); name != "" && name != "default" {
+		return b.srv.UseProject(name)
+	}
+	return b.srv
+}
 
 // mapErr translates an Incus client error into a backend sentinel so the HTTP
 // layer can map it to a status via errors.Is, mirroring the fake backend.

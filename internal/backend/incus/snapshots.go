@@ -10,8 +10,8 @@ import (
 	"github.com/lxc/incus/v6/shared/api"
 )
 
-func (b *incusBackend) ListSnapshots(_ context.Context, name string) ([]backend.Snapshot, error) {
-	snaps, err := b.srv.GetInstanceSnapshots(name)
+func (b *incusBackend) ListSnapshots(ctx context.Context, name string) ([]backend.Snapshot, error) {
+	snaps, err := b.project(ctx).GetInstanceSnapshots(name)
 	if err != nil {
 		return nil, fmt.Errorf("list snapshots of %q: %w", name, mapErr(err))
 	}
@@ -33,21 +33,21 @@ func (b *incusBackend) CreateSnapshot(ctx context.Context, name, snapshot string
 		t := opts.ExpiresAt
 		post.ExpiresAt = &t
 	}
-	op, err := b.srv.CreateInstanceSnapshot(name, post)
+	op, err := b.project(ctx).CreateInstanceSnapshot(name, post)
 	return waitOp(ctx, op, err, "snapshot %q of %q", snapshot, name)
 }
 
 func (b *incusBackend) RenameSnapshot(ctx context.Context, name, snapshot, newName string) error {
-	op, err := b.srv.RenameInstanceSnapshot(name, snapshot, api.InstanceSnapshotPost{Name: newName})
+	op, err := b.project(ctx).RenameInstanceSnapshot(name, snapshot, api.InstanceSnapshotPost{Name: newName})
 	return waitOp(ctx, op, err, "rename snapshot %q to %q on %q", snapshot, newName, name)
 }
 
 func (b *incusBackend) UpdateSnapshotExpiry(ctx context.Context, name, snapshot string, expiresAt time.Time) error {
-	_, etag, err := b.srv.GetInstanceSnapshot(name, snapshot)
+	_, etag, err := b.project(ctx).GetInstanceSnapshot(name, snapshot)
 	if err != nil {
 		return fmt.Errorf("get snapshot %q of %q: %w", snapshot, name, mapErr(err))
 	}
-	op, err := b.srv.UpdateInstanceSnapshot(name, snapshot, api.InstanceSnapshotPut{ExpiresAt: expiresAt}, etag)
+	op, err := b.project(ctx).UpdateInstanceSnapshot(name, snapshot, api.InstanceSnapshotPut{ExpiresAt: expiresAt}, etag)
 	return waitOp(ctx, op, err, "update expiry of %q on %q", snapshot, name)
 }
 
@@ -59,12 +59,12 @@ func (b *incusBackend) RestoreSnapshot(ctx context.Context, name, snapshot strin
 }
 
 func (b *incusBackend) DeleteSnapshot(ctx context.Context, name, snapshot string) error {
-	op, err := b.srv.DeleteInstanceSnapshot(name, snapshot)
+	op, err := b.project(ctx).DeleteInstanceSnapshot(name, snapshot)
 	return waitOp(ctx, op, err, "delete snapshot %q of %q", snapshot, name)
 }
 
-func (b *incusBackend) GetSnapshotSchedule(_ context.Context, name string) (backend.SnapshotSchedule, error) {
-	inst, _, err := b.srv.GetInstance(name)
+func (b *incusBackend) GetSnapshotSchedule(ctx context.Context, name string) (backend.SnapshotSchedule, error) {
+	inst, _, err := b.project(ctx).GetInstance(name)
 	if err != nil {
 		return backend.SnapshotSchedule{}, fmt.Errorf("get instance %q: %w", name, mapErr(err))
 	}

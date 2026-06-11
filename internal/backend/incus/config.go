@@ -44,8 +44,8 @@ func editableConfig(local map[string]string) map[string]string {
 	return out
 }
 
-func (b *incusBackend) GetInstanceConfig(_ context.Context, name string) (backend.InstanceConfig, error) {
-	inst, etag, err := b.srv.GetInstance(name)
+func (b *incusBackend) GetInstanceConfig(ctx context.Context, name string) (backend.InstanceConfig, error) {
+	inst, etag, err := b.project(ctx).GetInstance(name)
 	if err != nil {
 		return backend.InstanceConfig{}, fmt.Errorf("get instance %q: %w", name, mapErr(err))
 	}
@@ -93,7 +93,7 @@ func (b *incusBackend) AddDevice(ctx context.Context, name, device string, confi
 // to ErrConflict) when the instance changed since that read. An empty version
 // sends the fresh GET's etag, updating unconditionally in practice.
 func (b *incusBackend) UpdateDevice(ctx context.Context, name, device string, config map[string]string, version string) error {
-	inst, etag, err := b.srv.GetInstance(name)
+	inst, etag, err := b.project(ctx).GetInstance(name)
 	if err != nil {
 		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
 	}
@@ -105,13 +105,13 @@ func (b *incusBackend) UpdateDevice(ctx context.Context, name, device string, co
 	if version == "" {
 		version = etag
 	}
-	op, err := b.srv.UpdateInstance(name, put, version)
+	op, err := b.project(ctx).UpdateInstance(name, put, version)
 	return waitOp(ctx, op, err, "update device %q on %q", device, name)
 }
 
 // RemoveDevice detaches a local device. Absent devices 404 before any PUT.
 func (b *incusBackend) RemoveDevice(ctx context.Context, name, device string) error {
-	inst, etag, err := b.srv.GetInstance(name)
+	inst, etag, err := b.project(ctx).GetInstance(name)
 	if err != nil {
 		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
 	}
@@ -120,7 +120,7 @@ func (b *incusBackend) RemoveDevice(ctx context.Context, name, device string) er
 		return fmt.Errorf("device %q on %q: %w", device, name, backend.ErrNotFound)
 	}
 	delete(put.Devices, device)
-	op, err := b.srv.UpdateInstance(name, put, etag)
+	op, err := b.project(ctx).UpdateInstance(name, put, etag)
 	return waitOp(ctx, op, err, "remove device %q from %q", device, name)
 }
 

@@ -146,11 +146,11 @@ func TestDeleteInstanceRemovesCPUSampleAfterSuccessfulDelete(t *testing.T) {
 			state:    &api.InstanceState{Status: "Stopped"},
 			deleteOp: &operationStub{},
 		},
-		cpuSamples: map[string]cpuSample{"demo": {}},
+		cpuSamples: map[string]cpuSample{"/demo": {}},
 	}
 
 	require.NoError(t, b.DeleteInstance(t.Context(), "demo"))
-	assert.NotContains(t, b.cpuSamples, "demo")
+	assert.NotContains(t, b.cpuSamples, "/demo")
 }
 
 func TestDeleteInstanceRetainsCPUSampleWhenDeleteFails(t *testing.T) {
@@ -159,9 +159,9 @@ func TestDeleteInstanceRetainsCPUSampleWhenDeleteFails(t *testing.T) {
 			state:    &api.InstanceState{Status: "Stopped"},
 			deleteOp: &operationStub{waitErr: errors.New("delete failed")},
 		},
-		cpuSamples: map[string]cpuSample{"demo": {}},
+		cpuSamples: map[string]cpuSample{"/demo": {}},
 	}
 
 	require.Error(t, b.DeleteInstance(t.Context(), "demo"))
-	assert.Contains(t, b.cpuSamples, "demo")
+	assert.Contains(t, b.cpuSamples, "/demo")
 }

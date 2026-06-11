@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,8 +37,25 @@ func newBackend(t *testing.T) *incusBackend {
 	return nil
 }
 
+// nameSerial disambiguates back-to-back uniqueName calls: the wall clock has
+// ~1µs granularity on macOS, so consecutive calls collide ~80% of the time on
+// the time component alone. The time part stays for cross-run uniqueness
+// against leftovers from a crashed run.
+var nameSerial atomic.Int64
+
 func uniqueName(prefix string) string {
-	return fmt.Sprintf("lxcon-it-%s-%d", prefix, time.Now().UnixNano()%1_000_000)
+	return fmt.Sprintf("lxcon-it-%s-%d-%d", prefix, time.Now().UnixNano()%1_000_000, nameSerial.Add(1))
+}
+
+// Consecutive names must differ even within one clock tick — tests use
+// uniqueName for both sides of a rename, where a collision means renaming a
+// resource onto its own name ("already exists").
+func TestUniqueNameBackToBackDiffers(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		if a, b := uniqueName("x"), uniqueName("x"); a == b {
+			t.Fatalf("consecutive uniqueName calls collided: %q", a)
+		}
+	}
 }
 
 func listed(list []backend.Instance, name string) bool {

@@ -11,38 +11,38 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 )
 
-func (f *Fake) ListProjects(_ context.Context) ([]backend.Project, error) {
+func (f *Fake) ListProjects(ctx context.Context) ([]backend.Project, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	out := make([]backend.Project, 0, len(f.projects))
-	for name := range f.projects {
-		out = append(out, f.projectView(name))
+	out := make([]backend.Project, 0, len(f.remote(ctx).projects))
+	for name := range f.remote(ctx).projects {
+		out = append(out, f.projectView(f.remote(ctx), name))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
-func (f *Fake) GetProject(_ context.Context, name string) (backend.Project, error) {
+func (f *Fake) GetProject(ctx context.Context, name string) (backend.Project, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if _, ok := f.projects[name]; !ok {
+	if _, ok := f.remote(ctx).projects[name]; !ok {
 		return backend.Project{}, notFoundf("project %q", name)
 	}
-	p := f.projectView(name)
-	p.Version = strconv.Itoa(f.projectVersions[name])
+	p := f.projectView(f.remote(ctx), name)
+	p.Version = strconv.Itoa(f.remote(ctx).projectVersions[name])
 	return p, nil
 }
 
-func (f *Fake) CreateProject(_ context.Context, name, description string, config map[string]string) error {
+func (f *Fake) CreateProject(ctx context.Context, name, description string, config map[string]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	if !validProjectName(name) {
 		return invalid("invalid project name %q", name)
 	}
-	if _, ok := f.projects[name]; ok {
+	if _, ok := f.remote(ctx).projects[name]; ok {
 		return conflict("project %q already exists", name)
 	}
 	// Daemon parity: omitted default-enabled features are injected as "true"
@@ -57,10 +57,10 @@ func (f *Fake) CreateProject(_ context.Context, name, description string, config
 			cfg[feature] = "true"
 		}
 	}
-	f.projects[name] = backend.Project{Name: name, Description: description, Config: cfg}
+	f.remote(ctx).projects[name] = backend.Project{Name: name, Description: description, Config: cfg}
 	// A project owning its profiles starts with an empty default profile,
 	// like the daemon (no root disk — instances need one configured).
-	sp := f.spaceFor(name)
+	sp := f.remote(ctx).spaceFor(name)
 	if cfg["features.profiles"] == "true" {
 		sp.profiles["default"] = backend.Profile{
 			Name: "default", Description: "Default Incus profile",
@@ -71,39 +71,39 @@ func (f *Fake) CreateProject(_ context.Context, name, description string, config
 	return nil
 }
 
-func (f *Fake) UpdateProject(_ context.Context, name, description string, config map[string]string, version string) error {
+func (f *Fake) UpdateProject(ctx context.Context, name, description string, config map[string]string, version string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.projects[name]
+	p, ok := f.remote(ctx).projects[name]
 	if !ok {
 		return notFoundf("project %q", name)
 	}
 	// Empty version = unconditional, mirroring the Incus client's If-Match
 	// semantics; a stale version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(f.projectVersions[name]) {
+	if version != "" && version != strconv.Itoa(f.remote(ctx).projectVersions[name]) {
 		return conflict("project %q version %s", name, version)
 	}
 	// Incus parity: features cannot change once the project holds resources
 	// (flipping one would re-route existing resources to another namespace).
 	if f.projectFeatureChanged(p.Config, config) {
-		used := slices.DeleteFunc(f.projectUsedBy(name), isSeededDefaultProfile)
+		used := slices.DeleteFunc(f.projectUsedBy(f.remote(ctx), name), isSeededDefaultProfile)
 		if len(used) > 0 {
 			return invalid("features can only be changed on empty projects")
 		}
 	}
 	p.Description = description
 	p.Config = maps.Clone(config)
-	f.projects[name] = p
-	f.projectVersions[name]++
+	f.remote(ctx).projects[name] = p
+	f.remote(ctx).projectVersions[name]++
 	return nil
 }
 
-func (f *Fake) RenameProject(_ context.Context, name, newName string) error {
+func (f *Fake) RenameProject(ctx context.Context, name, newName string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.projects[name]
+	p, ok := f.remote(ctx).projects[name]
 	if !ok {
 		return notFoundf("project %q", name)
 	}
@@ -114,20 +114,20 @@ func (f *Fake) RenameProject(_ context.Context, name, newName string) error {
 	if !validProjectName(newName) {
 		return invalid("invalid project name %q", newName)
 	}
-	if _, exists := f.projects[newName]; exists {
+	if _, exists := f.remote(ctx).projects[newName]; exists {
 		return conflict("project %q already exists", newName)
 	}
 	p.Name = newName
-	f.projects[newName] = p
-	f.projectVersions[newName] = f.projectVersions[name] + 1
-	delete(f.projects, name)
-	delete(f.projectVersions, name)
+	f.remote(ctx).projects[newName] = p
+	f.remote(ctx).projectVersions[newName] = f.remote(ctx).projectVersions[name] + 1
+	delete(f.remote(ctx).projects, name)
+	delete(f.remote(ctx).projectVersions, name)
 	// The space and per-pool volume namespaces follow the rename.
-	if sp, ok := f.spaces[name]; ok {
-		f.spaces[newName] = sp
-		delete(f.spaces, name)
+	if sp, ok := f.remote(ctx).spaces[name]; ok {
+		f.remote(ctx).spaces[newName] = sp
+		delete(f.remote(ctx).spaces, name)
 	}
-	for _, pool := range f.pools {
+	for _, pool := range f.remote(ctx).pools {
 		if vols, ok := pool.volumes[name]; ok {
 			pool.volumes[newName] = vols
 			delete(pool.volumes, name)
@@ -136,11 +136,11 @@ func (f *Fake) RenameProject(_ context.Context, name, newName string) error {
 	return nil
 }
 
-func (f *Fake) DeleteProject(_ context.Context, name string) error {
+func (f *Fake) DeleteProject(ctx context.Context, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if _, ok := f.projects[name]; !ok {
+	if _, ok := f.remote(ctx).projects[name]; !ok {
 		return notFoundf("project %q", name)
 	}
 	// Incus parity: the default project cannot be deleted, and non-empty
@@ -150,14 +150,14 @@ func (f *Fake) DeleteProject(_ context.Context, name string) error {
 	}
 	// The project's own (seeded) default profile does not count against
 	// emptiness, matching the daemon's projectIsEmpty.
-	used := slices.DeleteFunc(f.projectUsedBy(name), isSeededDefaultProfile)
+	used := slices.DeleteFunc(f.projectUsedBy(f.remote(ctx), name), isSeededDefaultProfile)
 	if len(used) > 0 {
 		return conflict("project %q is not empty", name)
 	}
-	delete(f.projects, name)
-	delete(f.projectVersions, name)
-	delete(f.spaces, name)
-	for _, pool := range f.pools {
+	delete(f.remote(ctx).projects, name)
+	delete(f.remote(ctx).projectVersions, name)
+	delete(f.remote(ctx).spaces, name)
+	for _, pool := range f.remote(ctx).pools {
 		delete(pool.volumes, name)
 	}
 	return nil
@@ -209,18 +209,18 @@ func validProjectName(name string) bool {
 
 // projectView materializes a project with a fresh UsedBy. Callers must hold
 // the mutex.
-func (f *Fake) projectView(name string) backend.Project {
-	p := f.projects[name]
+func (f *Fake) projectView(rs *remoteState, name string) backend.Project {
+	p := rs.projects[name]
 	p.Config = maps.Clone(p.Config)
-	p.UsedBy = f.projectUsedBy(name)
+	p.UsedBy = f.projectUsedBy(rs, name)
 	return p
 }
 
 // projectUsedBy lists API paths of resources living in the project's space
 // (networks and ACLs only when the project owns them via features.networks).
 // Callers must hold the mutex.
-func (f *Fake) projectUsedBy(name string) []string {
-	sp, ok := f.spaces[name]
+func (f *Fake) projectUsedBy(rs *remoteState, name string) []string {
+	sp, ok := rs.spaces[name]
 	if !ok {
 		return nil
 	}
@@ -240,7 +240,7 @@ func (f *Fake) projectUsedBy(name string) []string {
 	for fp := range sp.images {
 		used = append(used, "/1.0/images/"+fp+suffix)
 	}
-	if name == "default" || f.projects[name].Config["features.networks"] == "true" {
+	if name == "default" || rs.projects[name].Config["features.networks"] == "true" {
 		for netName := range sp.networks {
 			used = append(used, "/1.0/networks/"+netName+suffix)
 		}
@@ -248,7 +248,7 @@ func (f *Fake) projectUsedBy(name string) []string {
 			used = append(used, "/1.0/network-acls/"+aclName+suffix)
 		}
 	}
-	for poolName, pool := range f.pools {
+	for poolName, pool := range rs.pools {
 		for volName := range pool.volumes[name] {
 			used = append(used, "/1.0/storage-pools/"+poolName+"/volumes/custom/"+volName+suffix)
 		}

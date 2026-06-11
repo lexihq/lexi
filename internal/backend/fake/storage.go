@@ -19,9 +19,9 @@ func (f *Fake) ListStoragePools(ctx context.Context) ([]backend.StoragePool, err
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	out := make([]backend.StoragePool, 0, len(f.pools))
-	for _, p := range f.pools {
-		out = append(out, f.poolView(p))
+	out := make([]backend.StoragePool, 0, len(f.remote(ctx).pools))
+	for _, p := range f.remote(ctx).pools {
+		out = append(out, f.poolView(f.remote(ctx), p))
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
@@ -31,11 +31,11 @@ func (f *Fake) GetStoragePool(ctx context.Context, pool string) (backend.Storage
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.pools[pool]
+	p, ok := f.remote(ctx).pools[pool]
 	if !ok {
 		return backend.StoragePool{}, notFoundf("storage pool %q", pool)
 	}
-	out := f.poolView(p)
+	out := f.poolView(f.remote(ctx), p)
 	out.Version = strconv.Itoa(p.version)
 	return out, nil
 }
@@ -44,7 +44,7 @@ func (f *Fake) UpdateStoragePool(ctx context.Context, name, description string, 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.pools[name]
+	p, ok := f.remote(ctx).pools[name]
 	if !ok {
 		return notFoundf("storage pool %q", name)
 	}
@@ -77,10 +77,10 @@ func (f *Fake) CreateStoragePool(ctx context.Context, p backend.StoragePool) err
 	if !slices.Contains([]string{"dir", "zfs", "btrfs", "lvm"}, p.Driver) {
 		return invalid("storage pool driver %q is not supported", p.Driver)
 	}
-	if _, ok := f.pools[p.Name]; ok {
+	if _, ok := f.remote(ctx).pools[p.Name]; ok {
 		return conflict("storage pool %q already exists", p.Name)
 	}
-	f.pools[p.Name] = &storagePool{
+	f.remote(ctx).pools[p.Name] = &storagePool{
 		StoragePool: backend.StoragePool{Name: p.Name, Driver: p.Driver, Description: p.Description, Config: maps.Clone(p.Config)},
 		volumes:     map[string]map[string]*storageVolume{},
 	}
@@ -91,23 +91,23 @@ func (f *Fake) DeleteStoragePool(ctx context.Context, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.pools[name]
+	p, ok := f.remote(ctx).pools[name]
 	if !ok {
 		return notFoundf("storage pool %q", name)
 	}
-	if used := f.poolUsedBy(p); len(used) > 0 {
+	if used := f.poolUsedBy(f.remote(ctx), p); len(used) > 0 {
 		return conflict("storage pool %q is in use by %s", name, strings.Join(used, ", "))
 	}
-	delete(f.pools, name)
+	delete(f.remote(ctx).pools, name)
 	return nil
 }
 
 // poolUsedBy lists the API paths of profiles, instances, and custom volumes
 // referencing the pool, mirroring the daemon's UsedBy. Callers must hold the
 // mutex.
-func (f *Fake) poolUsedBy(p *storagePool) []string {
+func (f *Fake) poolUsedBy(rs *remoteState, p *storagePool) []string {
 	var used []string
-	for _, spc := range f.spaces {
+	for _, spc := range rs.spaces {
 		for name, prof := range spc.profiles {
 			for _, dev := range prof.Devices {
 				if dev["pool"] == p.Name {
@@ -117,7 +117,7 @@ func (f *Fake) poolUsedBy(p *storagePool) []string {
 			}
 		}
 	}
-	for _, spc := range f.spaces {
+	for _, spc := range rs.spaces {
 		for name, in := range spc.instances {
 			for _, dev := range in.devices {
 				if dev["pool"] == p.Name {
@@ -140,7 +140,7 @@ func (f *Fake) ListVolumes(ctx context.Context, pool string) ([]backend.StorageV
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.pools[pool]
+	p, ok := f.remote(ctx).pools[pool]
 	if !ok {
 		return nil, notFoundf("storage pool %q", pool)
 	}
@@ -191,7 +191,7 @@ func (f *Fake) RenameVolume(ctx context.Context, pool, name, newName string) err
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.pools[pool]
+	p, ok := f.remote(ctx).pools[pool]
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
@@ -212,8 +212,8 @@ func (f *Fake) RenameVolume(ctx context.Context, pool, name, newName string) err
 	// Only projects sharing this volume namespace can reference the volume;
 	// same-named volumes in isolated projects must not block or be rewritten.
 	owner := f.featureProject(ctx, "features.storage.volumes")
-	for project, spc := range f.spaces {
-		if f.featureProjectName(project, "features.storage.volumes") != owner {
+	for project, spc := range f.remote(ctx).spaces {
+		if f.remote(ctx).featureProjectName(project, "features.storage.volumes") != owner {
 			continue
 		}
 		for instName, in := range spc.instances {
@@ -226,8 +226,8 @@ func (f *Fake) RenameVolume(ctx context.Context, pool, name, newName string) err
 			}
 		}
 	}
-	for project, spc := range f.spaces {
-		if f.featureProjectName(project, "features.storage.volumes") != owner {
+	for project, spc := range f.remote(ctx).spaces {
+		if f.remote(ctx).featureProjectName(project, "features.storage.volumes") != owner {
 			continue
 		}
 		for _, in := range spc.instances {
@@ -248,7 +248,7 @@ func (f *Fake) CreateVolume(ctx context.Context, pool string, v backend.StorageV
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.pools[pool]
+	p, ok := f.remote(ctx).pools[pool]
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
@@ -272,7 +272,7 @@ func (f *Fake) DeleteVolume(ctx context.Context, pool, name string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.pools[pool]
+	p, ok := f.remote(ctx).pools[pool]
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
@@ -298,7 +298,7 @@ func (f *Fake) ExportVolume(ctx context.Context, pool, volume string, w io.Write
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.pools[pool]
+	p, ok := f.remote(ctx).pools[pool]
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
@@ -331,7 +331,7 @@ func (f *Fake) ImportVolume(ctx context.Context, pool, volume string, r io.Reade
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	p, ok := f.pools[pool]
+	p, ok := f.remote(ctx).pools[pool]
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
@@ -349,10 +349,10 @@ func (f *Fake) ImportVolume(ctx context.Context, pool, volume string, r io.Reade
 
 // poolView returns a copy with a cloned config and a freshly computed UsedBy.
 // Callers must hold the mutex.
-func (f *Fake) poolView(p *storagePool) backend.StoragePool {
+func (f *Fake) poolView(rs *remoteState, p *storagePool) backend.StoragePool {
 	out := p.StoragePool
 	out.Config = maps.Clone(p.Config)
-	out.UsedBy = f.poolUsedBy(p)
+	out.UsedBy = f.poolUsedBy(rs, p)
 	return out
 }
 
@@ -366,7 +366,7 @@ func volumeView(v *storageVolume) backend.StorageVolume {
 // lookupVolume resolves a pool+volume, returning a not-found error at the right
 // level. Callers must hold the mutex.
 func (f *Fake) lookupVolume(ctx context.Context, pool, name string) (*storageVolume, error) {
-	p, ok := f.pools[pool]
+	p, ok := f.remote(ctx).pools[pool]
 	if !ok {
 		return nil, notFoundf("storage pool %q", pool)
 	}

@@ -124,8 +124,8 @@ func (f *Fake) networkView(ctx context.Context, owner *space, name string) backe
 func (f *Fake) networkUsers(ctx context.Context) map[string]*instance {
 	owner := f.featureProject(ctx, "features.networks")
 	out := map[string]*instance{}
-	for project, spc := range f.spaces {
-		if f.featureProjectName(project, "features.networks") != owner {
+	for project, spc := range f.remote(ctx).spaces {
+		if f.remote(ctx).featureProjectName(project, "features.networks") != owner {
 			continue
 		}
 		maps.Copy(out, spc.instances)

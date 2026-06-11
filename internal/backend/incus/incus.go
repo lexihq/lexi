@@ -35,6 +35,12 @@ type incusBackend struct {
 	srv  incusclient.InstanceServer
 	caps backend.Capabilities
 
+	// remoteName/remoteAddr identify the default remote this backend dialed;
+	// the multi-remote dial (Batch C of the remotes plan) extends this to the
+	// full CLI-config remote set.
+	remoteName string
+	remoteAddr string
+
 	imgMu     sync.Mutex
 	imgCache  []backend.Image
 	imgExpiry time.Time
@@ -47,7 +53,7 @@ type incusBackend struct {
 // New connects to Incus (default remote) and probes the server to populate
 // capabilities. It returns a clear error if the daemon is unreachable.
 func New() (*incusBackend, error) {
-	srv, err := Connect()
+	srv, remoteName, remoteAddr, _, err := Connect()
 	if err != nil {
 		return nil, fmt.Errorf("connect to incus: %w", err)
 	}
@@ -56,7 +62,9 @@ func New() (*incusBackend, error) {
 		return nil, fmt.Errorf("probe incus server: %w", err)
 	}
 	return &incusBackend{
-		srv: srv,
+		srv:        srv,
+		remoteName: remoteName,
+		remoteAddr: remoteAddr,
 		caps: backend.Capabilities{
 			Tier:       backend.TierIncus,
 			ServerInfo: "Incus " + info.Environment.ServerVersion,

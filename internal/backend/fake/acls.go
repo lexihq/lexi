@@ -142,11 +142,11 @@ func (f *Fake) aclUsedBy(ctx context.Context, owner *space, name string) []strin
 	// projects with their own network namespace can reuse the ACL name
 	// without touching this one.
 	ownerProject := f.featureProject(ctx, "features.networks")
-	for project, sp := range f.spaces {
-		if f.featureProjectName(project, "features.networks") != ownerProject {
+	for project, sp := range f.remote(ctx).spaces {
+		if f.remote(ctx).featureProjectName(project, "features.networks") != ownerProject {
 			continue
 		}
-		profSp := f.spaceFor(f.featureProjectName(project, "features.profiles"))
+		profSp := f.remote(ctx).spaceFor(f.remote(ctx).featureProjectName(project, "features.profiles"))
 		for instName, inst := range sp.instances {
 			for range aclNICMatches(expandedDevices(profSp, inst), name) {
 				used = append(used, "/1.0/instances/"+instName)

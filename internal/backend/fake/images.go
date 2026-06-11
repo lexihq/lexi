@@ -157,7 +157,7 @@ const fakeRootfsMagic = "lxcon-fake-rootfs\n"
 func (f *Fake) SeedSplitImage(fingerprint, description string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	sp := f.spaceFor("default")
+	sp := f.remoteFor("local").spaceFor("default")
 
 	sp.images[fingerprint] = &backend.LocalImage{
 		Fingerprint: fingerprint,

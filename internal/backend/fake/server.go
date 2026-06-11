@@ -12,7 +12,7 @@ import (
 	"github.com/adam/lxcon/internal/backend"
 )
 
-func (f *Fake) GetServerOverview(_ context.Context) (backend.ServerOverview, error) {
+func (f *Fake) GetServerOverview(ctx context.Context) (backend.ServerOverview, error) {
 	return backend.ServerOverview{
 		ServerVersion: "6.0-fake",
 		Kernel:        "Linux",
@@ -25,38 +25,38 @@ func (f *Fake) GetServerOverview(_ context.Context) (backend.ServerOverview, err
 	}, nil
 }
 
-func (f *Fake) GetServerConfig(_ context.Context) (map[string]string, string, error) {
+func (f *Fake) GetServerConfig(ctx context.Context) (map[string]string, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return maps.Clone(f.serverConfig), strconv.Itoa(f.serverConfigVersion), nil
+	return maps.Clone(f.remote(ctx).serverConfig), strconv.Itoa(f.remote(ctx).serverConfigVersion), nil
 }
 
-func (f *Fake) UpdateServerConfig(_ context.Context, config map[string]string, version string) error {
+func (f *Fake) UpdateServerConfig(ctx context.Context, config map[string]string, version string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Empty version = unconditional, mirroring the Incus client's If-Match
 	// semantics; a stale version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(f.serverConfigVersion) {
+	if version != "" && version != strconv.Itoa(f.remote(ctx).serverConfigVersion) {
 		return conflict("server config version %s", version)
 	}
-	f.serverConfig = maps.Clone(config)
-	if f.serverConfig == nil {
-		f.serverConfig = map[string]string{}
+	f.remote(ctx).serverConfig = maps.Clone(config)
+	if f.remote(ctx).serverConfig == nil {
+		f.remote(ctx).serverConfig = map[string]string{}
 	}
-	f.serverConfigVersion++
+	f.remote(ctx).serverConfigVersion++
 	return nil
 }
 
-func (f *Fake) ListCertificates(_ context.Context) ([]backend.Certificate, error) {
+func (f *Fake) ListCertificates(ctx context.Context) ([]backend.Certificate, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return append([]backend.Certificate(nil), f.certificates...), nil
+	return append([]backend.Certificate(nil), f.remote(ctx).certificates...), nil
 }
 
-func (f *Fake) AddCertificate(_ context.Context, name, certType, pemData string) error {
+func (f *Fake) AddCertificate(ctx context.Context, name, certType, pemData string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -66,59 +66,59 @@ func (f *Fake) AddCertificate(_ context.Context, name, certType, pemData string)
 	}
 	sum := sha256.Sum256(block.Bytes)
 	fingerprint := hex.EncodeToString(sum[:])
-	for _, c := range f.certificates {
+	for _, c := range f.remote(ctx).certificates {
 		if c.Fingerprint == fingerprint {
 			return conflict("certificate %q already trusted", fingerprint)
 		}
 	}
-	f.certificates = append(f.certificates, backend.Certificate{
+	f.remote(ctx).certificates = append(f.remote(ctx).certificates, backend.Certificate{
 		Name: name, Type: certType, Fingerprint: fingerprint,
 	})
 	return nil
 }
 
-func (f *Fake) DeleteCertificate(_ context.Context, fingerprint string) error {
+func (f *Fake) DeleteCertificate(ctx context.Context, fingerprint string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	for i, c := range f.certificates {
+	for i, c := range f.remote(ctx).certificates {
 		if c.Fingerprint == fingerprint {
-			f.certificates = append(f.certificates[:i], f.certificates[i+1:]...)
+			f.remote(ctx).certificates = append(f.remote(ctx).certificates[:i], f.remote(ctx).certificates[i+1:]...)
 			return nil
 		}
 	}
 	return notFoundf("certificate %q", fingerprint)
 }
 
-func (f *Fake) ListWarnings(_ context.Context) ([]backend.Warning, error) {
+func (f *Fake) ListWarnings(ctx context.Context) ([]backend.Warning, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	out := append([]backend.Warning(nil), f.warnings...)
+	out := append([]backend.Warning(nil), f.remote(ctx).warnings...)
 	sort.Slice(out, func(i, j int) bool { return out[i].LastSeenAt.After(out[j].LastSeenAt) })
 	return out, nil
 }
 
-func (f *Fake) DeleteWarning(_ context.Context, uuid string) error {
+func (f *Fake) DeleteWarning(ctx context.Context, uuid string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	for i, w := range f.warnings {
+	for i, w := range f.remote(ctx).warnings {
 		if w.UUID == uuid {
-			f.warnings = append(f.warnings[:i], f.warnings[i+1:]...)
+			f.remote(ctx).warnings = append(f.remote(ctx).warnings[:i], f.remote(ctx).warnings[i+1:]...)
 			return nil
 		}
 	}
 	return notFoundf("warning %q", uuid)
 }
 
-func (f *Fake) AcknowledgeWarning(_ context.Context, uuid string) error {
+func (f *Fake) AcknowledgeWarning(ctx context.Context, uuid string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	for i := range f.warnings {
-		if f.warnings[i].UUID == uuid {
-			f.warnings[i].Status = "acknowledged"
+	for i := range f.remote(ctx).warnings {
+		if f.remote(ctx).warnings[i].UUID == uuid {
+			f.remote(ctx).warnings[i].Status = "acknowledged"
 			return nil
 		}
 	}

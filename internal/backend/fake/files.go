@@ -233,7 +233,7 @@ func (f *Fake) PullFileHead(ctx context.Context, instance, p string, w io.Writer
 func (f *Fake) SeedSymlink(instance, p string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	sp := f.spaceFor("default")
+	sp := f.remoteFor("local").spaceFor("default")
 
 	if in, ok := sp.instances[instance]; ok {
 		in.files[p] = &fakeFile{symlink: true, mode: "0777"}

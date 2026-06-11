@@ -93,22 +93,29 @@ func newSpace() *space {
 }
 
 // Fake is a mutex-guarded, in-memory Backend with a deterministic clock.
-// Project-scoped state lives in spaces; pools, certificates, and server
+// remoteState is one fake daemon: everything a single Incus server owns.
+// Project-scoped state lives in its spaces; pools, certificates, and server
 // config are daemon-global, like Incus.
-type Fake struct {
-	mu       sync.Mutex
+type remoteState struct {
 	spaces   map[string]*space // keyed by project; "default" always exists
 	projects map[string]backend.Project
 	// projectVersions are per-project counters bumped on update; the
 	// Get/Update version token (missing key reads as 0).
 	projectVersions map[string]int
 	pools           map[string]*storagePool
-	clock           time.Time
 
 	serverConfig        map[string]string
 	serverConfigVersion int // bumped per update; the Get/Update version token
 	certificates        []backend.Certificate
 	warnings            []backend.Warning
+}
+
+// Fake models a set of independent daemons (remotes), each with its own
+// remoteState; "local" is the default remote and always exists.
+type Fake struct {
+	mu      sync.Mutex
+	remotes map[string]*remoteState
+	clock   time.Time
 
 	// opWatchers receive a coalesced tick whenever an operation is recorded
 	// or changed; keyed by a registration sequence so cancellation can
@@ -125,20 +132,52 @@ func projectOf(ctx context.Context) string {
 	return "default"
 }
 
+// remoteOf normalizes the request's remote; unset means local.
+func remoteOf(ctx context.Context) string {
+	if name := backend.RemoteFromContext(ctx); name != "" {
+		return name
+	}
+	return "local"
+}
+
+// remote returns the request's daemon state, creating it lazily (a ghost
+// remote's state is empty and invisible — the HTTP layer validates remote
+// existence against ListRemotes). Callers must hold the mutex.
+func (f *Fake) remote(ctx context.Context) *remoteState {
+	return f.remoteFor(remoteOf(ctx))
+}
+
+// remoteFor returns the named remote's state, creating it lazily. Callers
+// must hold the mutex.
+func (f *Fake) remoteFor(name string) *remoteState {
+	rs, ok := f.remotes[name]
+	if !ok {
+		rs = &remoteState{
+			spaces:          map[string]*space{},
+			projects:        map[string]backend.Project{},
+			projectVersions: map[string]int{},
+			pools:           map[string]*storagePool{},
+			serverConfig:    map[string]string{},
+		}
+		f.remotes[name] = rs
+	}
+	return rs
+}
+
 // space returns the request's project space, creating it lazily (a ghost
 // project's space is empty and invisible — the HTTP layer validates project
 // existence). Callers must hold the mutex.
 func (f *Fake) space(ctx context.Context) *space {
-	return f.spaceFor(projectOf(ctx))
+	return f.remote(ctx).spaceFor(projectOf(ctx))
 }
 
-// spaceFor returns the named project's space, creating it lazily. Callers
-// must hold the mutex.
-func (f *Fake) spaceFor(project string) *space {
-	sp, ok := f.spaces[project]
+// spaceFor returns the named project's space within this remote, creating it
+// lazily. Callers must hold the Fake mutex.
+func (rs *remoteState) spaceFor(project string) *space {
+	sp, ok := rs.spaces[project]
 	if !ok {
 		sp = newSpace()
-		f.spaces[project] = sp
+		rs.spaces[project] = sp
 	}
 	return sp
 }
@@ -148,20 +187,20 @@ func (f *Fake) spaceFor(project string) *space {
 // (Incus shares such resources from default otherwise). Callers must hold
 // the mutex.
 func (f *Fake) featureSpace(ctx context.Context, feature string) *space {
-	return f.spaceFor(f.featureProject(ctx, feature))
+	return f.remote(ctx).spaceFor(f.featureProject(ctx, feature))
 }
 
 // featureProject names the project owning a feature-routed resource kind for
 // this request. Callers must hold the mutex.
 func (f *Fake) featureProject(ctx context.Context, feature string) string {
-	return f.featureProjectName(projectOf(ctx), feature)
+	return f.remote(ctx).featureProjectName(projectOf(ctx), feature)
 }
 
 // featureProjectName is featureProject for an explicit project name; usage
 // scans use it to decide which projects share a resource owner's namespace.
-// Callers must hold the mutex.
-func (f *Fake) featureProjectName(project, feature string) string {
-	if project == "default" || f.projects[project].Config[feature] == "true" {
+// Callers must hold the Fake mutex.
+func (rs *remoteState) featureProjectName(project, feature string) string {
+	if project == "default" || rs.projects[project].Config[feature] == "true" {
 		return project
 	}
 	return "default"
@@ -208,7 +247,7 @@ func New() *Fake {
 			CreatedAt:   time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC),
 		},
 	}
-	return &Fake{
+	local := &remoteState{
 		spaces: map[string]*space{"default": defaultSpace},
 		projects: map[string]backend.Project{
 			"default": {Name: "default", Description: "Default Incus project", Config: map[string]string{
@@ -241,7 +280,62 @@ func New() *Fake {
 				LastSeenAt:  time.Date(2025, time.December, 30, 9, 0, 0, 0, time.UTC),
 			},
 		},
+	}
+	return &Fake{
+		remotes: map[string]*remoteState{
+			"local":     local,
+			"secondary": newSecondaryRemote(),
+		},
 		clock: time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC),
+	}
+}
+
+// newSecondaryRemote seeds the fake's second daemon: the bare defaults a
+// fresh Incus install has (default project/profile/network/pool plus the
+// catalog image instances launch from), and none of local's instances or
+// server state — switching remotes must visibly change everything.
+func newSecondaryRemote() *remoteState {
+	sp := newSpace()
+	sp.profiles = map[string]backend.Profile{
+		"default": {
+			Name: "default", Description: "Default Incus profile",
+			Config: map[string]string{},
+			Devices: map[string]map[string]string{
+				"eth0": {"type": "nic", "network": "incusbr0"},
+				"root": {"type": "disk", "path": "/", "pool": "default"},
+			},
+		},
+	}
+	sp.networks = map[string]backend.Network{
+		"incusbr0": {
+			Name: "incusbr0", Type: "bridge", Managed: true, Description: "Default bridge",
+			Config: map[string]string{"ipv4.address": "10.0.4.1/24", "ipv4.nat": "true"},
+		},
+	}
+	sp.images = map[string]*backend.LocalImage{
+		"fake-debian-12-aarch64": {
+			Fingerprint: "fake-debian-12-aarch64",
+			Aliases:     []string{"debian/12"},
+			Description: "Debian 12 (bookworm) arm64",
+			Arch:        "aarch64",
+			Type:        "container",
+			CreatedAt:   time.Date(2025, time.December, 1, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	return &remoteState{
+		spaces: map[string]*space{"default": sp},
+		projects: map[string]backend.Project{
+			"default": {Name: "default", Description: "Default Incus project", Config: map[string]string{
+				"features.images": "true", "features.networks": "true",
+				"features.profiles": "true", "features.storage.volumes": "true",
+			}},
+		},
+		projectVersions: map[string]int{},
+		pools: map[string]*storagePool{
+			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]map[string]*storageVolume{}},
+		},
+		serverConfig:        map[string]string{"core.https_address": ":8444"},
+		serverConfigVersion: 1,
 	}
 }
 
@@ -280,6 +374,7 @@ func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 		VolumeBackups:   true,
 		Projects:        true,
 		Events:          true,
+		Remotes:         true,
 	}
 }
 

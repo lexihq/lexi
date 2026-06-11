@@ -48,7 +48,7 @@ func (f *Fake) CreateInstance(ctx context.Context, opt backend.CreateOptions) er
 		}
 	}
 	if opt.Pool != "" {
-		if _, ok := f.pools[opt.Pool]; !ok {
+		if _, ok := f.remote(ctx).pools[opt.Pool]; !ok {
 			return notFoundf("storage pool %q", opt.Pool)
 		}
 	}

@@ -74,6 +74,9 @@ type Capabilities struct {
 	// API): WatchOperations plus the SSE-driven Tasks panel. Without it the
 	// panel falls back to polling.
 	Events bool
+	// Remotes is multi-server support: ListRemotes plus per-request scoping
+	// via WithRemote. Only set when more than one remote is reachable.
+	Remotes bool
 }
 
 // Instance is a system container or virtual machine.
@@ -355,6 +358,32 @@ type Project struct {
 	Version string
 }
 
+// Remote is a configured Incus server lxcon can scope requests to. The list
+// is read from the CLI config; lxcon does not add or trust remotes itself.
+type Remote struct {
+	Name    string
+	Addr    string
+	Current bool // selected by the request context, or the default remote
+}
+
+// remoteKey is the context key WithRemote stores the selection under.
+type remoteKey struct{}
+
+// WithRemote returns a context whose backend calls are scoped to the named
+// remote, when the driver supports remotes (Capabilities.Remotes).
+func WithRemote(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, remoteKey{}, name)
+}
+
+// RemoteFromContext reports the remote a request is scoped to; "" means the
+// default remote (also for contexts that never saw WithRemote).
+func RemoteFromContext(ctx context.Context) string {
+	if name, ok := ctx.Value(remoteKey{}).(string); ok {
+		return name
+	}
+	return ""
+}
+
 // projectKey is the context key WithProject stores the selection under.
 type projectKey struct{}
 
@@ -505,6 +534,10 @@ type Backend interface {
 	RenameNetworkACL(ctx context.Context, name, newName string) error
 	// DeleteNetworkACL refuses ACLs that are in use (ErrConflict).
 	DeleteNetworkACL(ctx context.Context, name string) error
+
+	// ListRemotes returns the reachable configured remotes, marking the one
+	// the request context selects (or the default) as Current.
+	ListRemotes(ctx context.Context) ([]Remote, error)
 
 	ListProjects(ctx context.Context) ([]Project, error)
 	// GetProject returns the project with a populated Version token.

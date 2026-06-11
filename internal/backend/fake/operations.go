@@ -83,7 +83,8 @@ func (f *Fake) CancelOperation(ctx context.Context, id string) error {
 func (f *Fake) SeedRunningOperation(description string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	sp := f.spaceFor("default")
+	// Seeds always land on the local remote's default project.
+	sp := f.remoteFor("local").spaceFor("default")
 
 	sp.opSeq++
 	id := fmt.Sprintf("op-%d", sp.opSeq)

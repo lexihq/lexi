@@ -32,7 +32,7 @@ func (f *Fake) MoveInstance(ctx context.Context, name, pool string) error {
 	if _, ok := sp.instances[name]; !ok {
 		return notFound(name)
 	}
-	if _, ok := f.pools[pool]; !ok {
+	if _, ok := f.remote(ctx).pools[pool]; !ok {
 		return notFoundf("storage pool %q", pool)
 	}
 	// The fake doesn't model per-instance pool placement; a validated no-op.

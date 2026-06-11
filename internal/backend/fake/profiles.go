@@ -145,8 +145,8 @@ func (f *Fake) RenameProfile(ctx context.Context, name, newName string) error {
 func (f *Fake) profileUsers(ctx context.Context) map[string]*instance {
 	owner := f.featureProject(ctx, "features.profiles")
 	out := map[string]*instance{}
-	for project, spc := range f.spaces {
-		if f.featureProjectName(project, "features.profiles") != owner {
+	for project, spc := range f.remote(ctx).spaces {
+		if f.remote(ctx).featureProjectName(project, "features.profiles") != owner {
 			continue
 		}
 		maps.Copy(out, spc.instances)

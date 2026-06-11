@@ -1,7 +1,10 @@
 package incus
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
+	"errors"
 	"strings"
 	"testing"
 
@@ -125,4 +128,52 @@ func TestImportVolumeCreatesFromBackup(t *testing.T) {
 	require.NotNil(t, s.volImportArgs)
 	assert.Equal(t, "restored", s.volImportArgs.Name, "destination volume name should be passed through")
 	assert.Equal(t, "tarball-bytes", string(s.volImportedBytes), "the reader should stream to the backup file")
+}
+
+func TestImportVolumeInvalidNameRejected(t *testing.T) {
+	b := &incusBackend{srv: &instanceServerStub{}}
+	err := b.ImportVolume(t.Context(), "default", "bad name", strings.NewReader("x"))
+	require.ErrorIs(t, err, backend.ErrInvalid)
+}
+
+// instanceBackupTarball builds the head of an instance backup: a gzip tarball
+// whose first entry is backup/index.yaml with an instance type.
+func instanceBackupTarball(t *testing.T, backupType string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	yaml := "name: c1\ntype: " + backupType + "\n"
+	require.NoError(t, tw.WriteHeader(&tar.Header{Name: "backup/index.yaml", Mode: 0o644, Size: int64(len(yaml))}))
+	_, err := tw.Write([]byte(yaml))
+	require.NoError(t, err)
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+	return buf.Bytes()
+}
+
+func TestImportVolumeRejectsInstanceBackup(t *testing.T) {
+	s := &instanceServerStub{volImportOp: &operationStub{}}
+	b := &incusBackend{srv: s}
+
+	for _, typ := range []string{"container", "virtual-machine"} {
+		err := b.ImportVolume(t.Context(), "default", "v1", bytes.NewReader(instanceBackupTarball(t, typ)))
+		require.ErrorIs(t, err, backend.ErrInvalid, typ)
+	}
+	assert.Nil(t, s.volImportArgs, "instance backups must be rejected before any upload")
+
+	// A custom-volume backup with the same shape passes the type check.
+	require.NoError(t, b.ImportVolume(t.Context(), "default", "v1", bytes.NewReader(instanceBackupTarball(t, "custom"))))
+	require.NotNil(t, s.volImportArgs)
+}
+
+func TestImportVolumeUniqueConstraintRaceIsConflict(t *testing.T) {
+	// Two concurrent imports of the same new name: the loser fails on the
+	// daemon's DB unique constraint, not the "already exists" pre-check.
+	s := &instanceServerStub{volImportOp: &operationStub{
+		waitErr: errors.New(`Error inserting volume "v1" for project "default" in pool "default" of type "custom" into database "UNIQUE constraint failed: storage_volumes.storage_pool_id, storage_volumes.node_id, storage_volumes.project_id, storage_volumes.name, storage_volumes.type"`),
+	}}
+	b := &incusBackend{srv: s}
+	err := b.ImportVolume(t.Context(), "default", "v1", strings.NewReader("x"))
+	require.ErrorIs(t, err, backend.ErrConflict)
 }

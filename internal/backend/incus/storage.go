@@ -1,14 +1,19 @@
 package incus
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/adam/lxcon/internal/backend"
 	incusclient "github.com/lxc/incus/v6/client"
@@ -329,8 +334,18 @@ func (b *incusBackend) ExportVolume(ctx context.Context, pool, volume string, w 
 // streamed from r (as produced by ExportVolume). Naming the new volume needs
 // the daemon's backup_override_name extension (gated by caps.VolumeBackups).
 func (b *incusBackend) ImportVolume(ctx context.Context, pool, volume string, r io.Reader) error {
+	// The daemon skips name validation on the backup-import override path
+	// (normal volume creation runs validate.IsAPIName), so an invalid name
+	// would land in its database — pre-check here, mirroring the fake.
+	if !validAPIName(volume) {
+		return fmt.Errorf("invalid volume name %q: %w", volume, backend.ErrInvalid)
+	}
+	rest, err := rejectNonCustomBackup(r)
+	if err != nil {
+		return fmt.Errorf("import volume %q/%q: %w", pool, volume, err)
+	}
 	op, err := b.srv.CreateStoragePoolVolumeFromBackup(pool, incusclient.StorageVolumeBackupArgs{
-		BackupFile: contextReader{ctx: ctx, Reader: r},
+		BackupFile: contextReader{ctx: ctx, Reader: rest},
 		Name:       volume,
 	})
 	if err != nil {
@@ -342,9 +357,82 @@ func (b *incusBackend) ImportVolume(ctx context.Context, pool, volume string, r 
 				slog.Warn("cancel volume import operation", "pool", pool, "volume", volume, "err", cancelErr)
 			}
 		}
+		// Two concurrent imports of the same new name can both pass the
+		// daemon's existence pre-check; the loser fails on the database
+		// unique constraint, whose message lacks "already exists".
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return fmt.Errorf("import volume %q/%q: %w: %w", pool, volume, backend.ErrConflict, err)
+		}
 		return fmt.Errorf("import volume %q/%q: %w", pool, volume, mapErr(err))
 	}
 	return nil
+}
+
+// validAPIName mirrors the daemon's validate.IsAPIName rules (≤64 chars, no
+// whitespace, none of the reserved URL characters), matching the fake's
+// validator.
+func validAPIName(name string) bool {
+	if name == "" || len(name) > 64 {
+		return false
+	}
+	for _, r := range name {
+		if unicode.IsSpace(r) {
+			return false
+		}
+	}
+	return !strings.ContainsAny(name, `$?&+"'`+"`*/")
+}
+
+// rejectNonCustomBackup peeks backup/index.yaml from the upload and refuses
+// instance backups (type container/virtual-machine) with ErrInvalid — the
+// daemon never checks the type on this endpoint and fails such uploads deep
+// in the volume unpacker with an opaque internal error. Detection is
+// best-effort over the first 64KiB of gzip or plain tar (our exports are
+// gzip); anything unrecognized passes through for the daemon to judge. The
+// returned reader replays the peeked bytes followed by the rest of r.
+func rejectNonCustomBackup(r io.Reader) (io.Reader, error) {
+	head := make([]byte, 64<<10)
+	n, err := io.ReadFull(r, head)
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, err
+	}
+	head = head[:n]
+	rest := io.MultiReader(bytes.NewReader(head), r)
+
+	var tarStream io.Reader = bytes.NewReader(head)
+	if bytes.HasPrefix(head, []byte{0x1f, 0x8b}) {
+		gz, err := gzip.NewReader(bytes.NewReader(head))
+		if err != nil {
+			return rest, nil
+		}
+		tarStream = gz
+	}
+	// index.yaml is the first entry of every incus backup tarball; a
+	// truncated or foreign stream simply skips the check.
+	tr := tar.NewReader(tarStream)
+	hdr, err := tr.Next()
+	if err != nil || path.Clean(hdr.Name) != "backup/index.yaml" {
+		return rest, nil
+	}
+	// ReadAll may error where the peek window ends; whatever was decoded up
+	// to that point still carries the top-level type line.
+	data, err := io.ReadAll(io.LimitReader(tr, 256<<10))
+	if err != nil && len(data) == 0 {
+		return rest, nil
+	}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		// Top-level field only: nested config blocks indent their keys.
+		t, ok := strings.CutPrefix(line, "type:")
+		if !ok {
+			continue
+		}
+		t = strings.TrimSpace(strings.TrimSuffix(t, "\r"))
+		if t == "container" || t == "virtual-machine" {
+			return nil, fmt.Errorf("backup is an instance backup (type %q), not a volume backup: %w", t, backend.ErrInvalid)
+		}
+		break
+	}
+	return rest, nil
 }
 
 // deleteVolumeBackup removes the temporary server-side backup created during

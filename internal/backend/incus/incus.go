@@ -118,6 +118,10 @@ func mapErr(err error) error {
 		strings.Contains(msg, "invalid value"),
 		strings.Contains(msg, "invalid config"):
 		return fmt.Errorf("%w: %w", backend.ErrInvalid, err)
+	case strings.Contains(msg, "missing the required") && strings.Contains(msg, "api extension"):
+		// The client pre-checks extensions ("The server is missing the
+		// required %q API extension") for verbs the daemon doesn't support.
+		return fmt.Errorf("%w: %w", backend.ErrUnsupported, err)
 	}
 	return err
 }

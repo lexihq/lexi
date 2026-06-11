@@ -27,3 +27,9 @@ func TestMapErrMapsInvalidConfigOperationError(t *testing.T) {
 
 	require.ErrorIs(t, mapErr(err), backend.ErrInvalid)
 }
+
+func TestMapErrMapsMissingExtensionToUnsupported(t *testing.T) {
+	err := errors.New(`The server is missing the required "custom_volume_backup" API extension`)
+
+	require.ErrorIs(t, mapErr(err), backend.ErrUnsupported)
+}

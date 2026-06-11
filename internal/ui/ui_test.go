@@ -656,3 +656,11 @@ func TestListPagesRenderEmptyStates(t *testing.T) {
 		})
 	}
 }
+
+func TestProjectsPageCreateFormIsLabeledCard(t *testing.T) {
+	html := render(t, ProjectsPage(testCaps(), []backend.Project{{Name: "default"}}, "default"))
+	assertContains(t, html, "Create project")
+	assertContains(t, html, ">Name</label>")
+	assertContains(t, html, ">Description</label>")
+	assertContains(t, html, "shared from default")
+}

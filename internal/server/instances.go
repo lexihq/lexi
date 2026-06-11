@@ -19,7 +19,7 @@ func (h handlers) list(w http.ResponseWriter, r *http.Request) {
 	// Pools feed the shared move-to-pool datalist; only fetched when the move
 	// form renders. A pool listing failure shouldn't take down the instance
 	// list, so it degrades to a plain text input.
-	caps := h.backend.Capabilities()
+	caps := h.backend.Capabilities(r.Context())
 	var pools []backend.StoragePool
 	if caps.Move && caps.Storage {
 		if got, err := h.backend.ListStoragePools(r.Context()); err == nil {
@@ -57,7 +57,7 @@ func (h handlers) detail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var profiles []backend.Profile
-	if h.backend.Capabilities().Profiles {
+	if h.backend.Capabilities(r.Context()).Profiles {
 		profiles, err = h.backend.ListProfiles(r.Context())
 		if err != nil {
 			http.Error(w, err.Error(), statusFor(err))
@@ -71,10 +71,10 @@ func (h handlers) detail(w http.ResponseWriter, r *http.Request) {
 	// or list) carries HX-Boosted and must get the full page so the shell's
 	// #content swap finds the whole content region.
 	if isHTMX(r) && !isBoosted(r) {
-		h.render(w, r, http.StatusOK, ui.InstanceBody(h.backend.Capabilities(), inst, snapshots, profiles, tab))
+		h.render(w, r, http.StatusOK, ui.InstanceBody(h.backend.Capabilities(r.Context()), inst, snapshots, profiles, tab))
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.InstancePage(h.backend.Capabilities(), inst, snapshots, profiles, tab))
+	h.renderShell(w, r, http.StatusOK, ui.InstancePage(h.backend.Capabilities(r.Context()), inst, snapshots, profiles, tab))
 }
 
 func (h handlers) start(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +130,7 @@ func (h handlers) clone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isHTMX(r) {
-		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(), inst))
+		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(r.Context()), inst))
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)

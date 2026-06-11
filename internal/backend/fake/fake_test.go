@@ -28,7 +28,7 @@ func TestSentinelErrors(t *testing.T) {
 }
 
 func TestCapabilitiesAdvertisesSnapshotAndClone(t *testing.T) {
-	caps := New().Capabilities()
+	caps := New().Capabilities(ctx())
 	if !caps.Snapshots || !caps.Clone {
 		t.Fatalf("fake should support snapshots and clone, got %+v", caps)
 	}

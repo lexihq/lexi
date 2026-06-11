@@ -28,7 +28,7 @@ func TestExecEchoesStdin(t *testing.T) {
 
 func TestConsoleLog(t *testing.T) {
 	b := New()
-	assert.True(t, b.Capabilities().Console, "fake should advertise console")
+	assert.True(t, b.Capabilities(ctx()).Console, "fake should advertise console")
 	mustCreate(t, b, "demo")
 
 	log, err := b.ConsoleLog(ctx(), "demo")

@@ -19,7 +19,7 @@ func (h handlers) createForm(w http.ResponseWriter, r *http.Request) {
 	// Profiles/pools/networks feed the optional create-form selectors, each
 	// gated on its capability. A listing failure shouldn't take down the
 	// create page — the affected selector just doesn't render.
-	caps := h.backend.Capabilities()
+	caps := h.backend.Capabilities(r.Context())
 	var profiles []backend.Profile
 	if caps.Profiles {
 		if got, err := h.backend.ListProfiles(r.Context()); err == nil {
@@ -49,7 +49,7 @@ func (h handlers) createForm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	h.renderShell(w, r, http.StatusOK, ui.CreatePage(h.backend.Capabilities(), images, profiles, pools, networks))
+	h.renderShell(w, r, http.StatusOK, ui.CreatePage(h.backend.Capabilities(r.Context()), images, profiles, pools, networks))
 }
 
 // imagePicker renders the HTMX-driven image search results for the create
@@ -143,7 +143,7 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isHTMX(r) {
-		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(), inst))
+		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(r.Context()), inst))
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)

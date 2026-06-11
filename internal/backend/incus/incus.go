@@ -90,7 +90,7 @@ func New() (*incusBackend, error) {
 }
 
 // Capabilities reports the server info and feature flags probed at New().
-func (b *incusBackend) Capabilities() backend.Capabilities { return b.caps }
+func (b *incusBackend) Capabilities(_ context.Context) backend.Capabilities { return b.caps }
 
 // project returns the client scoped to the request's project (the Backend
 // interface contract: WithProject tags the ctx, unset means default), or the

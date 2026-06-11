@@ -100,7 +100,7 @@ func TestFileMetadataRoundTrip(t *testing.T) {
 // deletes the file, then deletes the (now empty) directory.
 func TestFileMkdirDeleteRoundTrip(t *testing.T) {
 	b := newBackend(t)
-	caps := b.Capabilities()
+	caps := b.Capabilities(context.Background())
 	if !caps.FileMkdir || !caps.FileDelete {
 		t.Skipf("daemon lacks file extensions: mkdir=%v delete=%v", caps.FileMkdir, caps.FileDelete)
 	}

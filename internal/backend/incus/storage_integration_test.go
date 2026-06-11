@@ -176,7 +176,7 @@ func TestStoragePoolCreateDeleteRoundTrip(t *testing.T) {
 // backup tarball), deletes the volume, and re-imports it under a new name.
 func TestVolumeExportImportRoundTrip(t *testing.T) {
 	b := newBackend(t)
-	if !b.Capabilities().VolumeBackups {
+	if !b.Capabilities(context.Background()).VolumeBackups {
 		t.Skip("daemon lacks the custom_volume_backup/backup_override_name extensions")
 	}
 	// Deadline so a daemon death mid-backup fails in minutes (the instance

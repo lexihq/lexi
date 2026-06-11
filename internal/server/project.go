@@ -19,7 +19,7 @@ const projectCookie = "lxcon-project"
 // so the UI can never be trapped in a nonexistent project.
 func (h handlers) withProject(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !h.backend.Capabilities().Projects {
+		if !h.backend.Capabilities(r.Context()).Projects {
 			next.ServeHTTP(w, r)
 			return
 		}

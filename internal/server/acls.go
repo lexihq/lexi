@@ -17,7 +17,7 @@ func (h handlers) networkACLs(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.NetworkACLsPage(h.backend.Capabilities(), acls))
+	h.renderShell(w, r, http.StatusOK, ui.NetworkACLsPage(h.backend.Capabilities(r.Context()), acls))
 }
 
 func (h handlers) networkACLDetail(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +26,7 @@ func (h handlers) networkACLDetail(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.NetworkACLDetailPage(h.backend.Capabilities(), acl))
+	h.renderShell(w, r, http.StatusOK, ui.NetworkACLDetailPage(h.backend.Capabilities(r.Context()), acl))
 }
 
 // createNetworkACL makes an empty ACL (name + description) and redirects to

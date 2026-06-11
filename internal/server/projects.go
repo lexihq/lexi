@@ -17,7 +17,7 @@ func (h handlers) projectsPage(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.ProjectsPage(h.backend.Capabilities(), projects, backend.ProjectFromContext(r.Context())))
+	h.renderShell(w, r, http.StatusOK, ui.ProjectsPage(h.backend.Capabilities(r.Context()), projects, backend.ProjectFromContext(r.Context())))
 }
 
 func (h handlers) projectDetail(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +26,7 @@ func (h handlers) projectDetail(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.ProjectDetailPage(h.backend.Capabilities(), p))
+	h.renderShell(w, r, http.StatusOK, ui.ProjectDetailPage(h.backend.Capabilities(r.Context()), p))
 }
 
 // createProject makes a project from the name/description/feature checkboxes.

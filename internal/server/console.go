@@ -24,7 +24,7 @@ func (h handlers) console(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.ConsolePage(h.backend.Capabilities(), inst))
+	h.renderShell(w, r, http.StatusOK, ui.ConsolePage(h.backend.Capabilities(r.Context()), inst))
 }
 
 // consoleWS bridges a browser terminal to backend.Exec. Binary frames carry

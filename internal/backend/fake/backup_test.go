@@ -34,7 +34,7 @@ func TestImportInstanceRoundTrip(t *testing.T) {
 
 func TestExportInstance(t *testing.T) {
 	b := New()
-	assert.True(t, b.Capabilities().Backup, "fake should advertise backup")
+	assert.True(t, b.Capabilities(ctx()).Backup, "fake should advertise backup")
 	mustCreate(t, b, "demo")
 
 	var buf bytes.Buffer

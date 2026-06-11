@@ -16,7 +16,7 @@ func (h handlers) profiles(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), statusFor(err))
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.ProfilesPage(h.backend.Capabilities(), profiles))
+	h.renderShell(w, r, http.StatusOK, ui.ProfilesPage(h.backend.Capabilities(r.Context()), profiles))
 }
 
 func (h handlers) profileDetail(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +25,7 @@ func (h handlers) profileDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), statusFor(err))
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.ProfileDetailPage(h.backend.Capabilities(), p))
+	h.renderShell(w, r, http.StatusOK, ui.ProfileDetailPage(h.backend.Capabilities(r.Context()), p))
 }
 
 // createProfile makes an empty profile (name + description) and redirects to
@@ -162,7 +162,7 @@ func (h handlers) renderProfileDevices(w http.ResponseWriter, r *http.Request, n
 		return
 	}
 	if isHTMX(r) {
-		h.render(w, r, http.StatusOK, ui.ProfileDevicesSection(h.backend.Capabilities(), p))
+		h.render(w, r, http.StatusOK, ui.ProfileDevicesSection(h.backend.Capabilities(r.Context()), p))
 		return
 	}
 	http.Redirect(w, r, "/profiles/"+url.PathEscape(name), http.StatusSeeOther)

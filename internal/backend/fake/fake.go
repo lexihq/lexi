@@ -252,7 +252,7 @@ func (f *Fake) now() time.Time {
 	return f.clock
 }
 
-func (f *Fake) Capabilities() backend.Capabilities {
+func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 	return backend.Capabilities{
 		Tier:       backend.TierFake,
 		ServerInfo: "fake backend",

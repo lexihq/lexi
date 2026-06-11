@@ -31,10 +31,10 @@ func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, action 
 		// Detail-header buttons post with ?from=header and swap the header
 		// fragment in place; list-row buttons swap their row.
 		if r.URL.Query().Get("from") == "header" {
-			h.render(w, r, http.StatusOK, ui.InstanceHeader(h.backend.Capabilities(), inst))
+			h.render(w, r, http.StatusOK, ui.InstanceHeader(h.backend.Capabilities(r.Context()), inst))
 			return
 		}
-		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(), inst))
+		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(r.Context()), inst))
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -91,7 +91,7 @@ func (h handlers) renderWithSidebar(w http.ResponseWriter, r *http.Request, code
 	ctx := ui.WithSidebarInstances(r.Context(), instances)
 	// The project switcher is layout-wide like the instance list; a listing
 	// failure degrades to a hidden switcher rather than failing the page.
-	if h.backend.Capabilities().Projects {
+	if h.backend.Capabilities(r.Context()).Projects {
 		if projects, err := h.backend.ListProjects(r.Context()); err == nil {
 			ctx = ui.WithProjectSwitcher(ctx, projects, backend.ProjectFromContext(r.Context()))
 		} else {

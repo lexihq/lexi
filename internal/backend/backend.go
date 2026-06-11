@@ -413,7 +413,11 @@ type CreateOptions struct {
 // every project-scoped method; an unset project means the default project.
 // Drivers without project support ignore it.
 type Backend interface {
-	Capabilities() Capabilities
+	// Capabilities reports the feature flags for the daemon the request is
+	// scoped to. Flags are probed per server (extensions differ between
+	// daemons), so the UI never offers an operation the connected daemon
+	// doesn't support.
+	Capabilities(ctx context.Context) Capabilities
 
 	ListInstances(ctx context.Context) ([]Instance, error)
 	GetInstance(ctx context.Context, name string) (Instance, error)

@@ -16,7 +16,7 @@ import (
 // asserted along the way.
 func TestProjectCRUDRoundTrip(t *testing.T) {
 	b := newBackend(t)
-	if !b.Capabilities().Projects {
+	if !b.Capabilities(context.Background()).Projects {
 		t.Skip("daemon lacks the projects extension")
 	}
 	ctx := context.Background()
@@ -61,7 +61,7 @@ func TestProjectCRUDRoundTrip(t *testing.T) {
 // other's instances.
 func TestProjectScopedInstanceIsolation(t *testing.T) {
 	b := newBackend(t)
-	if !b.Capabilities().Projects {
+	if !b.Capabilities(context.Background()).Projects {
 		t.Skip("daemon lacks the projects extension")
 	}
 	ctx := context.Background()

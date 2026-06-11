@@ -128,7 +128,7 @@ func (h handlers) renderDevices(w http.ResponseWriter, r *http.Request, name str
 		return
 	}
 	if isHTMX(r) {
-		h.render(w, r, http.StatusOK, ui.DevicesSection(h.backend.Capabilities(), name, cfg))
+		h.render(w, r, http.StatusOK, ui.DevicesSection(h.backend.Capabilities(r.Context()), name, cfg))
 		return
 	}
 	redirectToInstance(w, name)

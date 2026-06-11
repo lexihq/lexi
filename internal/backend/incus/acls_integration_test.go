@@ -18,7 +18,7 @@ import (
 // and rules (versioned), renames it, and deletes it.
 func TestNetworkACLCRUDRoundTrip(t *testing.T) {
 	b := newBackend(t)
-	if !b.Capabilities().NetworkACLs {
+	if !b.Capabilities(context.Background()).NetworkACLs {
 		t.Skip("daemon lacks the network_acl extension")
 	}
 	ctx := context.Background()
@@ -57,7 +57,7 @@ func TestNetworkACLCRUDRoundTrip(t *testing.T) {
 // needed) and that its refusal maps to ErrConflict, matching the fake.
 func TestNetworkACLNICAttachmentGuardsDelete(t *testing.T) {
 	b := newBackend(t)
-	if !b.Capabilities().NetworkACLs {
+	if !b.Capabilities(context.Background()).NetworkACLs {
 		t.Skip("daemon lacks the network_acl extension")
 	}
 	ctx := context.Background()

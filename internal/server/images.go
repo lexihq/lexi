@@ -27,7 +27,7 @@ func (h handlers) imagesPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderWithSidebar(w, r, http.StatusOK, instances,
-		ui.ImagesPage(h.backend.Capabilities(), images, instances))
+		ui.ImagesPage(h.backend.Capabilities(r.Context()), images, instances))
 }
 
 // imageAction runs a mutation, then re-renders the images table on HTMX or

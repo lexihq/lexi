@@ -17,7 +17,7 @@ func (h handlers) storagePools(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.StoragePoolsPage(h.backend.Capabilities(), pools))
+	h.renderShell(w, r, http.StatusOK, ui.StoragePoolsPage(h.backend.Capabilities(r.Context()), pools))
 }
 
 func (h handlers) storagePool(w http.ResponseWriter, r *http.Request) {
@@ -32,11 +32,11 @@ func (h handlers) storagePool(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.StoragePoolPage(h.backend.Capabilities(), p, vols))
+	h.renderShell(w, r, http.StatusOK, ui.StoragePoolPage(h.backend.Capabilities(r.Context()), p, vols))
 }
 
 func (h handlers) poolCreateForm(w http.ResponseWriter, r *http.Request) {
-	h.renderShell(w, r, http.StatusOK, ui.StoragePoolCreatePage(h.backend.Capabilities()))
+	h.renderShell(w, r, http.StatusOK, ui.StoragePoolCreatePage(h.backend.Capabilities(r.Context())))
 }
 
 // createPool builds a pool from the form (name/driver/description + optional
@@ -160,7 +160,7 @@ func (h handlers) storageVolume(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.StorageVolumePage(h.backend.Capabilities(), v, snaps))
+	h.renderShell(w, r, http.StatusOK, ui.StorageVolumePage(h.backend.Capabilities(r.Context()), v, snaps))
 }
 
 func (h handlers) createVolumeSnapshot(w http.ResponseWriter, r *http.Request) {

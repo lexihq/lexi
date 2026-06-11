@@ -34,7 +34,7 @@ func (h handlers) serverPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.renderShell(w, r, http.StatusOK,
-		ui.ServerPage(h.backend.Capabilities(), overview, config, configVersion, certs, warnings))
+		ui.ServerPage(h.backend.Capabilities(r.Context()), overview, config, configVersion, certs, warnings))
 }
 
 // updateServerConfig replaces the server config from the submitted key/value

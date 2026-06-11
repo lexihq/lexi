@@ -61,7 +61,7 @@ func (h handlers) renderFiles(w http.ResponseWriter, r *http.Request, name, dir 
 		h.fail(w, err)
 		return
 	}
-	h.render(w, r, http.StatusOK, ui.FilesPanel(h.backend.Capabilities(), name, dir, entries))
+	h.render(w, r, http.StatusOK, ui.FilesPanel(h.backend.Capabilities(r.Context()), name, dir, entries))
 }
 
 // attachmentWriter defers the download headers until the backend produces the
@@ -200,7 +200,7 @@ func (h handlers) editFileForm(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusBadRequest, fmt.Sprintf("%q is a binary file; download it instead", p))
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.FileEditorPage(h.backend.Capabilities(), name, p, string(content), info))
+	h.renderShell(w, r, http.StatusOK, ui.FileEditorPage(h.backend.Capabilities(r.Context()), name, p, string(content), info))
 }
 
 // viewFile renders a read-only view of a file: its content (truncated to
@@ -227,7 +227,7 @@ func (h handlers) viewFile(w http.ResponseWriter, r *http.Request) {
 	// (valid UTF-8, but the editor's binary marker and unsafe to render raw).
 	content := strings.ToValidUTF8(buf.String(), "�")
 	content = strings.ReplaceAll(content, "\x00", "�")
-	h.renderShell(w, r, http.StatusOK, ui.FileViewerPage(h.backend.Capabilities(), name, p, content, info, truncated))
+	h.renderShell(w, r, http.StatusOK, ui.FileViewerPage(h.backend.Capabilities(r.Context()), name, p, content, info, truncated))
 }
 
 // saveFile writes the edited content back with the ownership and mode the

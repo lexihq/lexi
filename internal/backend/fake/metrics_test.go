@@ -10,7 +10,7 @@ import (
 
 func TestMetrics(t *testing.T) {
 	b := New()
-	assert.True(t, b.Capabilities().Metrics, "fake should advertise metrics")
+	assert.True(t, b.Capabilities(ctx()).Metrics, "fake should advertise metrics")
 	mustCreate(t, b, "demo")
 
 	m, err := b.Metrics(ctx(), "demo")

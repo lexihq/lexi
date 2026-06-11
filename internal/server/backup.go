@@ -16,7 +16,7 @@ var maxImportBytes int64 = 8 << 30 // 8 GiB
 
 // importForm renders the backup-upload page.
 func (h handlers) importForm(w http.ResponseWriter, r *http.Request) {
-	h.renderShell(w, r, http.StatusOK, ui.ImportPage(h.backend.Capabilities()))
+	h.renderShell(w, r, http.StatusOK, ui.ImportPage(h.backend.Capabilities(r.Context())))
 }
 
 // importInstance restores an instance from an uploaded backup tarball. The file
@@ -58,7 +58,7 @@ func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
 			h.fail(w, err)
 			return
 		}
-		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(), inst))
+		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(r.Context()), inst))
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)

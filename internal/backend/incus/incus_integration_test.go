@@ -76,7 +76,7 @@ func cleanupInstance(t *testing.T, b *incusBackend, name string) {
 
 func TestConnect(t *testing.T) {
 	b := newBackend(t)
-	caps := b.Capabilities()
+	caps := b.Capabilities(context.Background())
 	if caps.Tier != backend.TierIncus {
 		t.Fatalf("want tier %q, got %q", backend.TierIncus, caps.Tier)
 	}

@@ -16,7 +16,7 @@ func (h handlers) networks(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.NetworksPage(h.backend.Capabilities(), nets))
+	h.renderShell(w, r, http.StatusOK, ui.NetworksPage(h.backend.Capabilities(r.Context()), nets))
 }
 
 func (h handlers) networkDetail(w http.ResponseWriter, r *http.Request) {
@@ -25,11 +25,11 @@ func (h handlers) networkDetail(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.NetworkDetailPage(h.backend.Capabilities(), n))
+	h.renderShell(w, r, http.StatusOK, ui.NetworkDetailPage(h.backend.Capabilities(r.Context()), n))
 }
 
 func (h handlers) networkCreateForm(w http.ResponseWriter, r *http.Request) {
-	h.renderShell(w, r, http.StatusOK, ui.NetworkCreatePage(h.backend.Capabilities()))
+	h.renderShell(w, r, http.StatusOK, ui.NetworkCreatePage(h.backend.Capabilities(r.Context())))
 }
 
 // createNetwork builds a network from the form (name/type/description + optional

@@ -73,10 +73,7 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 			<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/instances/" + inst.Name) }>{ inst.Name }</a>
 		}
 		@table.Cell() {
-			@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
-				<span class={ "size-2 rounded-full " + statusDotClass(inst.Status) }></span>
-				{ inst.Status }
-			}
+			@statusBadge(inst.Status)
 		}
 		@table.Cell() {
 			if len(inst.IPv4) > 0 {
@@ -221,6 +218,15 @@ func deleteAttrs(name string) templ.Attributes {
 	attrs := instanceActionAttrs(name, "delete")
 	attrs["hx-confirm"] = "Delete instance " + name + "?"
 	return attrs
+}
+
+// statusBadge renders the instance status as an outline badge with a colored
+// dot, shared by the list rows and the detail header.
+templ statusBadge(status string) {
+	@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
+		<span class={ "size-2 rounded-full " + statusDotClass(status) }></span>
+		{ status }
+	}
 }
 
 // emptyRow is the shared table empty state: one muted full-width row shown

@@ -78,7 +78,7 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 										Set expiry (UTC)
 									}
 								</form>
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/delete", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/delete", "hx-target": "#snapshots", "hx-swap": "outerHTML", "hx-confirm": "Delete snapshot " + snap.Name + "?"}}) {
 									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 									Delete
 								}

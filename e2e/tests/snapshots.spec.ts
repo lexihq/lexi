@@ -5,6 +5,8 @@ import { test, expect } from "@playwright/test";
 // All tests run against the shared fake-backed server (instance "demo" seeded).
 
 test("snapshot create, restore, and delete on the detail page", async ({ page }) => {
+  // Snapshot delete asks via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
   await page.goto("/instances/demo");
   // Snapshots live behind their tab; open it before driving the table.
   await page.getByRole("link", { name: "Snapshots" }).click();
@@ -31,6 +33,8 @@ test("snapshot create, restore, and delete on the detail page", async ({ page })
 });
 
 test("snapshot stateful flag, expiry, and rename on the detail page", async ({ page }) => {
+  // Snapshot delete asks via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
   await page.goto("/instances/demo");
   await page.getByRole("link", { name: "Snapshots" }).click();
   const snapshots = page.locator("#snapshots");

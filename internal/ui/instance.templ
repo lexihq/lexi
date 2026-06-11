@@ -4,7 +4,6 @@ import (
 	"net/url"
 
 	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/components/badge"
 	"github.com/adam/lxcon/internal/components/button"
 	"github.com/adam/lxcon/internal/components/icon"
 )
@@ -29,10 +28,7 @@ templ InstanceHeader(caps backend.Capabilities, inst backend.Instance) {
 			<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>
 			<h1 class="mt-2 text-2xl font-semibold">{ inst.Name }</h1>
 			<div class="mt-1">
-				@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
-					<span class={ "size-2 rounded-full " + statusDotClass(inst.Status) }></span>
-					{ inst.Status }
-				}
+				@statusBadge(inst.Status)
 			</div>
 		</div>
 		<div class="flex flex-wrap justify-end gap-2">

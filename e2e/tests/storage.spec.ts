@@ -5,6 +5,8 @@ import { readFileSync } from "node:fs";
 // All tests run against the shared fake-backed server (instance "demo" seeded).
 
 test("create and delete a custom volume in the Storage section", async ({ page }) => {
+  // Volume delete asks via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
   await page.goto("/");
   await page.getByRole("link", { name: "Storage" }).click();
   await expect(page).toHaveURL(/\/storage$/);
@@ -46,6 +48,8 @@ test("create and delete a custom volume in the Storage section", async ({ page }
 });
 
 test("snapshot a custom volume: create, restore, and delete", async ({ page }) => {
+  // Volume and volume-snapshot deletes ask via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
   await page.goto("/storage/default");
   // Distinct volume name so this doesn't collide with the volume-CRUD test on
   // the shared fake server.
@@ -129,6 +133,8 @@ test("storage: create and delete a pool; in-use pool can't be deleted", async ({
 });
 
 test("export a volume and re-import it under a new name", async ({ page }) => {
+  // Volume delete asks via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
   // Create a volume with a config key so the round-trip is observable.
   await page.goto("/storage/default");
   const volumes = page.locator("#volumes");

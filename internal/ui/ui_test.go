@@ -712,3 +712,12 @@ func TestEmbeddedTablesRenderEmptyStates(t *testing.T) {
 		})
 	}
 }
+
+func TestSnapshotAndVolumeDeletesAskForConfirmation(t *testing.T) {
+	snaps := render(t, SnapshotTable("demo", []backend.Snapshot{{Name: "snap0"}}))
+	assertContains(t, snaps, `hx-confirm="Delete snapshot snap0?"`)
+	pool := render(t, StoragePoolPage(testCaps(), backend.StoragePool{Name: "default", Driver: "dir"}, []backend.StorageVolume{{Pool: "default", Name: "vol0"}}))
+	assertContains(t, pool, `hx-confirm="Delete volume vol0?"`)
+	vol := render(t, StorageVolumePage(testCaps(), backend.StorageVolume{Pool: "default", Name: "vol0"}, []backend.StorageVolumeSnapshot{{Name: "vsnap0"}}))
+	assertContains(t, vol, `hx-confirm="Delete snapshot vsnap0?"`)
+}

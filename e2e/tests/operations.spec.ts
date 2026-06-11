@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-// The bottom Tasks panel: operation listing, polling, and cancel.
+// The bottom Tasks panel: operation listing, SSE push updates, and cancel.
 // All tests run against the shared fake-backed server (instance "demo" seeded).
 
 test("tasks panel lists operations and picks up new ones", async ({ page }) => {
@@ -17,13 +17,15 @@ test("tasks panel lists operations and picks up new ones", async ({ page }) => {
   const row = page.locator(`#instance-${name}`);
   await expect(row).toBeVisible();
 
-  // Expand the bottom Tasks panel; its content hx-loads on page load.
+  // Expand the bottom Tasks panel; the fake backend is Events-capable, so the
+  // panel is SSE-wired and painted by the stream's initial frame.
   const footer = page.locator("footer");
+  await expect(footer.locator('[sse-connect="/events/operations"]')).toBeAttached();
   await footer.locator('label[for="ops-toggle"]').click();
   await expect(footer.getByText(`Creating instance "${name}"`)).toBeVisible();
 
   // Delete the instance via the row's kebab menu (accepting the hx-confirm
-  // dialog); the 5s poll picks the new operation up.
+  // dialog); the SSE push delivers the new operation.
   const deleteItem = row.getByRole("menuitem", { name: "Delete", exact: true });
   // One persistent handler for the whole retry loop: stacking a page.once per
   // attempt would invoke several accepts on the same dialog, which throws.
@@ -35,7 +37,9 @@ test("tasks panel lists operations and picks up new ones", async ({ page }) => {
     await deleteItem.click();
     await expect(row).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
-  await expect(footer.getByText(`Deleting instance "${name}"`)).toBeVisible({ timeout: 10000 });
+  // 3s would be unreachable for the old 5s poll in the worst case; SSE pushes
+  // the frame within milliseconds of the delete.
+  await expect(footer.getByText(`Deleting instance "${name}"`)).toBeVisible({ timeout: 3000 });
 });
 
 test("tasks panel: cancel a running operation", async ({ page }) => {

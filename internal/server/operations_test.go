@@ -84,7 +84,7 @@ func TestOperationsEventsStreamsPanelFrames(t *testing.T) {
 	require.NoError(t, err)
 	res, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	defer res.Body.Close()
+	defer func() { require.NoError(t, res.Body.Close()) }()
 
 	require.Equal(t, http.StatusOK, res.StatusCode)
 	assert.Contains(t, res.Header.Get("Content-Type"), "text/event-stream")

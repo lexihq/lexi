@@ -137,7 +137,7 @@ templ LimitsForm(inst backend.Instance) {
 				<label class="text-sm text-muted-foreground" for="memory">Memory</label>
 				<input id="memory" name="memory" value={ inst.LimitsMemory } placeholder="e.g. 2GiB" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
 			</div>
-			@button.Button(button.Props{Type: button.TypeSubmit}) {
+			@button.Button(button.Props{Type: button.TypeSubmit, Class: "justify-self-start"}) {
 				@icon.Icon("save")(icon.Props{Class: "size-4"})
 				Apply limits
 			}

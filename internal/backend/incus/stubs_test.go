@@ -120,6 +120,17 @@ type instanceServerStub struct {
 	deletedProject string                // captured by DeleteProject
 	projectState   *api.ProjectState     // returned by GetProjectState
 
+	zones             []api.NetworkZone           // returned by GetNetworkZones
+	zone              *api.NetworkZone            // returned by GetNetworkZone
+	createdZone       *api.NetworkZonesPost       // captured by CreateNetworkZone
+	updatedZone       *api.NetworkZonePut         // captured by UpdateNetworkZone
+	zoneEtag          string                      // etag captured by UpdateNetworkZone
+	deletedZone       string                      // captured by DeleteNetworkZone
+	zoneRecords       []api.NetworkZoneRecord     // returned by GetNetworkZoneRecords
+	createdZoneRecord *api.NetworkZoneRecordsPost // captured by CreateNetworkZoneRecord
+	zoneRecordZone    string                      // zone captured by record calls
+	deletedZoneRecord string                      // captured by DeleteNetworkZoneRecord
+
 	files       map[string]*fileStub          // keyed by path, served by GetInstanceFile
 	createdFile *incusclient.InstanceFileArgs // captured by CreateInstanceFile
 	createdPath string                        // path captured by CreateInstanceFile
@@ -197,6 +208,50 @@ func (s *instanceServerStub) GetProject(string) (*api.Project, string, error) {
 		return nil, "", errNotFoundStatus()
 	}
 	return s.project, "project-etag", nil
+}
+
+func (s *instanceServerStub) GetNetworkZones() ([]api.NetworkZone, error) {
+	return s.zones, nil
+}
+
+func (s *instanceServerStub) GetNetworkZone(string) (*api.NetworkZone, string, error) {
+	if s.zone == nil {
+		return nil, "", errNotFoundStatus()
+	}
+	return s.zone, "zone-etag", nil
+}
+
+func (s *instanceServerStub) CreateNetworkZone(zone api.NetworkZonesPost) error {
+	s.createdZone = &zone
+	return nil
+}
+
+func (s *instanceServerStub) UpdateNetworkZone(_ string, put api.NetworkZonePut, etag string) error {
+	s.updatedZone = &put
+	s.zoneEtag = etag
+	return nil
+}
+
+func (s *instanceServerStub) DeleteNetworkZone(name string) error {
+	s.deletedZone = name
+	return nil
+}
+
+func (s *instanceServerStub) GetNetworkZoneRecords(zone string) ([]api.NetworkZoneRecord, error) {
+	s.zoneRecordZone = zone
+	return s.zoneRecords, nil
+}
+
+func (s *instanceServerStub) CreateNetworkZoneRecord(zone string, record api.NetworkZoneRecordsPost) error {
+	s.zoneRecordZone = zone
+	s.createdZoneRecord = &record
+	return nil
+}
+
+func (s *instanceServerStub) DeleteNetworkZoneRecord(zone, name string) error {
+	s.zoneRecordZone = zone
+	s.deletedZoneRecord = name
+	return nil
 }
 
 func (s *instanceServerStub) GetProjectState(string) (*api.ProjectState, error) {

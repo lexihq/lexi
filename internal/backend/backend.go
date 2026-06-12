@@ -108,6 +108,9 @@ type Capabilities struct {
 	// "project_usage"): the Usage & limits section on the project detail page
 	// and the live Resources column on the projects list.
 	ProjectUsage bool
+	// NetworkZones is managed DNS zone + record management (Incus extension
+	// "network_dns").
+	NetworkZones bool
 }
 
 // Instance is a system container or virtual machine.
@@ -429,6 +432,33 @@ type Project struct {
 	Version string
 }
 
+// NetworkZone is a managed DNS zone (Incus extension "network_dns"). The
+// zone serves records for the networks that reference it via their
+// dns.zone.* config keys.
+type NetworkZone struct {
+	Name        string // DNS zone name, e.g. "incus.example.org"
+	Description string
+	Config      map[string]string
+	UsedBy      []string
+	// Version is an opaque concurrency token for UpdateNetworkZone,
+	// populated by GetNetworkZone (empty on list entries).
+	Version string
+}
+
+// ZoneRecord is one record set in a network zone.
+type ZoneRecord struct {
+	Name        string // relative name within the zone, e.g. "www"
+	Description string
+	Entries     []ZoneEntry
+}
+
+// ZoneEntry is one DNS entry of a ZoneRecord.
+type ZoneEntry struct {
+	Type  string // e.g. "A", "AAAA", "CNAME", "TXT"
+	TTL   uint64 // seconds; 0 uses the zone default
+	Value string
+}
+
 // ProjectUsage is one resource row of a project's state: current usage
 // against the configured limit. Memory and disk are bytes; the other
 // resources are counts. Limit is -1 when the project sets none.
@@ -696,6 +726,27 @@ type Backend interface {
 	UpdateNetworkForward(ctx context.Context, network string, f NetworkForward) error
 	// DeleteNetworkForward removes the forward at the listen address.
 	DeleteNetworkForward(ctx context.Context, network, listenAddress string) error
+
+	ListNetworkZones(ctx context.Context) ([]NetworkZone, error)
+	// GetNetworkZone returns the zone with a populated Version token.
+	GetNetworkZone(ctx context.Context, name string) (NetworkZone, error)
+	// CreateNetworkZone creates a DNS zone; the name must be a valid zone
+	// name (ErrInvalid) and free (ErrConflict).
+	CreateNetworkZone(ctx context.Context, name, description string) error
+	// UpdateNetworkZone replaces the zone's description and config,
+	// conditionally on version (ErrConflict when stale; empty version is
+	// unconditional).
+	UpdateNetworkZone(ctx context.Context, name, description string, config map[string]string, version string) error
+	// DeleteNetworkZone refuses zones referenced by a network (ErrConflict).
+	DeleteNetworkZone(ctx context.Context, name string) error
+	// ListZoneRecords lists the zone's record sets, sorted by name.
+	ListZoneRecords(ctx context.Context, zone string) ([]ZoneRecord, error)
+	// CreateZoneRecord adds a record set; the name is its identity within
+	// the zone (a duplicate is ErrConflict) and every entry needs a type
+	// and value (ErrInvalid).
+	CreateZoneRecord(ctx context.Context, zone string, r ZoneRecord) error
+	// DeleteZoneRecord removes the named record set from the zone.
+	DeleteZoneRecord(ctx context.Context, zone, name string) error
 
 	// ListRemotes returns the reachable configured remotes, marking the one
 	// the request context selects (or the default) as Current.

@@ -27,6 +27,12 @@ templ NetworksPage(caps backend.Capabilities, networks []backend.Network) {
 						ACLs
 					}
 				}
+				if caps.NetworkZones {
+					@button.Button(button.Props{Variant: button.VariantOutline, Href: "/network-zones"}) {
+						@icon.Icon("globe")(icon.Props{Class: "size-4"})
+						DNS zones
+					}
+				}
 				@button.Button(button.Props{Href: "/networks/new"}) {
 					@icon.Icon("plus")(icon.Props{Class: "size-4"})
 					Create network

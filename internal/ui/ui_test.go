@@ -684,6 +684,16 @@ func TestListPagesRenderEmptyStates(t *testing.T) {
 	}
 }
 
+func TestNetworksPageZonesLinkGatedByCapability(t *testing.T) {
+	caps := testCaps()
+	caps.NetworkZones = true
+	html := render(t, NetworksPage(caps, nil))
+	assertContains(t, html, `href="/network-zones"`)
+
+	plain := render(t, NetworksPage(testCaps(), nil))
+	assertNotContains(t, plain, `href="/network-zones"`)
+}
+
 func TestProjectsPageCreateFormIsLabeledCard(t *testing.T) {
 	html := render(t, ProjectsPage(testCaps(), []backend.Project{{Name: "default"}}, "default", nil))
 	assertContains(t, html, "Create project")

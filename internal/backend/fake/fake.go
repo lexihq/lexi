@@ -76,11 +76,15 @@ type space struct {
 	aclVersions     map[string]int
 	// forwards are port forwards keyed by network, then listen address.
 	// Deliberately unversioned: the daemon enforces no etag on forwards.
-	forwards map[string]map[string]backend.NetworkForward
-	images   map[string]*backend.LocalImage // keyed by fingerprint
-	ops      []backend.Operation            // newest first, capped at maxOps
-	opSeq    int
-	ipSeq    int // DHCP-ish counter for addresses handed to started instances
+	forwards     map[string]map[string]backend.NetworkForward
+	zones        map[string]backend.NetworkZone
+	zoneVersions map[string]int
+	// zoneRecords are record sets keyed by zone, then record name.
+	zoneRecords map[string]map[string]backend.ZoneRecord
+	images      map[string]*backend.LocalImage // keyed by fingerprint
+	ops         []backend.Operation            // newest first, capped at maxOps
+	opSeq       int
+	ipSeq       int // DHCP-ish counter for addresses handed to started instances
 }
 
 // newSpace returns an empty project space.
@@ -94,6 +98,9 @@ func newSpace() *space {
 		acls:            map[string]backend.NetworkACL{},
 		aclVersions:     map[string]int{},
 		forwards:        map[string]map[string]backend.NetworkForward{},
+		zones:           map[string]backend.NetworkZone{},
+		zoneVersions:    map[string]int{},
+		zoneRecords:     map[string]map[string]backend.ZoneRecord{},
 		images:          map[string]*backend.LocalImage{},
 	}
 }
@@ -390,6 +397,7 @@ func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 		ISOVolumes:      true,
 		Hardware:        true,
 		ProjectUsage:    true,
+		NetworkZones:    true,
 	}
 }
 

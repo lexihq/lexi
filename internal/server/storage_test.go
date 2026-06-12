@@ -351,3 +351,52 @@ func TestImportVolumeMissingNameIs400(t *testing.T) {
 	res := importVolumeRequest(t, New(fake.New()), "default", "", "whatever")
 	assertStatus(t, res, http.StatusBadRequest)
 }
+
+// uploadISORequest posts a multipart ISO volume upload.
+func uploadISORequest(t *testing.T, srv *http.Server, pool, name, content string) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	if name != "" {
+		require.NoError(t, mw.WriteField("name", name))
+	}
+	fw, err := mw.CreateFormFile("iso", "install.iso")
+	require.NoError(t, err)
+	_, err = fw.Write([]byte(content))
+	require.NoError(t, err)
+	require.NoError(t, mw.Close())
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/storage/"+pool+"/volumes/iso", &body)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	res := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(res, req)
+	return res
+}
+
+func TestUploadISOVolume(t *testing.T) {
+	b := fake.New()
+	res := uploadISORequest(t, New(b), "default", "install-media", "iso-bytes")
+	assertStatus(t, res, http.StatusSeeOther)
+	assert.Equal(t, "/storage/default", res.Header().Get("Location"))
+
+	got, err := b.GetVolume(t.Context(), "default", "install-media")
+	require.NoError(t, err)
+	assert.Equal(t, "iso", got.ContentType)
+}
+
+func TestUploadISOVolumeMissingNameIs400(t *testing.T) {
+	res := uploadISORequest(t, New(fake.New()), "default", "", "iso-bytes")
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
+func TestUploadISOVolumeDuplicateIs409(t *testing.T) {
+	b := fake.New()
+	srv := New(b)
+	assertStatus(t, uploadISORequest(t, srv, "default", "install-media", "iso-bytes"), http.StatusSeeOther)
+	assertStatus(t, uploadISORequest(t, srv, "default", "install-media", "iso-bytes"), http.StatusConflict)
+}
+
+func TestUploadISOVolumeGhostPoolIs404(t *testing.T) {
+	res := uploadISORequest(t, New(fake.New()), "ghost", "install-media", "iso-bytes")
+	assertStatus(t, res, http.StatusNotFound)
+}

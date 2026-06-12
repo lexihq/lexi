@@ -296,3 +296,31 @@ func TestVolumeExportImportRoundTrip(t *testing.T) {
 	require.ErrorIs(t, f.ImportVolume(ctx(), "default", "other", strings.NewReader("garbage")), backend.ErrInvalid)
 	require.ErrorIs(t, f.ImportVolume(ctx(), "ghost", "other", strings.NewReader(buf.String())), backend.ErrNotFound)
 }
+
+func TestCreateVolumeFromISO(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateVolumeFromISO(ctx(), "default", "install-media", strings.NewReader("iso-bytes")))
+
+	v, err := f.GetVolume(ctx(), "default", "install-media")
+	require.NoError(t, err)
+	assert.Equal(t, "custom", v.Type)
+	assert.Equal(t, "iso", v.ContentType)
+}
+
+func TestCreateVolumeFromISOErrors(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateVolumeFromISO(ctx(), "default", "install-media", strings.NewReader("iso-bytes")))
+
+	// The name is the volume's identity: a second upload conflicts.
+	require.ErrorIs(t, f.CreateVolumeFromISO(ctx(), "default", "install-media", strings.NewReader("x")), backend.ErrConflict)
+	// An ISO volume also collides with an existing custom volume.
+	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "vol1"}))
+	require.ErrorIs(t, f.CreateVolumeFromISO(ctx(), "default", "vol1", strings.NewReader("x")), backend.ErrConflict)
+	// Ghost pools are not found; invalid names are rejected.
+	require.ErrorIs(t, f.CreateVolumeFromISO(ctx(), "ghost", "other", strings.NewReader("x")), backend.ErrNotFound)
+	require.ErrorIs(t, f.CreateVolumeFromISO(ctx(), "default", "bad name", strings.NewReader("x")), backend.ErrInvalid)
+}
+
+func TestCapabilitiesReportISOVolumes(t *testing.T) {
+	assert.True(t, New().Capabilities(ctx()).ISOVolumes)
+}

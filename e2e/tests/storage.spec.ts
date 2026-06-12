@@ -182,3 +182,27 @@ test("export a volume and re-import it under a new name", async ({ page }) => {
     }).toPass({ timeout: 10000 });
   }
 });
+
+test("upload an ISO as a custom volume", async ({ page }) => {
+  // Volume delete asks via hx-confirm; accept dialogs.
+  page.on("dialog", (d) => d.accept());
+  await page.goto("/storage/default");
+
+  const isoForm = page.locator('form[action="/storage/default/volumes/iso"]');
+  await isoForm.locator('input[name="iso"]').setInputFiles({
+    name: "install.iso",
+    mimeType: "application/octet-stream",
+    buffer: Buffer.from("fake-iso-bytes"),
+  });
+  await isoForm.locator('input[name="name"]').fill("e2e-iso-vol");
+  await isoForm.getByRole("button", { name: "Upload" }).click();
+
+  await expect(page).toHaveURL(/\/storage\/default$/);
+  const row = page.locator("#volumes").getByRole("row", { name: "e2e-iso-vol" });
+  await expect(row).toBeVisible();
+  await expect(row.getByText("iso", { exact: true })).toBeVisible();
+
+  // Cleanup.
+  await row.getByRole("button", { name: "Delete" }).click();
+  await expect(page.locator("#volumes").getByText("e2e-iso-vol")).toHaveCount(0);
+});

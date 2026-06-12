@@ -97,6 +97,10 @@ type Capabilities struct {
 	// while keeping its config and devices (Incus extension
 	// "instances_rebuild").
 	InstanceRebuild bool
+	// ISOVolumes is creating custom ISO volumes from an uploaded image file,
+	// attachable to VMs as install media (Incus extension
+	// "custom_volume_iso").
+	ISOVolumes bool
 }
 
 // Instance is a system container or virtual machine.
@@ -699,6 +703,11 @@ type Backend interface {
 	// time clears it.
 	UpdateVolumeSnapshotExpiry(ctx context.Context, pool, volume, snapshot string, expiresAt time.Time) error
 	DeleteVolumeSnapshot(ctx context.Context, pool, volume, snapshot string) error
+
+	// CreateVolumeFromISO creates custom volume volume in pool (content type
+	// "iso") from an ISO image read from r. The name must be free
+	// (ErrConflict) and the pool must exist (ErrNotFound).
+	CreateVolumeFromISO(ctx context.Context, pool, volume string, r io.Reader) error
 
 	// ExportVolume streams a portable backup tarball of the custom volume
 	// (snapshots included) to w.

@@ -347,3 +347,38 @@ func (h handlers) importVolume(w http.ResponseWriter, r *http.Request) {
 	}
 	http.Redirect(w, r, "/storage/"+url.PathEscape(pool), http.StatusSeeOther)
 }
+
+// uploadISOVolume creates a custom "iso" content-type volume from an uploaded
+// ISO image (install media for VMs). The file upload uses a plain multipart
+// form, so success redirects to the pool.
+func (h handlers) uploadISOVolume(w http.ResponseWriter, r *http.Request) {
+	pool := r.PathValue("pool")
+	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
+	// The request body is bounded by MaxBytesReader immediately above.
+	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			h.renderError(w, http.StatusRequestEntityTooLarge, "ISO file is too large")
+			return
+		}
+		h.renderError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	volume := strings.TrimSpace(r.FormValue("name"))
+	if volume == "" {
+		h.fail(w, fmt.Errorf("volume name is required: %w", backend.ErrInvalid))
+		return
+	}
+	file, _, err := r.FormFile("iso")
+	if err != nil {
+		h.renderError(w, http.StatusBadRequest, "ISO file is required")
+		return
+	}
+	defer closeAndLog("uploaded ISO image", file)
+
+	if err := h.backend.CreateVolumeFromISO(r.Context(), pool, volume, file); err != nil {
+		h.fail(w, err)
+		return
+	}
+	http.Redirect(w, r, "/storage/"+url.PathEscape(pool), http.StatusSeeOther)
+}

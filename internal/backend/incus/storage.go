@@ -369,6 +369,35 @@ func (b *incusBackend) ImportVolume(ctx context.Context, pool, volume string, r 
 	return nil
 }
 
+// CreateVolumeFromISO creates a custom "iso" content-type volume in pool by
+// streaming the ISO image from r (gated by caps.ISOVolumes over the
+// custom_volume_iso extension). Like the backup-import override path, the
+// daemon names the volume from a header without running its usual name
+// validation — pre-check here, mirroring the fake.
+func (b *incusBackend) CreateVolumeFromISO(ctx context.Context, pool, volume string, r io.Reader) error {
+	if !validAPIName(volume) {
+		return fmt.Errorf("invalid volume name %q: %w", volume, backend.ErrInvalid)
+	}
+	op, err := b.project(ctx).CreateStoragePoolVolumeFromISO(pool, incusclient.StorageVolumeBackupArgs{
+		BackupFile: contextReader{ctx: ctx, Reader: r},
+		Name:       volume,
+	})
+	if err != nil {
+		return fmt.Errorf("create ISO volume %q/%q: %w", pool, volume, mapErr(err))
+	}
+	if err := op.WaitContext(ctx); err != nil {
+		if ctx.Err() != nil {
+			if cancelErr := op.Cancel(); cancelErr != nil {
+				slog.Warn("cancel ISO volume upload operation", "pool", pool, "volume", volume, "err", cancelErr)
+			}
+		}
+		// Like ImportVolume, a concurrent same-name upload loses on the
+		// database unique constraint; mapErr turns it into ErrConflict.
+		return fmt.Errorf("create ISO volume %q/%q: %w", pool, volume, mapErr(err))
+	}
+	return nil
+}
+
 // validAPIName mirrors the daemon's validate.IsAPIName rules (≤64 chars, no
 // whitespace, none of the reserved URL characters), matching the fake's
 // validator.

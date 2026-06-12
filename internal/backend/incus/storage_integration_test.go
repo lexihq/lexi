@@ -211,3 +211,28 @@ func TestVolumeExportImportRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "32MiB", got.Config["size"], "config survives the round-trip")
 }
+
+func TestCreateVolumeFromISOIntegration(t *testing.T) {
+	b := newBackend(t)
+	if !b.Capabilities(context.Background()).ISOVolumes {
+		t.Skip("daemon lacks the custom_volume_iso extension")
+	}
+	ctx, cancelCtx := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancelCtx()
+	pool := pickPool(t, b, ctx)
+	name := fmt.Sprintf("lxiso%d", time.Now().UnixNano()%100000)
+	t.Cleanup(func() { _ = b.DeleteVolume(ctx, pool.Name, name) })
+
+	iso := bytes.Repeat([]byte("lxcon-iso-test-payload\n"), 64)
+	require.NoError(t, b.CreateVolumeFromISO(ctx, pool.Name, name, bytes.NewReader(iso)))
+
+	got, err := b.GetVolume(ctx, pool.Name, name)
+	require.NoError(t, err)
+	assert.Equal(t, "custom", got.Type)
+	assert.Equal(t, "iso", got.ContentType)
+
+	// The name is the volume's identity: a second upload conflicts.
+	require.ErrorIs(t, b.CreateVolumeFromISO(ctx, pool.Name, name, bytes.NewReader(iso)), backend.ErrConflict)
+	// Invalid names are rejected before any upload.
+	require.ErrorIs(t, b.CreateVolumeFromISO(ctx, pool.Name, "bad name", bytes.NewReader(iso)), backend.ErrInvalid)
+}

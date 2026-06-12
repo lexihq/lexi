@@ -68,6 +68,9 @@ type instanceServerStub struct {
 	volImportArgs     *incusclient.StorageVolumeBackupArgs // captured by CreateStoragePoolVolumeFromBackup
 	volImportOp       incusclient.Operation                // returned by CreateStoragePoolVolumeFromBackup
 	volImportedBytes  []byte                               // drained from the import reader
+	volISOArgs        *incusclient.StorageVolumeBackupArgs // captured by CreateStoragePoolVolumeFromISO
+	volISOOp          incusclient.Operation                // returned by CreateStoragePoolVolumeFromISO
+	volISOBytes       []byte                               // drained from the ISO upload reader
 
 	volumeSnapshots []api.StorageVolumeSnapshot // returned by GetStoragePoolVolumeSnapshots
 	createdSnap     string                      // name captured by CreateStoragePoolVolumeSnapshot
@@ -452,6 +455,16 @@ func (s *instanceServerStub) CreateStoragePoolVolumeFromBackup(_ string, args in
 		return nil, err
 	}
 	return s.volImportOp, nil
+}
+
+func (s *instanceServerStub) CreateStoragePoolVolumeFromISO(_ string, args incusclient.StorageVolumeBackupArgs) (incusclient.Operation, error) {
+	s.volISOArgs = &args
+	var err error
+	s.volISOBytes, err = io.ReadAll(args.BackupFile)
+	if err != nil {
+		return nil, err
+	}
+	return s.volISOOp, nil
 }
 
 func (s *instanceServerStub) CreateInstanceFromBackup(args incusclient.InstanceBackupArgs) (incusclient.Operation, error) {

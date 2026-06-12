@@ -117,6 +117,20 @@ templ StoragePoolPage(caps backend.Capabilities, pool backend.StoragePool, volum
 				</div>
 			</form>
 		}
+		if caps.ISOVolumes {
+			<form method="post" action={ templ.URL("/storage/" + url.PathEscape(pool.Name) + "/volumes/iso") } enctype="multipart/form-data" hx-boost="false" class="mt-8 rounded-lg border bg-card p-4">
+				<h2 class="mb-2 text-lg font-medium">Upload ISO</h2>
+				<p class="mb-3 text-sm text-muted-foreground">Create an ISO volume from an image file, attachable to a VM as install media.</p>
+				<div class="flex gap-2">
+					<input name="iso" type="file" required accept=".iso,application/octet-stream" class="w-1/2 rounded-md border bg-background px-3 py-1.5 text-sm"/>
+					<input name="name" placeholder="volume name" required class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						@icon.Icon("disc")(icon.Props{Class: "size-4"})
+						Upload
+					}
+				</div>
+			</form>
+		}
 	}
 }
 

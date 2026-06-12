@@ -347,6 +347,35 @@ func (f *Fake) ImportVolume(ctx context.Context, pool, volume string, r io.Reade
 	return nil
 }
 
+// CreateVolumeFromISO creates a custom "iso" content-type volume from r. The
+// payload is drained and discarded — the fake records only the volume's
+// existence (ISO bytes are opaque install media, never read back).
+func (f *Fake) CreateVolumeFromISO(ctx context.Context, pool, volume string, r io.Reader) error {
+	if !validAPIName(volume) {
+		return invalid("invalid volume name %q", volume)
+	}
+	if _, err := io.Copy(io.Discard, r); err != nil {
+		return err
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	p, ok := f.remote(ctx).pools[pool]
+	if !ok {
+		return notFoundf("storage pool %q", pool)
+	}
+	if _, ok := p.vols(f.featureProject(ctx, "features.storage.volumes"))[volume]; ok {
+		return conflict("volume %q already exists", volume)
+	}
+	p.vols(f.featureProject(ctx, "features.storage.volumes"))[volume] = &storageVolume{
+		StorageVolume: backend.StorageVolume{
+			Name: volume, Type: "custom", ContentType: "iso", Pool: pool,
+		},
+	}
+	return nil
+}
+
 // poolView returns a copy with a cloned config and a freshly computed UsedBy.
 // Callers must hold the mutex.
 func (f *Fake) poolView(rs *remoteState, p *storagePool) backend.StoragePool {

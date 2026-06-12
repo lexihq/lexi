@@ -387,6 +387,7 @@ func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 		StoredBackups:   true,
 		CertificateEdit: true,
 		InstanceRebuild: true,
+		ISOVolumes:      true,
 	}
 }
 

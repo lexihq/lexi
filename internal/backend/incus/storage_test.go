@@ -167,6 +167,24 @@ func TestImportVolumeRejectsInstanceBackup(t *testing.T) {
 	require.NotNil(t, s.volImportArgs)
 }
 
+func TestCreateVolumeFromISOStreamsUpload(t *testing.T) {
+	s := &instanceServerStub{volISOOp: &operationStub{}}
+	b := &incusBackend{srv: s}
+
+	require.NoError(t, b.CreateVolumeFromISO(t.Context(), "default", "install-media", strings.NewReader("iso-bytes")))
+
+	require.NotNil(t, s.volISOArgs)
+	assert.Equal(t, "install-media", s.volISOArgs.Name, "volume name should be passed through")
+	assert.Equal(t, "iso-bytes", string(s.volISOBytes), "the reader should stream to the upload")
+}
+
+func TestCreateVolumeFromISOInvalidNameRejected(t *testing.T) {
+	s := &instanceServerStub{}
+	err := (&incusBackend{srv: s}).CreateVolumeFromISO(t.Context(), "default", "bad name", strings.NewReader("x"))
+	require.ErrorIs(t, err, backend.ErrInvalid)
+	assert.Nil(t, s.volISOArgs, "invalid names must be rejected before any upload")
+}
+
 func TestImportVolumeUniqueConstraintRaceIsConflict(t *testing.T) {
 	// Two concurrent imports of the same new name: the loser fails on the
 	// daemon's DB unique constraint, not the "already exists" pre-check.

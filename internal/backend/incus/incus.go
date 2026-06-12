@@ -102,6 +102,7 @@ func probeCaps(srv incusclient.InstanceServer) (backend.Capabilities, error) {
 		Hardware:        srv.HasExtension("resources_v2"),
 		VolumeBackups:   srv.HasExtension("custom_volume_backup") && srv.HasExtension("backup_override_name"),
 		Projects:        srv.HasExtension("projects"),
+		ProjectUsage:    srv.HasExtension("projects") && srv.HasExtension("project_usage"),
 		Events:          true, // the events API is core, no extension to probe
 	}, nil
 }

@@ -96,3 +96,34 @@ func TestProjectScopedInstanceIsolation(t *testing.T) {
 	require.NoError(t, b.DeleteInstance(scoped, name))
 	require.NoError(t, b.DeleteProject(ctx, project))
 }
+
+// TestGetProjectUsageRoundTrip creates a capped project and checks the state
+// API reports the configured limits and zero usage for it.
+func TestGetProjectUsageRoundTrip(t *testing.T) {
+	b := newBackend(t)
+	if !b.Capabilities(context.Background()).ProjectUsage {
+		t.Skip("daemon lacks the project_usage extension")
+	}
+	ctx := context.Background()
+	name := uniqueName("lxusage")
+	t.Cleanup(func() { _ = b.DeleteProject(ctx, name) })
+	require.NoError(t, b.CreateProject(ctx, name, "usage test", map[string]string{
+		"limits.instances": "5",
+		"limits.memory":    "1GiB",
+	}))
+
+	usage, err := b.GetProjectUsage(ctx, name)
+	require.NoError(t, err)
+	byName := map[string]backend.ProjectUsage{}
+	for _, u := range usage {
+		byName[u.Resource] = u
+	}
+	require.Contains(t, byName, "instances")
+	assert.Equal(t, int64(0), byName["instances"].Usage)
+	assert.Equal(t, int64(5), byName["instances"].Limit)
+	require.Contains(t, byName, "memory")
+	assert.Equal(t, int64(1<<30), byName["memory"].Limit)
+
+	_, err = b.GetProjectUsage(ctx, uniqueName("ghost"))
+	require.ErrorIs(t, err, backend.ErrNotFound)
+}

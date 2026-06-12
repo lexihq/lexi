@@ -672,7 +672,7 @@ func TestListPagesRenderEmptyStates(t *testing.T) {
 		want string
 	}{
 		{"instances", InstancesPage(testCaps(), nil, nil), "No instances yet"},
-		{"projects", ProjectsPage(testCaps(), nil, "default"), "No projects yet"},
+		{"projects", ProjectsPage(testCaps(), nil, "default", nil), "No projects yet"},
 		{"networks", NetworksPage(testCaps(), nil), "No networks yet"},
 		{"storage", StoragePoolsPage(testCaps(), nil), "No storage pools yet"},
 		{"profiles", ProfilesPage(testCaps(), nil), "No profiles yet"},
@@ -685,11 +685,48 @@ func TestListPagesRenderEmptyStates(t *testing.T) {
 }
 
 func TestProjectsPageCreateFormIsLabeledCard(t *testing.T) {
-	html := render(t, ProjectsPage(testCaps(), []backend.Project{{Name: "default"}}, "default"))
+	html := render(t, ProjectsPage(testCaps(), []backend.Project{{Name: "default"}}, "default", nil))
 	assertContains(t, html, "Create project")
 	assertContains(t, html, ">Name</label>")
 	assertContains(t, html, ">Description</label>")
 	assertContains(t, html, "shared from default")
+}
+
+func TestProjectsPageResourcesColumnPrefersUsage(t *testing.T) {
+	projects := []backend.Project{{Name: "default", UsedBy: []string{"/1.0/profiles/default"}}}
+
+	// With a usage map the column shows live instance counts...
+	withUsage := render(t, ProjectsPage(testCaps(), projects, "default", map[string]int64{"default": 2}))
+	assertContains(t, withUsage, "2 instances")
+
+	// ...without one it falls back to the UsedBy count.
+	withoutUsage := render(t, ProjectsPage(testCaps(), projects, "default", nil))
+	assertNotContains(t, withoutUsage, "instances</td>")
+}
+
+func TestProjectDetailUsageAndLimitsGatedByCapability(t *testing.T) {
+	caps := testCaps()
+	caps.ProjectUsage = true
+	p := backend.Project{Name: "dev", Config: map[string]string{"limits.memory": "1GiB"}, Version: "1"}
+	usage := []backend.ProjectUsage{
+		{Resource: "instances", Usage: 3, Limit: 5},
+		{Resource: "memory", Usage: 512 << 20, Limit: 1 << 30},
+		{Resource: "cpu", Usage: 0, Limit: -1},
+	}
+	html := render(t, ProjectDetailPage(caps, p, usage))
+
+	assertContains(t, html, "Usage & limits")
+	assertContains(t, html, "512.0 MiB") // memory usage as bytes
+	assertContains(t, html, "1.0 GiB")   // memory limit as bytes
+	assertContains(t, html, "—")         // unset cpu limit
+	assertContains(t, html, `action="/projects/dev/limits"`)
+	assertContains(t, html, `name="memory" value="1GiB"`) // prefilled from config
+	assertContains(t, html, `name="virtual_machines"`)
+
+	// Without the capability the section is absent.
+	plain := render(t, ProjectDetailPage(testCaps(), p, nil))
+	assertNotContains(t, plain, "Usage & limits")
+	assertNotContains(t, plain, `action="/projects/dev/limits"`)
 }
 
 func TestInstanceHeaderRestartIsStatusAware(t *testing.T) {

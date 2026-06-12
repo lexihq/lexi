@@ -277,7 +277,7 @@ func TestSplitImageExportImportRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open export zip: %v", err)
 	}
-	var names []string
+	names := make([]string, 0, len(zr.File))
 	for _, zf := range zr.File {
 		names = append(names, zf.Name)
 		if zf.Method != zip.Store {

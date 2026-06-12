@@ -2,6 +2,7 @@ package fake
 
 import (
 	"maps"
+	"sort"
 	"testing"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -164,4 +165,52 @@ func TestProjectFeatureAndNamespaceGuards(t *testing.T) {
 	for _, img := range defImgs {
 		assert.NotContains(t, img.Aliases, "dev-img", "published image leaked into default")
 	}
+}
+
+func TestGetProjectUsageReportsCountsAndLimits(t *testing.T) {
+	f := New()
+
+	// Default project: one created instance, the seeded managed network
+	// (unmanaged eth0 doesn't count), no limits configured, rows sorted.
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "usage-inst", Image: "debian/12"}))
+	usage, err := f.GetProjectUsage(ctx(), "default")
+	require.NoError(t, err)
+	byName := map[string]backend.ProjectUsage{}
+	order := make([]string, 0, len(usage))
+	for _, u := range usage {
+		byName[u.Resource] = u
+		order = append(order, u.Resource)
+	}
+	assert.True(t, sort.StringsAreSorted(order), "rows must be sorted by resource: %v", order)
+	assert.Equal(t, int64(1), byName["instances"].Usage)
+	assert.Equal(t, int64(-1), byName["instances"].Limit, "unset limit must be -1")
+	assert.Equal(t, int64(1), byName["networks"].Usage)
+	assert.Equal(t, int64(0), byName["memory"].Usage)
+
+	// Instance limits aggregate into cpu/memory usage.
+	require.NoError(t, f.UpdateLimits(ctx(), "usage-inst", backend.Limits{CPU: "2", Memory: "512MiB"}))
+	usage, err = f.GetProjectUsage(ctx(), "default")
+	require.NoError(t, err)
+	for _, u := range usage {
+		byName[u.Resource] = u
+	}
+	assert.Equal(t, int64(2), byName["cpu"].Usage)
+	assert.Equal(t, int64(512<<20), byName["memory"].Usage)
+
+	// Project limits.* config keys surface as parsed limits.
+	require.NoError(t, f.CreateProject(ctx(), "capped", "", map[string]string{
+		"limits.instances": "5",
+		"limits.memory":    "1GiB",
+	}))
+	usage, err = f.GetProjectUsage(ctx(), "capped")
+	require.NoError(t, err)
+	for _, u := range usage {
+		byName[u.Resource] = u
+	}
+	assert.Equal(t, int64(0), byName["instances"].Usage)
+	assert.Equal(t, int64(5), byName["instances"].Limit)
+	assert.Equal(t, int64(1<<30), byName["memory"].Limit)
+
+	_, err = f.GetProjectUsage(ctx(), "ghost")
+	require.ErrorIs(t, err, backend.ErrNotFound)
 }

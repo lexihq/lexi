@@ -104,6 +104,10 @@ type Capabilities struct {
 	// Hardware is the host hardware inventory on the Server page: GPU cards,
 	// network cards, and physical disks (Incus extension "resources_v2").
 	Hardware bool
+	// ProjectUsage is per-project usage-vs-limits reporting (Incus extension
+	// "project_usage"): the Usage & limits section on the project detail page
+	// and the live Resources column on the projects list.
+	ProjectUsage bool
 }
 
 // Instance is a system container or virtual machine.
@@ -427,6 +431,15 @@ type Project struct {
 	Version string
 }
 
+// ProjectUsage is one resource row of a project's state: current usage
+// against the configured limit. Memory and disk are bytes; the other
+// resources are counts. Limit is -1 when the project sets none.
+type ProjectUsage struct {
+	Resource string // e.g. "instances", "memory"
+	Usage    int64
+	Limit    int64
+}
+
 // InstanceBackup is a named backup the daemon stores server-side, as opposed
 // to the streamed export/import tarballs.
 type InstanceBackup struct {
@@ -697,6 +710,10 @@ type Backend interface {
 	ListProjects(ctx context.Context) ([]Project, error)
 	// GetProject returns the project with a populated Version token.
 	GetProject(ctx context.Context, name string) (Project, error)
+	// GetProjectUsage reports the project's resource usage against its
+	// configured limits, sorted by resource name. An unknown project is
+	// ErrNotFound.
+	GetProjectUsage(ctx context.Context, name string) ([]ProjectUsage, error)
 	// CreateProject creates a project; config carries the features.* keys
 	// (the daemon defaults unset features for new projects).
 	CreateProject(ctx context.Context, name, description string, config map[string]string) error

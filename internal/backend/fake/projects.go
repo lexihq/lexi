@@ -35,6 +35,86 @@ func (f *Fake) GetProject(ctx context.Context, name string) (backend.Project, er
 	return p, nil
 }
 
+// GetProjectUsage derives the usage rows the daemon's project state API
+// reports: resource counts from the project's space, cpu/memory usage
+// aggregated from instance limits, and limits parsed from the project's
+// limits.* config keys (-1 when unset).
+func (f *Fake) GetProjectUsage(ctx context.Context, name string) ([]backend.ProjectUsage, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	rs := f.remote(ctx)
+	p, ok := rs.projects[name]
+	if !ok {
+		return nil, notFoundf("project %q", name)
+	}
+	usage := map[string]int64{"instances": 0, "networks": 0, "cpu": 0, "memory": 0, "disk": 0}
+	if sp, ok := rs.spaces[name]; ok {
+		usage["instances"] = int64(len(sp.instances))
+		for _, n := range sp.networks {
+			if n.Managed { // limits.networks governs managed networks only
+				usage["networks"]++
+			}
+		}
+		for _, inst := range sp.instances {
+			if cpu, err := strconv.ParseInt(inst.LimitsCPU, 10, 64); err == nil {
+				usage["cpu"] += cpu
+			}
+			if mem, ok := parseSizeBytes(inst.LimitsMemory); ok {
+				usage["memory"] += mem
+			}
+		}
+	}
+	out := make([]backend.ProjectUsage, 0, len(usage))
+	for resource, used := range usage {
+		limit := int64(-1)
+		if raw, ok := p.Config["limits."+resource]; ok {
+			switch resource {
+			case "memory", "disk":
+				if parsed, ok := parseSizeBytes(raw); ok {
+					limit = parsed
+				}
+			default:
+				if parsed, err := strconv.ParseInt(raw, 10, 64); err == nil {
+					limit = parsed
+				}
+			}
+		}
+		out = append(out, backend.ProjectUsage{Resource: resource, Usage: used, Limit: limit})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Resource < out[j].Resource })
+	return out, nil
+}
+
+// parseSizeBytes parses the daemon's byte-size notation: a bare integer is
+// bytes, decimal suffixes are 1000-based, binary suffixes 1024-based.
+func parseSizeBytes(s string) (int64, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, false
+	}
+	units := []struct {
+		suffix string
+		factor int64
+	}{
+		{"EiB", 1 << 60}, {"PiB", 1 << 50}, {"TiB", 1 << 40}, {"GiB", 1 << 30}, {"MiB", 1 << 20}, {"KiB", 1 << 10},
+		{"EB", 1e18}, {"PB", 1e15}, {"TB", 1e12}, {"GB", 1e9}, {"MB", 1e6}, {"kB", 1e3}, {"B", 1},
+	}
+	factor := int64(1)
+	for _, u := range units {
+		if strings.HasSuffix(s, u.suffix) {
+			factor = u.factor
+			s = strings.TrimSpace(strings.TrimSuffix(s, u.suffix))
+			break
+		}
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n * factor, true
+}
+
 func (f *Fake) CreateProject(ctx context.Context, name, description string, config map[string]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -39,9 +39,45 @@ func projectBlockers(p backend.Project) int {
 	return n
 }
 
+// projectLimitInputs are the validated limits the detail page's form edits;
+// the remaining limits.*/restricted.* keys stay raw-editable in the config
+// editor. Size inputs accept the daemon's byte notation (e.g. 1GiB).
+var projectLimitInputs = []struct {
+	Field string
+	Key   string
+	Label string
+	Size  bool
+}{
+	{"instances", "limits.instances", "Instances", false},
+	{"containers", "limits.containers", "Containers", false},
+	{"virtual_machines", "limits.virtual-machines", "Virtual machines", false},
+	{"cpu", "limits.cpu", "CPUs", false},
+	{"memory", "limits.memory", "Memory", true},
+	{"disk", "limits.disk", "Disk", true},
+}
+
+// usageAmount renders a usage/limit number: bytes for memory and disk,
+// plain counts otherwise.
+func usageAmount(resource string, v int64) string {
+	if resource == "memory" || resource == "disk" {
+		return sizeLabel(v)
+	}
+	return fmt.Sprint(v)
+}
+
+// instancesLabel is the Resources column text: live instance usage.
+func instancesLabel(n int64) string {
+	if n == 1 {
+		return "1 instance"
+	}
+	return fmt.Sprintf("%d instances", n)
+}
+
 // ProjectsPage lists projects with a create form. Switching the active
 // project happens in the sidebar dropdown; this page manages their lifecycle.
-templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, current string) {
+// instancesUsage backs the Resources column when the backend reports project
+// usage (nil otherwise, falling back to the UsedBy count).
+templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, current string, instancesUsage map[string]int64) {
 	@Layout("Projects", caps, Nav{Section: NavProjects}) {
 		<div class="mb-6">
 			<h1 class="text-2xl font-semibold">Projects</h1>
@@ -72,7 +108,11 @@ templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, curren
 							{ p.Description }
 						}
 						@table.Cell() {
-							{ fmt.Sprint(len(p.UsedBy)) }
+							if instancesUsage != nil {
+								{ instancesLabel(instancesUsage[p.Name]) }
+							} else {
+								{ fmt.Sprint(len(p.UsedBy)) }
+							}
 						}
 						@table.Cell() {
 							if p.Name != "default" {
@@ -132,9 +172,10 @@ templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, curren
 }
 
 // ProjectDetailPage shows one project: versioned description/config editor,
-// rename (hidden for default), and a delete guarded by the daemon's
-// emptiness rule (the seeded default profile doesn't count).
-templ ProjectDetailPage(caps backend.Capabilities, p backend.Project) {
+// usage-vs-limits with a validated limits form (when the backend reports
+// project usage), rename (hidden for default), and a delete guarded by the
+// daemon's emptiness rule (the seeded default profile doesn't count).
+templ ProjectDetailPage(caps backend.Capabilities, p backend.Project, usage []backend.ProjectUsage) {
 	{{ base := "/projects/" + url.PathEscape(p.Name) }}
 	{{ blockers := projectBlockers(p) }}
 	@Layout(p.Name, caps, Nav{Section: NavProjects}) {
@@ -195,6 +236,60 @@ templ ProjectDetailPage(caps backend.Capabilities, p backend.Project) {
 				}
 			</form>
 		</section>
+		if caps.ProjectUsage {
+			<section class="mb-8 rounded-lg border bg-card p-4">
+				<h2 class="mb-1 text-lg font-medium">Usage & limits</h2>
+				<p class="mb-3 text-sm text-muted-foreground">Current usage against this project's limits. CPU and memory usage sum the limits of the project's instances.</p>
+				@table.Table() {
+					@table.Header() {
+						@table.Row() {
+							@table.Head() { Resource }
+							@table.Head() { Used }
+							@table.Head() { Limit }
+						}
+					}
+					@table.Body() {
+						for _, u := range usage {
+							@table.Row() {
+								@table.Cell() {
+									{ u.Resource }
+								}
+								@table.Cell() {
+									{ usageAmount(u.Resource, u.Usage) }
+								}
+								@table.Cell() {
+									if u.Limit < 0 {
+										<span class="text-muted-foreground">—</span>
+									} else {
+										{ usageAmount(u.Resource, u.Limit) }
+									}
+								}
+							}
+						}
+					}
+				}
+				<form method="post" action={ templ.URL(base + "/limits") } class="mt-4 max-w-xl space-y-2">
+					<h3 class="text-sm font-medium">Limits</h3>
+					<p class="text-sm text-muted-foreground">Empty fields remove the limit. Sizes accept the daemon's notation, e.g. <span class="font-mono">1GiB</span>.</p>
+					<div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+						for _, f := range projectLimitInputs {
+							<div>
+								<label class="mb-1 block text-xs text-muted-foreground">{ f.Label }</label>
+								if f.Size {
+									<input name={ f.Field } value={ p.Config[f.Key] } placeholder="1GiB" class="h-9 w-full rounded-md border bg-background px-3 font-mono text-sm"/>
+								} else {
+									<input name={ f.Field } value={ p.Config[f.Key] } inputmode="numeric" class="h-9 w-full rounded-md border bg-background px-3 font-mono text-sm"/>
+								}
+							</div>
+						}
+					</div>
+					@button.Button(button.Props{Type: button.TypeSubmit, Size: button.SizeSm}) {
+						@icon.Icon("check")(icon.Props{Class: "size-4"})
+						Apply limits
+					}
+				</form>
+			</section>
+		}
 		if len(p.UsedBy) > 0 {
 			<section class="rounded-lg border bg-card p-4">
 				<h2 class="mb-3 text-lg font-medium">Resources</h2>

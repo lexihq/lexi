@@ -94,3 +94,39 @@ test("projects: delete an empty project straight from the list", async ({ page }
     await expect(page.getByRole("link", { name: "e2e-rowdel" })).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 });
+
+test("projects: usage and validated limits on the detail page", async ({ page }) => {
+  page.on("dialog", (d) => d.accept());
+  await page.goto("/projects");
+  await page.locator('input[name="name"]').fill("e2e-limits");
+  await page.getByRole("button", { name: "Create" }).click();
+  await expect(page).toHaveURL(/\/projects\/e2e-limits$/);
+
+  // Scope to main: the collapsed Tasks footer echoes names in operation rows.
+  const main = page.locator("main");
+  const usage = main.locator("section", { has: page.getByRole("heading", { name: "Usage & limits" }) });
+  await expect(usage.getByRole("cell", { name: "instances", exact: true })).toBeVisible();
+
+  // Apply limits; the usage table picks them up.
+  await usage.locator('input[name="instances"]').fill("5");
+  await usage.locator('input[name="memory"]').fill("1GiB");
+  await usage.getByRole("button", { name: "Apply limits" }).click();
+  await expect(page).toHaveURL(/\/projects\/e2e-limits$/);
+  await expect(usage.getByRole("row", { name: /instances/ }).getByRole("cell", { name: "5", exact: true })).toBeVisible();
+  await expect(usage.getByRole("row", { name: /memory/ }).getByText("1.0 GiB")).toBeVisible();
+
+  // Invalid values are rejected with a toast, nothing applied.
+  await usage.locator('input[name="instances"]').fill("many");
+  await usage.getByRole("button", { name: "Apply limits" }).click();
+  await expect(page.locator("[data-tui-toast]")).toBeVisible();
+
+  // The list's Resources column reports live instance usage.
+  await page.goto("/projects");
+  await expect(page.getByRole("row", { name: /e2e-limits/ }).getByText("0 instances")).toBeVisible();
+
+  // Clean up for reruns against a reused server.
+  await expect(async () => {
+    await page.getByRole("row", { name: /e2e-limits/ }).getByRole("button", { name: "Delete" }).click();
+    await expect(page.getByRole("link", { name: "e2e-limits" })).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 10000 });
+});

@@ -117,3 +117,21 @@ func TestContextProjectScopesClient(t *testing.T) {
 		assert.Empty(t, s.usedProject)
 	})
 }
+
+func TestGetProjectUsageMapsAndSortsState(t *testing.T) {
+	b := &incusBackend{srv: &instanceServerStub{projectState: &api.ProjectState{
+		Resources: map[string]api.ProjectStateResource{
+			"memory":    {Limit: 1 << 30, Usage: 512 << 20},
+			"instances": {Limit: -1, Usage: 3},
+			"cpu":       {Limit: 8, Usage: 2},
+		},
+	}}}
+
+	got, err := b.GetProjectUsage(t.Context(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, []backend.ProjectUsage{
+		{Resource: "cpu", Usage: 2, Limit: 8},
+		{Resource: "instances", Usage: 3, Limit: -1},
+		{Resource: "memory", Usage: 512 << 20, Limit: 1 << 30},
+	}, got)
+}

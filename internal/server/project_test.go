@@ -160,3 +160,66 @@ func TestProjectCookieSurvivesSpecialCharacters(t *testing.T) {
 	assertStatus(t, res, http.StatusOK)
 	assert.Contains(t, res.Body.String(), "odd-inst")
 }
+
+func TestProjectsPageShowsUsageInResourcesColumn(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "u1", Image: "debian/12"}))
+	res := request(t, New(b), "GET", "/projects", "", false)
+	assertStatus(t, res, http.StatusOK)
+	assert.Contains(t, res.Body.String(), "1 instance")
+}
+
+func TestProjectDetailShowsUsageAndLimitsForm(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateProject(t.Context(), "capped", "", map[string]string{
+		"limits.instances": "5",
+		"limits.memory":    "1GiB",
+	}))
+	res := request(t, New(b), "GET", "/projects/capped", "", false)
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	assert.Contains(t, body, "Usage")
+	assert.Contains(t, body, "instances")                        // usage row
+	assert.Contains(t, body, "1.0 GiB")                          // parsed memory limit
+	assert.Contains(t, body, `action="/projects/capped/limits"`) // limits form
+	assert.Contains(t, body, `name="instances" value="5"`)       // prefilled from config
+	assert.Contains(t, body, `name="memory" value="1GiB"`)
+}
+
+func TestUpdateProjectLimitsAppliesAndClears(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateProject(t.Context(), "dev", "", map[string]string{"limits.cpu": "4"}))
+
+	res := formRequest(t, New(b), "/projects/dev/limits", url.Values{
+		"instances": {"5"}, "memory": {"2GiB"}, "cpu": {""},
+	}, false)
+	assertStatus(t, res, http.StatusSeeOther)
+
+	p, err := b.GetProject(t.Context(), "dev")
+	require.NoError(t, err)
+	assert.Equal(t, "5", p.Config["limits.instances"])
+	assert.Equal(t, "2GiB", p.Config["limits.memory"])
+	_, hasCPU := p.Config["limits.cpu"]
+	assert.False(t, hasCPU, "empty field must clear the key")
+}
+
+func TestUpdateProjectLimitsRejectsBadValues(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateProject(t.Context(), "dev", "", nil))
+
+	res := formRequest(t, New(b), "/projects/dev/limits", url.Values{"instances": {"many"}}, false)
+	assertStatus(t, res, http.StatusBadRequest)
+
+	res = formRequest(t, New(b), "/projects/dev/limits", url.Values{"memory": {"10XB"}}, false)
+	assertStatus(t, res, http.StatusBadRequest)
+
+	res = formRequest(t, New(b), "/projects/dev/limits", url.Values{"instances": {"-2"}}, false)
+	assertStatus(t, res, http.StatusBadRequest)
+
+	// Nothing may have been applied.
+	p, err := b.GetProject(t.Context(), "dev")
+	require.NoError(t, err)
+	for k := range p.Config {
+		assert.False(t, strings.HasPrefix(k, "limits."), "no limits key may be set, got %q", k)
+	}
+}

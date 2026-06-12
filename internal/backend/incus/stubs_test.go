@@ -118,6 +118,7 @@ type instanceServerStub struct {
 	renamedProject [2]string             // name/newName captured by RenameProject
 	renameProjOp   incusclient.Operation // operation returned by RenameProject
 	deletedProject string                // captured by DeleteProject
+	projectState   *api.ProjectState     // returned by GetProjectState
 
 	files       map[string]*fileStub          // keyed by path, served by GetInstanceFile
 	createdFile *incusclient.InstanceFileArgs // captured by CreateInstanceFile
@@ -196,6 +197,13 @@ func (s *instanceServerStub) GetProject(string) (*api.Project, string, error) {
 		return nil, "", errNotFoundStatus()
 	}
 	return s.project, "project-etag", nil
+}
+
+func (s *instanceServerStub) GetProjectState(string) (*api.ProjectState, error) {
+	if s.projectState == nil {
+		return nil, errNotFoundStatus()
+	}
+	return s.projectState, nil
 }
 
 func (s *instanceServerStub) CreateProject(project api.ProjectsPost) error {

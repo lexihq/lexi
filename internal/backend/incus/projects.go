@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/adam/lxcon/internal/backend"
@@ -27,6 +28,21 @@ func (b *incusBackend) GetProject(ctx context.Context, name string) (backend.Pro
 		return backend.Project{}, fmt.Errorf("get project %q: %w", name, mapErr(err))
 	}
 	return toProject(p, etag), nil
+}
+
+// GetProjectUsage maps the project state API's resource map into sorted
+// usage rows.
+func (b *incusBackend) GetProjectUsage(ctx context.Context, name string) ([]backend.ProjectUsage, error) {
+	st, err := b.server(ctx).GetProjectState(name)
+	if err != nil {
+		return nil, fmt.Errorf("get project %q state: %w", name, mapErr(err))
+	}
+	out := make([]backend.ProjectUsage, 0, len(st.Resources))
+	for resource, r := range st.Resources {
+		out = append(out, backend.ProjectUsage{Resource: resource, Usage: r.Usage, Limit: r.Limit})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Resource < out[j].Resource })
+	return out, nil
 }
 
 func (b *incusBackend) CreateProject(ctx context.Context, name, description string, config map[string]string) error {

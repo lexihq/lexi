@@ -141,7 +141,9 @@ test("image lifecycle: auto-update, expiry, and refresh on a copied image", asyn
   await row.locator('input[name="auto_update"]').check();
   await row.locator('input[name="expires_at"]').fill("2027-03-01T00:00");
   await row.getByRole("button", { name: "Save" }).click();
-  await expect(table.getByRole("row", { name: /alpine\/edge/ }).getByText("auto-update")).toBeVisible();
+  // Exact match: the row also contains the edit form's "Auto-update" label,
+  // and getByText's default substring match is case-insensitive.
+  await expect(table.getByRole("row", { name: /alpine\/edge/ }).getByText("auto-update", { exact: true })).toBeVisible();
   await expect(table.getByRole("row", { name: /alpine\/edge/ }).getByText("expires 2027-03-01")).toBeVisible();
 
   // Refresh re-pulls from the source (fake logs the operation).

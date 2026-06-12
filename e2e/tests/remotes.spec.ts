@@ -61,6 +61,9 @@ test("remotes: switch scopes the UI and clears the project selection", async ({ 
   }).toPass({ timeout: 10000 });
 
   await page.locator('aside select[name="remote"]').selectOption("local");
+  // The switch submits the remote form (redirect to /); wait for local's
+  // instance list before navigating on, or the goto cancels the switch.
+  await expect(page.getByRole("link", { name: "demo" }).first()).toBeVisible();
   await page.goto("/projects");
   await expect(async () => {
     await page.getByRole("row", { name: /e2e-remote-proj/ }).getByRole("button", { name: "Delete" }).click();

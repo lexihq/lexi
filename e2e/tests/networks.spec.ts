@@ -148,15 +148,19 @@ test("network detail: leases and port forwards on the managed bridge", async ({ 
     await startBtn.click();
   }
   await page.goto("/networks/incusbr0");
-  await expect(page.getByText("MTU 1500")).toBeVisible();
-  await expect(page.getByRole("row", { name: /demo/ })).toBeVisible();
+  // Scope to main: the collapsed Tasks footer receives operation rows over
+  // SSE whose descriptions repeat instance names and forward addresses, and
+  // hidden text still matches getByText/getByRole.
+  const main = page.locator("main");
+  await expect(main.getByText("MTU 1500")).toBeVisible();
+  await expect(main.getByRole("row", { name: /demo/ })).toBeVisible();
 
   // Create a forward, add a port mapping, then delete it.
   await page.locator('input[name="listen_address"]').fill("192.0.2.40");
   await page.locator('form[action="/networks/incusbr0/forwards"] input[name="description"]').fill("e2e fwd");
   await page.getByRole("button", { name: "Add forward" }).click();
   await expect(page).toHaveURL(/\/networks\/incusbr0$/);
-  await expect(page.getByText("192.0.2.40")).toBeVisible();
+  await expect(main.getByText("192.0.2.40")).toBeVisible();
 
   const editor = page.locator('form[action="/networks/incusbr0/forwards/192.0.2.40/update"]');
   await editor.locator('input[name="listen_port"]').last().fill("8080");
@@ -164,8 +168,8 @@ test("network detail: leases and port forwards on the managed bridge", async ({ 
   await editor.getByRole("button", { name: "Apply forward" }).click();
   await expect(page.locator('input[name="listen_port"][value="8080"]')).toBeVisible();
 
-  await page.getByRole("button", { name: "Delete", exact: true }).first().click();
-  await expect(page.getByText("192.0.2.40")).toHaveCount(0);
+  await main.getByRole("button", { name: "Delete", exact: true }).first().click();
+  await expect(main.getByText("192.0.2.40")).toHaveCount(0);
 
   // Restore the seeded state for later tests: stop demo again.
   await page.goto("/");

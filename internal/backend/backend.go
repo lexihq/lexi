@@ -416,8 +416,6 @@ type Operation struct {
 	Cancelable  bool // the daemon will accept a cancel request for this op
 }
 
-// LocalImage is an image in the host's local image store (as opposed to Image,
-// which is a per-alias entry of the remote catalog backing the create picker).
 // Project is a multi-tenancy namespace. Config carries the daemon's
 // project keys — notably the features.* booleans deciding which resource
 // kinds are scoped to the project rather than shared from default.
@@ -529,6 +527,8 @@ func ProjectFromContext(ctx context.Context) string {
 	return ""
 }
 
+// LocalImage is an image in the host's local image store (as opposed to Image,
+// which is a per-alias entry of the remote catalog backing the create picker).
 type LocalImage struct {
 	Fingerprint string
 	Aliases     []string

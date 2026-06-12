@@ -57,7 +57,7 @@ linters:
     - asciicheck
     - gosec
     - prealloc
-    # - godoclint
+    - godoclint
   settings:
     errcheck:
       check-blank: true
@@ -67,6 +67,14 @@ linters:
       - path: internal/components/icon/icon_data\.go
         linters:
           - gosec
+      # Vendored templui code (installed by the templui CLI; edits would be
+      # lost on component updates) keeps its upstream comment style.
+      - path: internal/components/
+        linters:
+          - godoclint
+      - path: internal/utils/templui\.go
+        linters:
+          - godoclint
       - path: _test\.go
         text: "G304:"
         linters:

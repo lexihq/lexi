@@ -25,6 +25,24 @@ func (f *Fake) GetServerOverview(ctx context.Context) (backend.ServerOverview, e
 	}, nil
 }
 
+func (f *Fake) GetServerHardware(ctx context.Context) (backend.ServerHardware, error) {
+	return backend.ServerHardware{
+		GPUs: []backend.GPUCard{
+			{Vendor: "Fake Graphics", Product: "FakeGPU 1000", Driver: "fakegpu", PCIAddress: "0000:00:02.0"},
+		},
+		NICs: []backend.NetworkCard{
+			{
+				Vendor: "Fake Networks", Product: "FakeNIC 10G", Driver: "fakenic", PCIAddress: "0000:0d:00.0",
+				Ports: []backend.NetworkPort{{ID: "eth0", Address: "00:16:3e:00:00:01"}},
+			},
+		},
+		Disks: []backend.HostDisk{
+			{ID: "nvme0n1", Model: "FAKE SSD 256", Type: "nvme", SizeBytes: 256 << 30},
+			{ID: "sda", Model: "FAKE USB 64", Type: "usb", SizeBytes: 64 << 30, Removable: true},
+		},
+	}, nil
+}
+
 func (f *Fake) GetServerConfig(ctx context.Context) (map[string]string, string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

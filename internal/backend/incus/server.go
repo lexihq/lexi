@@ -36,6 +36,46 @@ func (b *incusBackend) GetServerOverview(ctx context.Context) (backend.ServerOve
 	}, nil
 }
 
+// GetServerHardware maps the daemon's resources topology (GPU cards, network
+// cards, physical disks) into the decoupled inventory types.
+func (b *incusBackend) GetServerHardware(ctx context.Context) (backend.ServerHardware, error) {
+	res, err := b.server(ctx).GetServerResources()
+	if err != nil {
+		return backend.ServerHardware{}, fmt.Errorf("get server resources: %w", mapErr(err))
+	}
+	var hw backend.ServerHardware
+	for _, c := range res.GPU.Cards {
+		hw.GPUs = append(hw.GPUs, backend.GPUCard{
+			Vendor:     c.Vendor,
+			Product:    c.Product,
+			Driver:     c.Driver,
+			PCIAddress: c.PCIAddress,
+		})
+	}
+	for _, c := range res.Network.Cards {
+		nic := backend.NetworkCard{
+			Vendor:     c.Vendor,
+			Product:    c.Product,
+			Driver:     c.Driver,
+			PCIAddress: c.PCIAddress,
+		}
+		for _, p := range c.Ports {
+			nic.Ports = append(nic.Ports, backend.NetworkPort{ID: p.ID, Address: p.Address})
+		}
+		hw.NICs = append(hw.NICs, nic)
+	}
+	for _, d := range res.Storage.Disks {
+		hw.Disks = append(hw.Disks, backend.HostDisk{
+			ID:        d.ID,
+			Model:     d.Model,
+			Type:      d.Type,
+			SizeBytes: int64(d.Size), //nolint:gosec // G115: real disk sizes fit int64.
+			Removable: d.Removable,
+		})
+	}
+	return hw, nil
+}
+
 // GetServerConfig returns the config map plus the server etag as the opaque
 // version token callers thread back into UpdateServerConfig.
 func (b *incusBackend) GetServerConfig(ctx context.Context) (map[string]string, string, error) {

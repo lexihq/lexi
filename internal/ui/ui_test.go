@@ -270,6 +270,7 @@ func TestSidebarGatesServerLink(t *testing.T) {
 func TestServerPageRendersSections(t *testing.T) {
 	html := render(t, ServerPage(testCaps(),
 		backend.ServerOverview{ServerVersion: "6.23", Kernel: "Linux", KernelVersion: "6.8", Driver: "lxc", DriverVersion: "6.0", CPUThreads: 16, MemoryUsed: 1 << 30, MemoryTotal: 8 << 30},
+		backend.ServerHardware{},
 		map[string]string{"core.https_address": ":8443"}, "etag-1",
 		[]backend.Certificate{{Name: "laptop", Type: "client", Fingerprint: "abcdef0123456789", Restricted: true}},
 		[]backend.Warning{{UUID: "w-1", Severity: "high", Status: "new", Count: 2, LastMessage: "boom"}}))
@@ -282,6 +283,31 @@ func TestServerPageRendersSections(t *testing.T) {
 	assertContains(t, html, "restricted")
 	assertContains(t, html, "boom")
 	assertContains(t, html, `hx-post="/server/warnings/w-1/delete"`)
+
+	// Without the Hardware capability the inventory section is absent.
+	if strings.Contains(html, ">Hardware<") {
+		t.Fatalf("hardware section must be hidden without the capability")
+	}
+}
+
+func TestServerPageHardwareSection(t *testing.T) {
+	caps := testCaps()
+	caps.Hardware = true
+	hardware := backend.ServerHardware{
+		NICs: []backend.NetworkCard{{
+			Vendor: "Aquantia Corp.", Product: "AQC107 NBase-T", Driver: "atlantic", PCIAddress: "0000:0d:00.0",
+			Ports: []backend.NetworkPort{{ID: "eth0", Address: "00:23:a4:01:01:6f"}, {ID: "eth1"}},
+		}},
+		Disks: []backend.HostDisk{{ID: "nvme0n1", Model: "INTEL SSD", Type: "nvme", SizeBytes: 256 << 30, Removable: true}},
+	}
+	html := render(t, ServerPage(caps, backend.ServerOverview{}, hardware, map[string]string{}, "etag-1", nil, nil))
+
+	assertContains(t, html, "AQC107 NBase-T")
+	assertContains(t, html, "eth0 (00:23:a4:01:01:6f), eth1")
+	assertContains(t, html, "nvme0n1")
+	assertContains(t, html, "256.0 GiB")
+	assertContains(t, html, "removable")
+	assertContains(t, html, "No GPUs detected")
 }
 
 func TestWarningsTableEmptyState(t *testing.T) {
@@ -686,7 +712,7 @@ func TestImageAndNetworkDeletesAskForConfirmation(t *testing.T) {
 }
 
 func TestServerConfigRendersSingleBlankRow(t *testing.T) {
-	html := render(t, ServerPage(testCaps(), backend.ServerOverview{}, map[string]string{}, "etag-1", nil, nil))
+	html := render(t, ServerPage(testCaps(), backend.ServerOverview{}, backend.ServerHardware{}, map[string]string{}, "etag-1", nil, nil))
 	if n := strings.Count(html, `placeholder="user.mykey"`); n != 1 {
 		t.Fatalf("want 1 blank config row, got %d", n)
 	}

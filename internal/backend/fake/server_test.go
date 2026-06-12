@@ -28,6 +28,26 @@ func TestGetServerOverviewStatic(t *testing.T) {
 	}
 }
 
+func TestGetServerHardwareStatic(t *testing.T) {
+	hw, err := New().GetServerHardware(ctx())
+	if err != nil {
+		t.Fatalf("hardware: %v", err)
+	}
+	if len(hw.GPUs) == 0 || len(hw.NICs) == 0 || len(hw.Disks) == 0 {
+		t.Fatalf("hardware missing devices: %+v", hw)
+	}
+	if gpu := hw.GPUs[0]; gpu.Vendor == "" || gpu.Product == "" || gpu.Driver == "" {
+		t.Errorf("gpu missing fields: %+v", gpu)
+	}
+	nic := hw.NICs[0]
+	if nic.Product == "" || len(nic.Ports) == 0 || nic.Ports[0].ID == "" || nic.Ports[0].Address == "" {
+		t.Errorf("nic missing fields: %+v", nic)
+	}
+	if disk := hw.Disks[0]; disk.ID == "" || disk.Model == "" || disk.SizeBytes == 0 {
+		t.Errorf("disk missing fields: %+v", disk)
+	}
+}
+
 func TestServerConfigRoundTrip(t *testing.T) {
 	b := New()
 	cfg, version, err := b.GetServerConfig(ctx())

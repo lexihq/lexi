@@ -33,8 +33,16 @@ func (h handlers) serverPage(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
+	caps := h.backend.Capabilities(r.Context())
+	var hardware backend.ServerHardware
+	if caps.Hardware {
+		if hardware, err = h.backend.GetServerHardware(r.Context()); err != nil {
+			h.fail(w, err)
+			return
+		}
+	}
 	h.renderShell(w, r, http.StatusOK,
-		ui.ServerPage(h.backend.Capabilities(r.Context()), overview, config, configVersion, certs, warnings))
+		ui.ServerPage(caps, overview, hardware, config, configVersion, certs, warnings))
 }
 
 // updateServerConfig replaces the server config from the submitted key/value

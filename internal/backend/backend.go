@@ -101,6 +101,9 @@ type Capabilities struct {
 	// attachable to VMs as install media (Incus extension
 	// "custom_volume_iso").
 	ISOVolumes bool
+	// Hardware is the host hardware inventory on the Server page: GPU cards,
+	// network cards, and physical disks (Incus extension "resources_v2").
+	Hardware bool
 }
 
 // Instance is a system container or virtual machine.
@@ -311,6 +314,47 @@ type ServerOverview struct {
 	CPUThreads    int
 	MemoryUsed    int64
 	MemoryTotal   int64
+}
+
+// ServerHardware is the host hardware inventory (the daemon's /1.0/resources
+// topology): GPU cards, network cards, and physical disks. The headline
+// CPU/memory totals live on ServerOverview.
+type ServerHardware struct {
+	GPUs  []GPUCard
+	NICs  []NetworkCard
+	Disks []HostDisk
+}
+
+// GPUCard is a GPU device on the host.
+type GPUCard struct {
+	Vendor     string
+	Product    string
+	Driver     string // kernel driver, e.g. "i915"
+	PCIAddress string
+}
+
+// NetworkCard is a physical network device on the host.
+type NetworkCard struct {
+	Vendor     string
+	Product    string
+	Driver     string
+	PCIAddress string
+	Ports      []NetworkPort
+}
+
+// NetworkPort is a port on a NetworkCard.
+type NetworkPort struct {
+	ID      string // interface name, e.g. "eth0"
+	Address string // MAC address
+}
+
+// HostDisk is a physical disk on the host.
+type HostDisk struct {
+	ID        string // device name, e.g. "nvme0n1"
+	Model     string
+	Type      string // e.g. "nvme", "sata"
+	SizeBytes int64
+	Removable bool
 }
 
 // Certificate is one entry of the daemon's trust store.
@@ -821,6 +865,9 @@ type Backend interface {
 	MakeDirectory(ctx context.Context, instance, path string) error
 
 	GetServerOverview(ctx context.Context) (ServerOverview, error)
+	// GetServerHardware returns the host hardware inventory: GPU cards,
+	// network cards, and physical disks.
+	GetServerHardware(ctx context.Context) (ServerHardware, error)
 	// GetServerConfig returns the server config map plus an opaque version
 	// token for optimistic concurrency on update.
 	GetServerConfig(ctx context.Context) (map[string]string, string, error)

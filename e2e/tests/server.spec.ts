@@ -63,6 +63,19 @@ test("server section: edit a trusted certificate (rename + restrict)", async ({ 
   }).toPass({ timeout: 10000 });
 });
 
+test("server section: hardware inventory lists GPUs, NICs, and disks", async ({ page }) => {
+  await page.goto("/server");
+  const hardware = page.locator("section", { has: page.getByRole("heading", { name: "Hardware" }) });
+  await expect(hardware.getByRole("heading", { name: "Hardware" })).toBeVisible();
+
+  // The fake backend reports a static inventory: one GPU, one NIC with a
+  // port, and two disks (one removable).
+  await expect(hardware.getByRole("cell", { name: "FakeGPU 1000" })).toBeVisible();
+  await expect(hardware.getByRole("cell", { name: "eth0 (00:16:3e:00:00:01)" })).toBeVisible();
+  await expect(hardware.getByRole("cell", { name: "nvme0n1" })).toBeVisible();
+  await expect(hardware.getByRole("row", { name: /FAKE USB 64/ }).getByText("removable")).toBeVisible();
+});
+
 test("server section: acknowledge a warning", async ({ page }) => {
   await page.goto("/server");
   const warnings = page.locator("#warnings");

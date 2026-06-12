@@ -54,6 +54,23 @@ func waitForConfigKey(t *testing.T, b *incusBackend, key, want string) map[strin
 // (TestUpdateServerConfigEtagRaceIsConflict), the fake, and the server-layer
 // 409 test; daemon-side rejection was verified manually once the render
 // settled.
+func TestGetServerHardwareRoundTrip(t *testing.T) {
+	b := newBackend(t)
+
+	hw, err := b.GetServerHardware(context.Background())
+	require.NoError(t, err)
+	// GPUs can legitimately be absent (headless VMs), but any real host has at
+	// least one disk, and every reported device must carry its identity fields.
+	require.NotEmpty(t, hw.Disks)
+	for _, d := range hw.Disks {
+		require.NotEmpty(t, d.ID)
+		require.Positive(t, d.SizeBytes)
+	}
+	for _, n := range hw.NICs {
+		require.NotEmpty(t, n.Driver)
+	}
+}
+
 func TestServerAdminRoundTrip(t *testing.T) {
 	b := newBackend(t)
 	ctx := context.Background()

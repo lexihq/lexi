@@ -11,9 +11,9 @@ import (
 	"github.com/adam/lxcon/internal/components/table"
 )
 
-// ServerPage is the Server section: host overview, server config editor,
-// certificate trust list, and the swappable warnings table.
-templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, config map[string]string, configVersion string, certs []backend.Certificate, warnings []backend.Warning) {
+// ServerPage is the Server section: host overview, hardware inventory, server
+// config editor, certificate trust list, and the swappable warnings table.
+templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, hardware backend.ServerHardware, config map[string]string, configVersion string, certs []backend.Certificate, warnings []backend.Warning) {
 	@Layout("Server", caps, Nav{Section: NavServer}) {
 		<div class="mb-6">
 			<h1 class="text-2xl font-semibold">Server</h1>
@@ -29,6 +29,110 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, con
 				<div><dt class="text-muted-foreground">Memory</dt><dd>{ sizeLabel(overview.MemoryUsed) } / { sizeLabel(overview.MemoryTotal) }</dd></div>
 			</dl>
 		</section>
+		if caps.Hardware {
+			<section class="mb-8 rounded-lg border bg-card p-4">
+				<h2 class="mb-3 text-lg font-medium">Hardware</h2>
+				<div class="space-y-4">
+					<div>
+						<h3 class="mb-1 text-sm font-medium">GPUs</h3>
+						if len(hardware.GPUs) == 0 {
+							<p class="text-sm text-muted-foreground">No GPUs detected.</p>
+						} else {
+							@table.Table() {
+								@table.Header() {
+									@table.Row() {
+										@table.Head() { Vendor }
+										@table.Head() { Product }
+										@table.Head() { Driver }
+										@table.Head() { PCI address }
+									}
+								}
+								@table.Body() {
+									for _, g := range hardware.GPUs {
+										@table.Row() {
+											@table.Cell() { { g.Vendor } }
+											@table.Cell() { { g.Product } }
+											@table.Cell() { { g.Driver } }
+											@table.Cell() {
+												<span class="font-mono text-xs">{ g.PCIAddress }</span>
+											}
+										}
+									}
+								}
+							}
+						}
+					</div>
+					<div>
+						<h3 class="mb-1 text-sm font-medium">Network cards</h3>
+						if len(hardware.NICs) == 0 {
+							<p class="text-sm text-muted-foreground">No network cards detected.</p>
+						} else {
+							@table.Table() {
+								@table.Header() {
+									@table.Row() {
+										@table.Head() { Vendor }
+										@table.Head() { Product }
+										@table.Head() { Driver }
+										@table.Head() { Ports }
+										@table.Head() { PCI address }
+									}
+								}
+								@table.Body() {
+									for _, n := range hardware.NICs {
+										@table.Row() {
+											@table.Cell() { { n.Vendor } }
+											@table.Cell() { { n.Product } }
+											@table.Cell() { { n.Driver } }
+											@table.Cell() {
+												{ portsLabel(n.Ports) }
+											}
+											@table.Cell() {
+												<span class="font-mono text-xs">{ n.PCIAddress }</span>
+											}
+										}
+									}
+								}
+							}
+						}
+					</div>
+					<div>
+						<h3 class="mb-1 text-sm font-medium">Disks</h3>
+						if len(hardware.Disks) == 0 {
+							<p class="text-sm text-muted-foreground">No disks detected.</p>
+						} else {
+							@table.Table() {
+								@table.Header() {
+									@table.Row() {
+										@table.Head() { Device }
+										@table.Head() { Model }
+										@table.Head() { Type }
+										@table.Head() { Size }
+										@table.Head() { }
+									}
+								}
+								@table.Body() {
+									for _, d := range hardware.Disks {
+										@table.Row() {
+											@table.Cell() {
+												<span class="font-mono text-xs">{ d.ID }</span>
+											}
+											@table.Cell() { { d.Model } }
+											@table.Cell() { { d.Type } }
+											@table.Cell() { { sizeLabel(d.SizeBytes) } }
+											@table.Cell() {
+												if d.Removable {
+													<span class="rounded bg-accent px-1.5 py-0.5 text-xs">removable</span>
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					</div>
+				</div>
+			</section>
+		}
 		<section class="mb-8 rounded-lg border bg-card p-4">
 			<h2 class="mb-1 text-lg font-medium">Configuration</h2>
 			<p class="mb-3 text-sm text-muted-foreground">
@@ -201,6 +305,19 @@ templ WarningsTable(warnings []backend.Warning) {
 			}
 		}
 	</div>
+}
+
+// portsLabel joins a network card's ports as "eth0 (00:23:a4:01:01:6f), …".
+func portsLabel(ports []backend.NetworkPort) string {
+	parts := make([]string, 0, len(ports))
+	for _, p := range ports {
+		if p.Address != "" {
+			parts = append(parts, fmt.Sprintf("%s (%s)", p.ID, p.Address))
+		} else {
+			parts = append(parts, p.ID)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // severityClass colors the warning severity badge.

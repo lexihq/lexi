@@ -23,11 +23,16 @@ func TestServerPageRendersAllSections(t *testing.T) {
 	res := request(t, New(fake.New()), "GET", "/server", "", false)
 	assertStatus(t, res, http.StatusOK)
 	body := res.Body.String()
-	assert.Contains(t, body, "6.0-fake")               // overview
-	assert.Contains(t, body, "core.https_address")     // config row
-	assert.Contains(t, body, "admin-laptop")           // certificate
-	assert.Contains(t, body, "KVM support is missing") // warning message
-	assert.Contains(t, body, `<textarea name="value"`) // multiline-capable editor
+	assert.Contains(t, body, "6.0-fake")                 // overview
+	assert.Contains(t, body, "core.https_address")       // config row
+	assert.Contains(t, body, "admin-laptop")             // certificate
+	assert.Contains(t, body, "KVM support is missing")   // warning message
+	assert.Contains(t, body, `<textarea name="value"`)   // multiline-capable editor
+	assert.Contains(t, body, "FakeGPU 1000")             // hardware: GPU product
+	assert.Contains(t, body, "FakeNIC 10G")              // hardware: NIC product
+	assert.Contains(t, body, "eth0 (00:16:3e:00:00:01)") // hardware: NIC port
+	assert.Contains(t, body, "nvme0n1")                  // hardware: disk
+	assert.Contains(t, body, "removable")                // hardware: removable disk badge
 }
 
 func TestServerConfigApplyReplacesAndRedirects(t *testing.T) {

@@ -42,6 +42,40 @@ func TestGetServerOverviewMapsEnvironmentAndResources(t *testing.T) {
 	assert.Equal(t, int64(8<<30), got.MemoryTotal)
 }
 
+func TestGetServerHardwareMapsResourceTopology(t *testing.T) {
+	b := &incusBackend{srv: &instanceServerStub{
+		resources: &api.Resources{
+			GPU: api.ResourcesGPU{Cards: []api.ResourcesGPUCard{{
+				Vendor: "Intel Corporation", Product: "HD Graphics 620", Driver: "i915", PCIAddress: "0000:00:02.0",
+			}}},
+			Network: api.ResourcesNetwork{Cards: []api.ResourcesNetworkCard{{
+				Vendor: "Aquantia Corp.", Product: "AQC107 NBase-T", Driver: "atlantic", PCIAddress: "0000:0d:00.0",
+				Ports: []api.ResourcesNetworkCardPort{{ID: "eth0", Address: "00:23:a4:01:01:6f"}},
+			}}},
+			Storage: api.ResourcesStorage{Disks: []api.ResourcesStorageDisk{{
+				ID: "nvme0n1", Model: "INTEL SSDPEKKW256G7", Type: "nvme", Size: 256 << 30, Removable: true,
+			}}},
+		},
+	}}
+
+	got, err := b.GetServerHardware(context.Background())
+
+	require.NoError(t, err)
+	require.Len(t, got.GPUs, 1)
+	assert.Equal(t, backend.GPUCard{
+		Vendor: "Intel Corporation", Product: "HD Graphics 620", Driver: "i915", PCIAddress: "0000:00:02.0",
+	}, got.GPUs[0])
+	require.Len(t, got.NICs, 1)
+	assert.Equal(t, backend.NetworkCard{
+		Vendor: "Aquantia Corp.", Product: "AQC107 NBase-T", Driver: "atlantic", PCIAddress: "0000:0d:00.0",
+		Ports: []backend.NetworkPort{{ID: "eth0", Address: "00:23:a4:01:01:6f"}},
+	}, got.NICs[0])
+	require.Len(t, got.Disks, 1)
+	assert.Equal(t, backend.HostDisk{
+		ID: "nvme0n1", Model: "INTEL SSDPEKKW256G7", Type: "nvme", SizeBytes: 256 << 30, Removable: true,
+	}, got.Disks[0])
+}
+
 func TestServerConfigGetAndReplace(t *testing.T) {
 	srv := &instanceServerStub{
 		server: &api.Server{

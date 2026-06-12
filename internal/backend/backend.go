@@ -111,6 +111,9 @@ type Capabilities struct {
 	// NetworkZones is managed DNS zone + record management (Incus extension
 	// "network_dns").
 	NetworkZones bool
+	// StorageBuckets is S3-compatible object-store bucket + access-key
+	// management on storage pools (Incus extension "storage_buckets").
+	StorageBuckets bool
 }
 
 // Instance is a system container or virtual machine.
@@ -430,6 +433,24 @@ type Project struct {
 	// Version is an opaque concurrency token for UpdateProject, populated
 	// by GetProject (empty on list entries).
 	Version string
+}
+
+// StorageBucket is an S3-compatible object-store bucket on a storage pool
+// (Incus extension "storage_buckets").
+type StorageBucket struct {
+	Name        string
+	Description string
+	S3URL       string // endpoint URL clients use to reach the bucket
+	Size        string // the "size" config key; empty = no quota
+}
+
+// BucketKey is an access credential of a storage bucket.
+type BucketKey struct {
+	Name        string
+	Description string
+	Role        string // "admin" (read-write) or "read-only"
+	AccessKey   string
+	SecretKey   string
 }
 
 // NetworkZone is a managed DNS zone (Incus extension "network_dns"). The
@@ -820,6 +841,25 @@ type Backend interface {
 	// "iso") from an ISO image read from r. The name must be free
 	// (ErrConflict) and the pool must exist (ErrNotFound).
 	CreateVolumeFromISO(ctx context.Context, pool, volume string, r io.Reader) error
+
+	// ListBuckets lists the pool's storage buckets, sorted by name.
+	ListBuckets(ctx context.Context, pool string) ([]StorageBucket, error)
+	// CreateBucket creates a bucket; a non-empty size (e.g. "100MiB") caps
+	// it. The daemon seeds an initial admin key, visible via
+	// ListBucketKeys. The name must be free (ErrConflict) and the pool must
+	// exist (ErrNotFound).
+	CreateBucket(ctx context.Context, pool, name, description, size string) error
+	// DeleteBucket removes the bucket and its keys.
+	DeleteBucket(ctx context.Context, pool, name string) error
+	// ListBucketKeys lists the bucket's access keys (credentials included),
+	// sorted by name.
+	ListBucketKeys(ctx context.Context, pool, bucket string) ([]BucketKey, error)
+	// CreateBucketKey adds a credential and returns it with the generated
+	// access/secret keys. Role must be "admin" or "read-only"; empty
+	// defaults to read-only.
+	CreateBucketKey(ctx context.Context, pool, bucket, name, description, role string) (BucketKey, error)
+	// DeleteBucketKey revokes the named credential.
+	DeleteBucketKey(ctx context.Context, pool, bucket, name string) error
 
 	// ExportVolume streams a portable backup tarball of the custom volume
 	// (snapshots included) to w.

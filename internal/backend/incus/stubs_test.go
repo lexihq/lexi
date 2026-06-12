@@ -131,6 +131,14 @@ type instanceServerStub struct {
 	zoneRecordZone    string                      // zone captured by record calls
 	deletedZoneRecord string                      // captured by DeleteNetworkZoneRecord
 
+	buckets          []api.StorageBucket        // returned by GetStoragePoolBuckets
+	bucketPool       string                     // pool captured by bucket calls
+	createdBucket    *api.StorageBucketsPost    // captured by CreateStoragePoolBucket
+	deletedBucket    string                     // captured by DeleteStoragePoolBucket
+	bucketKeys       []api.StorageBucketKey     // returned by GetStoragePoolBucketKeys
+	createdBucketKey *api.StorageBucketKeysPost // captured by CreateStoragePoolBucketKey
+	deletedBucketKey string                     // captured by DeleteStoragePoolBucketKey
+
 	files       map[string]*fileStub          // keyed by path, served by GetInstanceFile
 	createdFile *incusclient.InstanceFileArgs // captured by CreateInstanceFile
 	createdPath string                        // path captured by CreateInstanceFile
@@ -251,6 +259,47 @@ func (s *instanceServerStub) CreateNetworkZoneRecord(zone string, record api.Net
 func (s *instanceServerStub) DeleteNetworkZoneRecord(zone, name string) error {
 	s.zoneRecordZone = zone
 	s.deletedZoneRecord = name
+	return nil
+}
+
+func (s *instanceServerStub) GetStoragePoolBuckets(pool string) ([]api.StorageBucket, error) {
+	s.bucketPool = pool
+	return s.buckets, nil
+}
+
+func (s *instanceServerStub) CreateStoragePoolBucket(pool string, bucket api.StorageBucketsPost) (*api.StorageBucketKey, error) {
+	s.bucketPool = pool
+	s.createdBucket = &bucket
+	key := api.StorageBucketKey{Name: "admin"}
+	key.Role = "admin"
+	return &key, nil
+}
+
+func (s *instanceServerStub) DeleteStoragePoolBucket(pool, name string) error {
+	s.bucketPool = pool
+	s.deletedBucket = name
+	return nil
+}
+
+func (s *instanceServerStub) GetStoragePoolBucketKeys(pool, bucket string) ([]api.StorageBucketKey, error) {
+	s.bucketPool = pool
+	return s.bucketKeys, nil
+}
+
+func (s *instanceServerStub) CreateStoragePoolBucketKey(pool, bucket string, key api.StorageBucketKeysPost) (*api.StorageBucketKey, error) {
+	s.bucketPool = pool
+	s.createdBucketKey = &key
+	created := api.StorageBucketKey{Name: key.Name}
+	created.Role = key.Role
+	created.Description = key.Description
+	created.AccessKey = "GENERATED-ACCESS"
+	created.SecretKey = "GENERATED-SECRET"
+	return &created, nil
+}
+
+func (s *instanceServerStub) DeleteStoragePoolBucketKey(pool, bucket, name string) error {
+	s.bucketPool = pool
+	s.deletedBucketKey = name
 	return nil
 }
 

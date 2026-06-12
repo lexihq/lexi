@@ -684,6 +684,24 @@ func TestListPagesRenderEmptyStates(t *testing.T) {
 	}
 }
 
+func TestStoragePoolBucketsSectionGatedByCapability(t *testing.T) {
+	pool := backend.StoragePool{Name: "default", Driver: "dir"}
+	caps := testCaps()
+	caps.StorageBuckets = true
+	buckets := []backend.StorageBucket{{Name: "media", S3URL: "https://s3:8555/media", Size: "100MiB"}}
+	keys := map[string][]backend.BucketKey{"media": {{Name: "admin", Role: "admin", AccessKey: "AK1", SecretKey: "SK1"}}}
+
+	html := render(t, StoragePoolPage(caps, pool, nil, buckets, keys))
+	assertContains(t, html, "Buckets")
+	assertContains(t, html, "https://s3:8555/media")
+	assertContains(t, html, "AK1")
+	assertContains(t, html, "SK1") // behind a details reveal, but rendered
+	assertContains(t, html, `action="/storage/default/buckets/media/keys"`)
+
+	plain := render(t, StoragePoolPage(testCaps(), pool, nil, nil, nil))
+	assertNotContains(t, plain, `action="/storage/default/buckets"`)
+}
+
 func TestNetworksPageZonesLinkGatedByCapability(t *testing.T) {
 	caps := testCaps()
 	caps.NetworkZones = true
@@ -777,7 +795,7 @@ func TestEmbeddedTablesRenderEmptyStates(t *testing.T) {
 		want string
 	}{
 		{"instance snapshots", SnapshotTable("demo", nil), "No snapshots yet"},
-		{"pool volumes", StoragePoolPage(testCaps(), backend.StoragePool{Name: "default", Driver: "dir"}, nil), "No volumes yet"},
+		{"pool volumes", StoragePoolPage(testCaps(), backend.StoragePool{Name: "default", Driver: "dir"}, nil, nil, nil), "No volumes yet"},
 		{"volume snapshots", StorageVolumePage(testCaps(), backend.StorageVolume{Pool: "default", Name: "vol0"}, nil), "No snapshots yet"},
 	}
 	for _, tc := range cases {
@@ -790,7 +808,7 @@ func TestEmbeddedTablesRenderEmptyStates(t *testing.T) {
 func TestSnapshotAndVolumeDeletesAskForConfirmation(t *testing.T) {
 	snaps := render(t, SnapshotTable("demo", []backend.Snapshot{{Name: "snap0"}}))
 	assertContains(t, snaps, `hx-confirm="Delete snapshot snap0?"`)
-	pool := render(t, StoragePoolPage(testCaps(), backend.StoragePool{Name: "default", Driver: "dir"}, []backend.StorageVolume{{Pool: "default", Name: "vol0"}}))
+	pool := render(t, StoragePoolPage(testCaps(), backend.StoragePool{Name: "default", Driver: "dir"}, []backend.StorageVolume{{Pool: "default", Name: "vol0"}}, nil, nil))
 	assertContains(t, pool, `hx-confirm="Delete volume vol0?"`)
 	vol := render(t, StorageVolumePage(testCaps(), backend.StorageVolume{Pool: "default", Name: "vol0"}, []backend.StorageVolumeSnapshot{{Name: "vsnap0"}}))
 	assertContains(t, vol, `hx-confirm="Delete snapshot vsnap0?"`)

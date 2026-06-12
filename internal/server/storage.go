@@ -32,7 +32,24 @@ func (h handlers) storagePool(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.StoragePoolPage(h.backend.Capabilities(r.Context()), p, vols))
+	caps := h.backend.Capabilities(r.Context())
+	var buckets []backend.StorageBucket
+	bucketKeys := map[string][]backend.BucketKey{}
+	if caps.StorageBuckets {
+		if buckets, err = h.backend.ListBuckets(r.Context(), pool); err != nil {
+			h.fail(w, err)
+			return
+		}
+		for _, bucket := range buckets {
+			keys, err := h.backend.ListBucketKeys(r.Context(), pool, bucket.Name)
+			if err != nil {
+				h.fail(w, err)
+				return
+			}
+			bucketKeys[bucket.Name] = keys
+		}
+	}
+	h.renderShell(w, r, http.StatusOK, ui.StoragePoolPage(caps, p, vols, buckets, bucketKeys))
 }
 
 func (h handlers) poolCreateForm(w http.ResponseWriter, r *http.Request) {

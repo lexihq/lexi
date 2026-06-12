@@ -37,6 +37,7 @@ type storagePool struct {
 	backend.StoragePool
 
 	volumes map[string]map[string]*storageVolume // project → volume name → volume
+	buckets map[string]map[string]*fakeBucket    // project → bucket name → bucket
 	// version is the counter behind the Get/Update concurrency token, bumped
 	// on every pool config update.
 	version int
@@ -135,6 +136,9 @@ type Fake struct {
 	// unregister exactly its own channel.
 	opWatchers  map[int]chan struct{}
 	opWatcherID int
+
+	// bucketKeySeq mints unique fake bucket credentials.
+	bucketKeySeq int
 }
 
 // projectOf normalizes the request's project; unset means default.
@@ -398,6 +402,7 @@ func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 		Hardware:        true,
 		ProjectUsage:    true,
 		NetworkZones:    true,
+		StorageBuckets:  true,
 	}
 }
 

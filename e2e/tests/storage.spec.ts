@@ -118,7 +118,7 @@ test("storage: create and delete a pool; in-use pool can't be deleted", async ({
   await editor.getByRole("button", { name: "Apply config" }).click();
   await expect(page).toHaveURL(/\/storage\/e2e-pool$/);
   await expect(page.locator('input[name="key"][value="rsync.bwlimit"]')).toBeVisible();
-  await expect(page.locator('input[name="description"]')).toHaveValue("edited by e2e");
+  await expect(editor.locator('input[name="description"]')).toHaveValue("edited by e2e");
 
   // Delete the (unused) pool from its detail page.
   await page.getByRole("button", { name: "Delete", exact: true }).click();
@@ -169,9 +169,11 @@ test("export a volume and re-import it under a new name", async ({ page }) => {
   await expect(page).toHaveURL(/\/storage\/default$/);
   await expect(page.locator("#volumes").getByText("e2e-imp-vol")).toBeVisible();
 
-  // The imported volume carries the exported description.
+  // The imported volume carries the exported description (scoped to the
+  // volume editor — the pool page behind the click has other description
+  // inputs).
   await page.locator("#volumes").getByRole("link", { name: "e2e-imp-vol" }).click();
-  await expect(page.locator('input[name="description"]')).toHaveValue("exported by e2e");
+  await expect(page.locator('form[action="/storage/default/volumes/e2e-imp-vol/config"] input[name="description"]')).toHaveValue("exported by e2e");
 
   // Cleanup both volumes (idempotent for reused servers).
   await page.goto("/storage/default");

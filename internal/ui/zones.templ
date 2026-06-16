@@ -29,9 +29,15 @@ templ NetworkZonesPage(caps backend.Capabilities, zones []backend.NetworkZone) {
 			@table.Table() {
 				@table.Header() {
 					@table.Row() {
-						@table.Head() { Name }
-						@table.Head() { Description }
-						@table.Head() { Used by }
+						@table.Head() {
+							Name 
+						}
+						@table.Head() {
+							Description 
+						}
+						@table.Head() {
+							Used by 
+						}
 					}
 				}
 				@table.Body() {
@@ -123,10 +129,16 @@ templ NetworkZoneDetailPage(caps backend.Capabilities, zone backend.NetworkZone,
 				@table.Table() {
 					@table.Header() {
 						@table.Row() {
-							@table.Head() { Name }
-							@table.Head() { Entries }
-							@table.Head() { Description }
-							@table.Head() { }
+							@table.Head() {
+								Name 
+							}
+							@table.Head() {
+								Entries 
+							}
+							@table.Head() {
+								Description 
+							}
+							@table.Head()
 						}
 					}
 					@table.Body() {

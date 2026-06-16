@@ -95,9 +95,13 @@ templ FilesPanel(caps backend.Capabilities, name, dir string, entries []backend.
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
-					@table.Head() { Name }
-					@table.Head() { Mode }
-					@table.Head() { }
+					@table.Head() {
+						Name 
+					}
+					@table.Head() {
+						Mode 
+					}
+					@table.Head()
 				}
 			}
 			@table.Body() {
@@ -115,8 +119,8 @@ templ FilesPanel(caps backend.Capabilities, name, dir string, entries []backend.
 								..
 							</button>
 						}
-						@table.Cell() {}
-						@table.Cell() {}
+						@table.Cell()
+						@table.Cell()
 					}
 				}
 				for _, e := range entries {

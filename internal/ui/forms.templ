@@ -1,0 +1,11 @@
+package ui
+
+// requiredMark is the shared required-field indicator, placed at the end of a
+// field's <label> text. The asterisk is purely visual — the input's native
+// `required` attribute is what assistive tech announces — so it is hidden from
+// the accessibility tree and carries a hover title for sighted mouse users.
+// Pair it only with inputs that actually set `required`, so the marker and the
+// validation it advertises never drift apart.
+templ requiredMark() {
+	<span class="ml-0.5 text-destructive" aria-hidden="true" title="Required">*</span>
+}

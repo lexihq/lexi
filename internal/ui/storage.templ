@@ -27,9 +27,15 @@ templ StoragePoolsPage(caps backend.Capabilities, pools []backend.StoragePool) {
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
-					@table.Head() { Name }
-					@table.Head() { Driver }
-					@table.Head() { Used by }
+					@table.Head() {
+						Name 
+					}
+					@table.Head() {
+						Driver 
+					}
+					@table.Head() {
+						Used by 
+					}
 				}
 			}
 			@table.Body() {
@@ -170,11 +176,19 @@ templ storageBucketsSection(pool string, buckets []backend.StorageBucket, bucket
 					@table.Table() {
 						@table.Header() {
 							@table.Row() {
-								@table.Head() { Key }
-								@table.Head() { Role }
-								@table.Head() { Access key }
-								@table.Head() { Secret key }
-								@table.Head() { }
+								@table.Head() {
+									Key 
+								}
+								@table.Head() {
+									Role 
+								}
+								@table.Head() {
+									Access key 
+								}
+								@table.Head() {
+									Secret key 
+								}
+								@table.Head()
 							}
 						}
 						@table.Body() {
@@ -251,7 +265,10 @@ templ StoragePoolCreatePage(caps backend.Capabilities) {
 		</div>
 		<form method="post" action="/storage" class="max-w-xl space-y-4">
 			<div>
-				<label class="mb-1 block text-sm font-medium">Name</label>
+				<label class="mb-1 block text-sm font-medium">
+					Name
+					@requiredMark()
+				</label>
 				<input name="name" required placeholder="fast0" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
 			</div>
 			<div>
@@ -314,10 +331,16 @@ templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
-					@table.Head() { Name }
-					@table.Head() { Content type }
-					@table.Head() { Used by }
-					@table.Head() { }
+					@table.Head() {
+						Name 
+					}
+					@table.Head() {
+						Content type 
+					}
+					@table.Head() {
+						Used by 
+					}
+					@table.Head()
 				}
 			}
 			@table.Body() {
@@ -440,11 +463,21 @@ templ VolumeBackupsTable(caps backend.Capabilities, pool, volume string, backups
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
-					@table.Head() { Name }
-					@table.Head() { Created }
-					@table.Head() { Expires }
-					@table.Head() { Contents }
-					@table.Head() { Actions }
+					@table.Head() {
+						Name 
+					}
+					@table.Head() {
+						Created 
+					}
+					@table.Head() {
+						Expires 
+					}
+					@table.Head() {
+						Contents 
+					}
+					@table.Head() {
+						Actions 
+					}
 				}
 			}
 			@table.Body() {
@@ -454,7 +487,9 @@ templ VolumeBackupsTable(caps backend.Capabilities, pool, volume string, backups
 				for _, bk := range backups {
 					{{ eb := url.PathEscape(bk.Name) }}
 					@table.Row() {
-						@table.Cell() { { bk.Name } }
+						@table.Cell() {
+							{ bk.Name }
+						}
 						@table.Cell() {
 							<span class="text-xs text-muted-foreground">{ bk.CreatedAt.UTC().Format("2006-01-02 15:04") } UTC</span>
 						}
@@ -505,7 +540,9 @@ templ volumeBackupRestoreDialog(pool, volume, backup string, pools []backend.Sto
 	@dialog.Dialog(dialog.Props{ID: "restore-vbk-" + backup}) {
 		@dialog.Content() {
 			@dialog.Header() {
-				@dialog.Title() { Restore { backup } }
+				@dialog.Title() {
+					Restore { backup }
+				}
 			}
 			<form method="post" action={ templ.URL(base + "/restore") } hx-boost="false" class="flex flex-col gap-4">
 				<label class="flex flex-col gap-2 text-sm font-medium">
@@ -518,13 +555,18 @@ templ volumeBackupRestoreDialog(pool, volume, backup string, pools []backend.Sto
 				</label>
 				<label class="flex flex-col gap-2 text-sm font-medium">
 					New volume name
+					@requiredMark()
 					<input class="h-9 rounded-md border bg-background px-3 text-sm font-normal" name="name" required/>
 				</label>
 				@dialog.Footer() {
 					@dialog.Close() {
-						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) {
+							Cancel 
+						}
 					}
-					@button.Button(button.Props{Type: button.TypeSubmit}) { Restore }
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						Restore 
+					}
 				}
 			</form>
 		}
@@ -550,9 +592,15 @@ templ StorageVolumeSnapshotsTable(pool, volume string, snapshots []backend.Stora
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
-					@table.Head() { Name }
-					@table.Head() { Expires }
-					@table.Head() { Actions }
+					@table.Head() {
+						Name 
+					}
+					@table.Head() {
+						Expires 
+					}
+					@table.Head() {
+						Actions 
+					}
 				}
 			}
 			@table.Body() {
@@ -562,7 +610,9 @@ templ StorageVolumeSnapshotsTable(pool, volume string, snapshots []backend.Stora
 				for _, snap := range snapshots {
 					{{ es := url.PathEscape(snap.Name) }}
 					@table.Row() {
-						@table.Cell() { { snap.Name } }
+						@table.Cell() {
+							{ snap.Name }
+						}
 						@table.Cell() {
 							if !snap.ExpiresAt.IsZero() {
 								<span class="text-xs text-muted-foreground">{ snap.ExpiresAt.UTC().Format("2006-01-02 15:04") } UTC</span>

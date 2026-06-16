@@ -49,11 +49,19 @@ templ NetworksTable(networks []backend.Network) {
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
-					@table.Head() { Name }
-					@table.Head() { Type }
-					@table.Head() { Managed }
-					@table.Head() { Used by }
-					@table.Head() { }
+					@table.Head() {
+						Name 
+					}
+					@table.Head() {
+						Type 
+					}
+					@table.Head() {
+						Managed 
+					}
+					@table.Head() {
+						Used by 
+					}
+					@table.Head()
 				}
 			}
 			@table.Body() {
@@ -160,10 +168,18 @@ templ NetworkDetailPage(caps backend.Capabilities, n backend.Network, st backend
 				@table.Table() {
 					@table.Header() {
 						@table.Row() {
-							@table.Head() { Hostname }
-							@table.Head() { MAC }
-							@table.Head() { Address }
-							@table.Head() { Type }
+							@table.Head() {
+								Hostname 
+							}
+							@table.Head() {
+								MAC 
+							}
+							@table.Head() {
+								Address 
+							}
+							@table.Head() {
+								Type 
+							}
 						}
 					}
 					@table.Body() {
@@ -172,11 +188,15 @@ templ NetworkDetailPage(caps backend.Capabilities, n backend.Network, st backend
 						}
 						for _, l := range leases {
 							@table.Row() {
-								@table.Cell() { { l.Hostname } }
+								@table.Cell() {
+									{ l.Hostname }
+								}
 								@table.Cell() {
 									<span class="font-mono text-xs">{ l.MAC }</span>
 								}
-								@table.Cell() { { l.Address } }
+								@table.Cell() {
+									{ l.Address }
+								}
 								@table.Cell() {
 									<span class="text-xs text-muted-foreground">{ l.Type }</span>
 								}

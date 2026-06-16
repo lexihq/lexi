@@ -95,10 +95,16 @@ templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, curren
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
-					@table.Head() { Name }
-					@table.Head() { Description }
-					@table.Head() { Resources }
-					@table.Head() { }
+					@table.Head() {
+						Name 
+					}
+					@table.Head() {
+						Description 
+					}
+					@table.Head() {
+						Resources 
+					}
+					@table.Head()
 				}
 			}
 			@table.Body() {
@@ -147,11 +153,16 @@ templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, curren
 		@dialog.Dialog(dialog.Props{ID: "create-project"}) {
 			@dialog.Content() {
 				@dialog.Header() {
-					@dialog.Title() { Create project }
+					@dialog.Title() {
+						Create project 
+					}
 				}
 				<form method="post" action="/projects" class="space-y-3">
 					<div>
-						<label class="mb-1 block text-sm font-medium" for="project-name">Name</label>
+						<label class="mb-1 block text-sm font-medium" for="project-name">
+							Name
+							@requiredMark()
+						</label>
 						<input id="project-name" name="name" required placeholder="staging" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
 					</div>
 					<div>
@@ -176,7 +187,9 @@ templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, curren
 					</div>
 					@dialog.Footer() {
 						@dialog.Close() {
-							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) {
+								Cancel 
+							}
 						}
 						@button.Button(button.Props{Type: button.TypeSubmit}) {
 							@icon.Icon("plus")(icon.Props{Class: "size-4"})
@@ -262,9 +275,15 @@ templ ProjectDetailPage(caps backend.Capabilities, p backend.Project, usage []ba
 				@table.Table() {
 					@table.Header() {
 						@table.Row() {
-							@table.Head() { Resource }
-							@table.Head() { Used }
-							@table.Head() { Limit }
+							@table.Head() {
+								Resource 
+							}
+							@table.Head() {
+								Used 
+							}
+							@table.Head() {
+								Limit 
+							}
 						}
 					}
 					@table.Body() {

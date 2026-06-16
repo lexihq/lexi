@@ -26,10 +26,18 @@ templ NetworkACLsPage(caps backend.Capabilities, acls []backend.NetworkACL) {
 			@table.Table() {
 				@table.Header() {
 					@table.Row() {
-						@table.Head() { Name }
-						@table.Head() { Description }
-						@table.Head() { Rules }
-						@table.Head() { Used by }
+						@table.Head() {
+							Name 
+						}
+						@table.Head() {
+							Description 
+						}
+						@table.Head() {
+							Rules 
+						}
+						@table.Head() {
+							Used by 
+						}
 					}
 				}
 				@table.Body() {
@@ -126,13 +134,25 @@ templ aclRulesSection(base, direction, title string, rules []backend.NetworkACLR
 			@table.Table() {
 				@table.Header() {
 					@table.Row() {
-						@table.Head() { Action }
-						@table.Head() { Source }
-						@table.Head() { Destination }
-						@table.Head() { Protocol }
-						@table.Head() { Ports (src → dst) }
-						@table.Head() { State }
-						@table.Head() { }
+						@table.Head() {
+							Action 
+						}
+						@table.Head() {
+							Source 
+						}
+						@table.Head() {
+							Destination 
+						}
+						@table.Head() {
+							Protocol 
+						}
+						@table.Head() {
+							Ports (src → dst) 
+						}
+						@table.Head() {
+							State 
+						}
+						@table.Head()
 					}
 				}
 				@table.Body() {

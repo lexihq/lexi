@@ -27,7 +27,9 @@ templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots [
 // controls. The buttons post with ?from=header and swap this fragment in
 // place, so state changes update the header without leaving the page.
 templ InstanceHeader(caps backend.Capabilities, inst backend.Instance) {
-	{{ post := func(action string) string { return "/instances/" + url.PathEscape(inst.Name) + "/" + action + "?from=header" } }}
+	{{ post := func(action string) string {
+	return "/instances/" + url.PathEscape(inst.Name) + "/" + action + "?from=header"
+} }}
 	<div id="instance-header" class="mb-6 flex items-start justify-between gap-4">
 		<div>
 			<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>

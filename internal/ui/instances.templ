@@ -47,11 +47,21 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, poo
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
-					@table.Head() { Name }
-					@table.Head() { Status }
-					@table.Head() { IPv4 }
-					@table.Head() { Snapshots }
-					@table.Head() { Actions }
+					@table.Head() {
+						Name 
+					}
+					@table.Head() {
+						Status 
+					}
+					@table.Head() {
+						IPv4 
+					}
+					@table.Head() {
+						Snapshots 
+					}
+					@table.Head() {
+						Actions 
+					}
 				}
 			}
 			@table.Body() {
@@ -83,7 +93,9 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 				<span class="text-muted-foreground">—</span>
 			}
 		}
-		@table.Cell() { { fmt.Sprint(inst.Snapshots) } }
+		@table.Cell() {
+			{ fmt.Sprint(inst.Snapshots) }
+		}
 		@table.Cell() {
 			<div class="flex items-center gap-2">
 				@instancePrimaryAction(caps, inst)
@@ -153,20 +165,28 @@ templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 			}
 			if caps.Clone {
 				@dialog.Trigger(dialog.TriggerProps{For: "clone-" + inst.Name}) {
-					@dropdown.Item() { Clone… }
+					@dropdown.Item() {
+						Clone… 
+					}
 				}
 			}
 			if caps.Move {
 				@dialog.Trigger(dialog.TriggerProps{For: "rename-" + inst.Name}) {
-					@dropdown.Item() { Rename… }
+					@dropdown.Item() {
+						Rename… 
+					}
 				}
 				@dialog.Trigger(dialog.TriggerProps{For: "move-" + inst.Name}) {
-					@dropdown.Item() { Move… }
+					@dropdown.Item() {
+						Move… 
+					}
 				}
 			}
 			if caps.Migrate && inst.Status == "Stopped" && len(migrateTargets(ctx)) > 0 {
 				@dialog.Trigger(dialog.TriggerProps{For: "migrate-" + inst.Name}) {
-					@dropdown.Item() { Migrate… }
+					@dropdown.Item() {
+						Migrate… 
+					}
 				}
 			}
 			if caps.InstanceRebuild && inst.Status == "Stopped" {
@@ -217,7 +237,9 @@ templ instanceMigrateDialog(inst backend.Instance) {
 	@dialog.Dialog(dialog.Props{ID: "migrate-" + inst.Name}) {
 		@dialog.Content() {
 			@dialog.Header() {
-				@dialog.Title() { Migrate { inst.Name } }
+				@dialog.Title() {
+					Migrate { inst.Name }
+				}
 			}
 			<form method="post" action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/migrate") } hx-boost="false" class="flex flex-col gap-4">
 				<label class="flex flex-col gap-2 text-sm font-medium">
@@ -234,9 +256,13 @@ templ instanceMigrateDialog(inst backend.Instance) {
 				</label>
 				@dialog.Footer() {
 					@dialog.Close() {
-						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) {
+							Cancel 
+						}
 					}
-					@button.Button(button.Props{Type: button.TypeSubmit}) { Migrate }
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						Migrate 
+					}
 				}
 			</form>
 		}
@@ -247,18 +273,24 @@ templ instanceActionDialog(id, title, action, field, label, submit string, input
 	@dialog.Dialog(dialog.Props{ID: id}) {
 		@dialog.Content() {
 			@dialog.Header() {
-				@dialog.Title() { { title } }
+				@dialog.Title() {
+					{ title }
+				}
 			}
 			<form method="post" action={ templ.URL(action) } hx-boost="false" class="flex flex-col gap-4">
 				<label class="flex flex-col gap-2 text-sm font-medium">
-					{ label }
+					{ label }@requiredMark()
 					<input class="h-9 rounded-md border bg-background px-3 text-sm font-normal" name={ field } required { inputAttrs... }/>
 				</label>
 				@dialog.Footer() {
 					@dialog.Close() {
-						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) {
+							Cancel 
+						}
 					}
-					@button.Button(button.Props{Type: button.TypeSubmit}) { { submit } }
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						{ submit }
+					}
 				}
 			</form>
 		}

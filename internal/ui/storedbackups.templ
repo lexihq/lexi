@@ -36,11 +36,21 @@ templ BackupsPanel(name string, backups []backend.InstanceBackup) {
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
-					@table.Head() { Name }
-					@table.Head() { Created }
-					@table.Head() { Expires }
-					@table.Head() { Contents }
-					@table.Head() { Actions }
+					@table.Head() {
+						Name 
+					}
+					@table.Head() {
+						Created 
+					}
+					@table.Head() {
+						Expires 
+					}
+					@table.Head() {
+						Contents 
+					}
+					@table.Head() {
+						Actions 
+					}
 				}
 			}
 			@table.Body() {
@@ -50,7 +60,9 @@ templ BackupsPanel(name string, backups []backend.InstanceBackup) {
 				for _, bk := range backups {
 					{{ eb := url.PathEscape(bk.Name) }}
 					@table.Row() {
-						@table.Cell() { { bk.Name } }
+						@table.Cell() {
+							{ bk.Name }
+						}
 						@table.Cell() {
 							<span class="text-xs text-muted-foreground">{ bk.CreatedAt.UTC().Format("2006-01-02 15:04") } UTC</span>
 						}
@@ -100,18 +112,25 @@ templ backupRestoreDialog(instance, backup string) {
 	@dialog.Dialog(dialog.Props{ID: "restore-bk-" + backup}) {
 		@dialog.Content() {
 			@dialog.Header() {
-				@dialog.Title() { Restore { backup } }
+				@dialog.Title() {
+					Restore { backup }
+				}
 			}
 			<form method="post" action={ templ.URL("/instances/" + url.PathEscape(instance) + "/backups/" + url.PathEscape(backup) + "/restore") } hx-boost="false" class="flex flex-col gap-4">
 				<label class="flex flex-col gap-2 text-sm font-medium">
 					New instance name
+					@requiredMark()
 					<input class="h-9 rounded-md border bg-background px-3 text-sm font-normal" name="new_name" required/>
 				</label>
 				@dialog.Footer() {
 					@dialog.Close() {
-						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) {
+							Cancel 
+						}
 					}
-					@button.Button(button.Props{Type: button.TypeSubmit}) { Restore }
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						Restore 
+					}
 				}
 			</form>
 		}

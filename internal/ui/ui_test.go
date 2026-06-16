@@ -740,9 +740,18 @@ func TestNetworksPageZonesLinkGatedByCapability(t *testing.T) {
 func TestProjectsPageCreateFormIsLabeledCard(t *testing.T) {
 	html := render(t, ProjectsPage(testCaps(), []backend.Project{{Name: "default"}}, "default", nil))
 	assertContains(t, html, "Create project")
-	assertContains(t, html, ">Name</label>")
-	assertContains(t, html, ">Description</label>")
+	assertContains(t, html, `for="project-name">Name`) // required field, labeled with a marker
+	assertContains(t, html, ">Description</label>")     // optional field, no marker
 	assertContains(t, html, "shared from default")
+}
+
+func TestRequiredMarkRendersAccessibleIndicator(t *testing.T) {
+	html := render(t, requiredMark())
+	// Visual-only asterisk: hidden from the a11y tree (the input's native
+	// `required` is what AT announces) with a hover title for sighted users.
+	assertContains(t, html, `aria-hidden="true"`)
+	assertContains(t, html, `title="Required"`)
+	assertContains(t, html, "*")
 }
 
 func TestProjectsPageResourcesColumnPrefersUsage(t *testing.T) {

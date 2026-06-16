@@ -17,11 +17,17 @@ templ CreatePage(caps backend.Capabilities, images []backend.Image, profiles []b
 		</div>
 		<form method="post" action="/instances" hx-boost="false" class="max-w-xl space-y-5 rounded-lg border bg-card p-6">
 			<div class="space-y-2">
-				<label class="text-sm font-medium" for="name">Name</label>
+				<label class="text-sm font-medium" for="name">
+					Name
+					@requiredMark()
+				</label>
 				<input id="name" name="name" class="h-10 w-full rounded-md border bg-background px-3 text-sm" required/>
 			</div>
 			<div class="space-y-2">
-				<label class="text-sm font-medium" for="image-search">Image</label>
+				<label class="text-sm font-medium" for="image-search">
+					Image
+					@requiredMark()
+				</label>
 				<div class="flex gap-2">
 					<input
 						id="image-search"
@@ -131,7 +137,10 @@ templ RebuildPage(caps backend.Capabilities, inst backend.Instance, images []bac
 		</div>
 		<form method="post" action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/rebuild") } hx-boost="false" class="max-w-xl space-y-5 rounded-lg border bg-card p-6">
 			<div class="space-y-2">
-				<label class="text-sm font-medium" for="image-search">Image</label>
+				<label class="text-sm font-medium" for="image-search">
+					Image
+					@requiredMark()
+				</label>
 				<div class="flex gap-2">
 					<input
 						id="image-search"
@@ -180,11 +189,17 @@ templ ImportPage(caps backend.Capabilities) {
 		</div>
 		<form method="post" action="/instances/import" enctype="multipart/form-data" hx-boost="false" class="max-w-xl space-y-5 rounded-lg border bg-card p-6">
 			<div class="space-y-2">
-				<label class="text-sm font-medium" for="name">Name</label>
+				<label class="text-sm font-medium" for="name">
+					Name
+					@requiredMark()
+				</label>
 				<input id="name" name="name" class="h-10 w-full rounded-md border bg-background px-3 text-sm" required/>
 			</div>
 			<div class="space-y-2">
-				<label class="text-sm font-medium" for="backup">Backup file</label>
+				<label class="text-sm font-medium" for="backup">
+					Backup file
+					@requiredMark()
+				</label>
 				<input id="backup" name="backup" type="file" accept=".tar,.tar.gz,.gz,application/octet-stream" class="w-full rounded-md border bg-background px-3 py-2 text-sm" required/>
 			</div>
 			@button.Button(button.Props{Type: button.TypeSubmit}) {
@@ -202,15 +217,15 @@ templ ImageResults(images []backend.Image) {
 		<p class="py-2 text-sm text-muted-foreground">No matching images.</p>
 	} else {
 		<div class="max-h-72 space-y-1 overflow-y-auto rounded-md border p-1">
-				for _, img := range images {
-					<label class="flex cursor-pointer items-center gap-3 rounded-md p-2 text-sm hover:bg-muted/50">
-						<input type="radio" name="image" value={ img.Fingerprint } required/>
-						<span class="font-medium">{ img.Alias }</span>
-						<span class="truncate text-muted-foreground">{ img.Description }</span>
-						<span class="ml-auto shrink-0 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ img.Type }</span>
-						<span class="shrink-0 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ img.Arch }</span>
-					</label>
-				}
+			for _, img := range images {
+				<label class="flex cursor-pointer items-center gap-3 rounded-md p-2 text-sm hover:bg-muted/50">
+					<input type="radio" name="image" value={ img.Fingerprint } required/>
+					<span class="font-medium">{ img.Alias }</span>
+					<span class="truncate text-muted-foreground">{ img.Description }</span>
+					<span class="ml-auto shrink-0 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ img.Type }</span>
+					<span class="shrink-0 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ img.Arch }</span>
+				</label>
+			}
 		</div>
 	}
 }

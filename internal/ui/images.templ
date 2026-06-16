@@ -46,17 +46,26 @@ templ ImagesPage(caps backend.Capabilities, images []backend.LocalImage, instanc
 		@dialog.Dialog(dialog.Props{ID: "copy-image"}) {
 			@dialog.Content() {
 				@dialog.Header() {
-					@dialog.Title() { Copy from remote }
-					@dialog.Description() { Pull a catalog image (e.g. debian/12) into the local store. }
+					@dialog.Title() {
+						Copy from remote 
+					}
+					@dialog.Description() {
+						Pull a catalog image (e.g. debian/12) into the local store. 
+					}
 				}
 				<form hx-post="/images/copy" hx-target="#images-table" hx-swap="outerHTML" hx-on::after-request="window.tui.dialog.close('copy-image')" class="space-y-3">
 					<div>
-						<label class="mb-1 block text-sm font-medium" for="copy-alias">Image alias</label>
+						<label class="mb-1 block text-sm font-medium" for="copy-alias">
+							Image alias
+							@requiredMark()
+						</label>
 						<input id="copy-alias" name="alias" required placeholder="debian/12" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
 					</div>
 					@dialog.Footer() {
 						@dialog.Close() {
-							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) {
+								Cancel 
+							}
 						}
 						@button.Button(button.Props{Type: button.TypeSubmit}) {
 							@icon.Icon("download")(icon.Props{Class: "size-4"})
@@ -69,8 +78,12 @@ templ ImagesPage(caps backend.Capabilities, images []backend.LocalImage, instanc
 		@dialog.Dialog(dialog.Props{ID: "publish-image"}) {
 			@dialog.Content() {
 				@dialog.Header() {
-					@dialog.Title() { Publish from instance }
-					@dialog.Description() { Turn a stopped instance into a reusable image. }
+					@dialog.Title() {
+						Publish from instance 
+					}
+					@dialog.Description() {
+						Turn a stopped instance into a reusable image. 
+					}
 				}
 				<form hx-post="/images/publish" hx-target="#images-table" hx-swap="outerHTML" hx-on::after-request="window.tui.dialog.close('publish-image')" class="space-y-3">
 					<div>
@@ -87,7 +100,9 @@ templ ImagesPage(caps backend.Capabilities, images []backend.LocalImage, instanc
 					</div>
 					@dialog.Footer() {
 						@dialog.Close() {
-							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) {
+								Cancel 
+							}
 						}
 						@button.Button(button.Props{Type: button.TypeSubmit}) {
 							@icon.Icon("package")(icon.Props{Class: "size-4"})
@@ -100,12 +115,19 @@ templ ImagesPage(caps backend.Capabilities, images []backend.LocalImage, instanc
 		@dialog.Dialog(dialog.Props{ID: "import-image"}) {
 			@dialog.Content() {
 				@dialog.Header() {
-					@dialog.Title() { Import from file }
-					@dialog.Description() { Upload a unified image tarball (as produced by Export). }
+					@dialog.Title() {
+						Import from file 
+					}
+					@dialog.Description() {
+						Upload a unified image tarball (as produced by Export). 
+					}
 				}
 				<form method="post" action="/images/import" enctype="multipart/form-data" hx-boost="false" class="space-y-3">
 					<div>
-						<label class="mb-1 block text-sm font-medium" for="import-file">Image tarball</label>
+						<label class="mb-1 block text-sm font-medium" for="import-file">
+							Image tarball
+							@requiredMark()
+						</label>
 						<input id="import-file" name="image" type="file" required accept=".tar,.tar.gz,.tar.xz,.gz,.xz,application/octet-stream" class="w-full rounded-md border bg-background px-3 py-1.5 text-sm"/>
 					</div>
 					<div>
@@ -114,7 +136,9 @@ templ ImagesPage(caps backend.Capabilities, images []backend.LocalImage, instanc
 					</div>
 					@dialog.Footer() {
 						@dialog.Close() {
-							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) {
+								Cancel 
+							}
 						}
 						@button.Button(button.Props{Type: button.TypeSubmit}) {
 							@icon.Icon("upload")(icon.Props{Class: "size-4"})
@@ -136,13 +160,25 @@ templ ImagesTable(caps backend.Capabilities, images []backend.LocalImage) {
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
-					@table.Head() { Aliases }
-					@table.Head() { Fingerprint }
-					@table.Head() { Description }
-					@table.Head() { Arch }
-					@table.Head() { Type }
-					@table.Head() { Size }
-					@table.Head() { }
+					@table.Head() {
+						Aliases 
+					}
+					@table.Head() {
+						Fingerprint 
+					}
+					@table.Head() {
+						Description 
+					}
+					@table.Head() {
+						Arch 
+					}
+					@table.Head() {
+						Type 
+					}
+					@table.Head() {
+						Size 
+					}
+					@table.Head()
 				}
 			}
 			@table.Body() {

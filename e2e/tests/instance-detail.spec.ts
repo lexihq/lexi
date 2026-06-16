@@ -25,12 +25,19 @@ test("logs panel refresh button re-fetches the console log", async ({ page }) =>
   await page.getByRole("link", { name: "Logs" }).click();
   await expect(page.locator("#logs")).toContainText("Console log");
 
-  await Promise.all([
-    page.waitForResponse(
-      (r) => r.request().method() === "GET" && r.url().includes("/instances/demo/logs"),
-    ),
-    page.locator("#logs").getByRole("button", { name: "Refresh" }).click(),
-  ]);
+  // The Refresh button is freshly swapped in by the panel's load trigger, so
+  // the first click can be lost to the swap-then-click settle race (suite-wide
+  // pattern). Retry until the GET actually fires.
+  await expect(async () => {
+    const [resp] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.request().method() === "GET" && r.url().includes("/instances/demo/logs"),
+        { timeout: 2000 },
+      ),
+      page.locator("#logs").getByRole("button", { name: "Refresh" }).click(),
+    ]);
+    expect(resp.ok()).toBeTruthy();
+  }).toPass({ timeout: 10000 });
   await expect(page.locator("#logs")).toContainText("demo booted");
 });
 

@@ -87,6 +87,12 @@ type Capabilities struct {
 	// "container_backup"): list/create/download/restore/delete without
 	// streaming through the browser.
 	StoredBackups bool
+	// VolumeStoredBackups is server-side named backups for custom volumes
+	// (Incus extension "custom_volume_backup"): list/create/download/restore-
+	// as/delete. Distinct from VolumeBackups (streamed export/import, which
+	// also needs "backup_override_name"). Expiry additionally needs
+	// "backup_expiry".
+	VolumeStoredBackups bool
 	// ImageRefresh is on-demand re-pull of images from their update source
 	// (Incus extension "image_force_refresh").
 	ImageRefresh bool
@@ -498,6 +504,15 @@ type InstanceBackup struct {
 	InstanceOnly bool      // snapshots excluded
 }
 
+// VolumeBackup is a named backup of a custom volume the daemon stores
+// server-side, as opposed to the streamed export/import tarballs.
+type VolumeBackup struct {
+	Name       string
+	CreatedAt  time.Time
+	ExpiresAt  time.Time // zero means never auto-deleted
+	VolumeOnly bool      // volume snapshots excluded
+}
+
 // NetworkForward is a port forward on a managed network: traffic to the
 // listen address (and its port mappings) is redirected into instances.
 type NetworkForward struct {
@@ -890,6 +905,22 @@ type Backend interface {
 	// RestoreInstanceBackup creates a new instance from a stored backup,
 	// entirely server-side. A taken newName is ErrConflict.
 	RestoreInstanceBackup(ctx context.Context, instance, backup, newName string) error
+
+	// ListVolumeBackups lists the named backups stored on the server for the
+	// custom volume, oldest first.
+	ListVolumeBackups(ctx context.Context, pool, volume string) ([]VolumeBackup, error)
+	// CreateVolumeBackup stores a server-side backup. An empty name gets the
+	// daemon-style backupN default; a zero expiresAt never auto-deletes;
+	// volumeOnly excludes volume snapshots. A non-zero expiry on a daemon
+	// without the backup_expiry extension is ErrUnsupported.
+	CreateVolumeBackup(ctx context.Context, pool, volume, name string, expiresAt time.Time, volumeOnly bool) error
+	// DeleteVolumeBackup removes a stored backup.
+	DeleteVolumeBackup(ctx context.Context, pool, volume, backup string) error
+	// ExportVolumeBackup streams a stored backup's tarball to w.
+	ExportVolumeBackup(ctx context.Context, pool, volume, backup string, w io.Writer) error
+	// RestoreVolumeBackup creates a new custom volume named newName in
+	// targetPool from a stored backup. A taken newName is ErrConflict.
+	RestoreVolumeBackup(ctx context.Context, pool, volume, backup, targetPool, newName string) error
 
 	// ConsoleLog returns the instance's console log output.
 	ConsoleLog(ctx context.Context, name string) (string, error)

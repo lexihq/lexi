@@ -92,20 +92,69 @@ const dialogAction = async (
   await dlg.getByRole("button", { name: submit, exact: true }).click();
 };
 
+// The Create instance and Import forms live in header-button dialogs on the
+// list. openCreate/openImport open them; the form field IDs are unchanged.
+// The header trigger and the footer submit are both "Create instance", so
+// submitCreate scopes the click to the dialog.
+const openCreate = async (page: Page) => {
+  await page.goto("/");
+  // Only the header trigger is hittable here: the footer submit (same label)
+  // lives in the still-closed, hidden dialog.
+  await page.getByRole("button", { name: "Create instance" }).click();
+  await expect(page.locator("#create-instance dialog")).toBeVisible();
+};
+// submitCreate clicks the dialog's submit and waits for the create POST. A late
+// image-search swap can shift the layout under the button and eat the click, so
+// retry until the POST actually fires (the suite-wide swap-then-click pattern).
+const submitCreate = async (page: Page) => {
+  const button = page
+    .locator("#create-instance dialog")
+    .getByRole("button", { name: "Create instance" });
+  await expect(async () => {
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().endsWith("/instances") && r.request().method() === "POST",
+        { timeout: 3000 },
+      ),
+      button.click(),
+    ]);
+  }).toPass({ timeout: 15000 });
+};
+const openImport = async (page: Page) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(page.locator("#import-instance dialog")).toBeVisible();
+};
+// selectDebianImage types "debian" and picks the first result. The dialog opens
+// showing local images (one debian); typing swaps in the catalog, recreating the
+// radios. Wait for the catalog-only x86-64 debian before checking, so the swap
+// can't wipe the selection — a required radio left unchecked silently blocks the
+// native form submit.
+const selectDebianImage = async (page: Page) => {
+  await page.locator("#image-search").pressSequentially("debian");
+  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
+  // The debounced catalog search swaps #image-results, recreating (unchecking)
+  // the radios. Re-check until the selection survives a full debounce window — a
+  // required radio left unchecked silently blocks the native form submit.
+  await expect(async () => {
+    await expect(firstImage).toBeVisible();
+    await firstImage.check();
+    await page.waitForTimeout(400);
+    await expect(firstImage).toBeChecked();
+  }).toPass({ timeout: 15000 });
+};
+
 test("create from the image browser, then start/stop/clone/delete in the list", async ({ page }) => {
   const name = "e2e-create";
 
-  await page.goto("/instances/new");
+  await openCreate(page);
 
   // Typing fires the debounced HTMX search; pick the first filtered image.
-  await page.locator("#image-search").pressSequentially("debian");
-  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
-  await expect(firstImage).toBeVisible();
-  await firstImage.check();
+  await selectDebianImage(page);
 
   await page.locator("#name").fill(name);
   await page.locator("input[name=start]").check();
-  await page.getByRole("button", { name: "Create instance" }).click();
+  await submitCreate(page);
 
   // Full-page submit redirects to the list; the new row shows Running.
   await expect(page.locator(`#instance-${name}`)).toContainText(name);
@@ -135,13 +184,10 @@ test("rebuild a stopped instance from a new image", async ({ page }) => {
   const name = "e2e-rebuild";
 
   // Create a stopped instance from a debian image.
-  await page.goto("/instances/new");
-  await page.locator("#image-search").pressSequentially("debian");
-  const createImage = page.locator("#image-results input[type=radio][name=image]").first();
-  await expect(createImage).toBeVisible();
-  await createImage.check();
+  await openCreate(page);
+  await selectDebianImage(page);
   await page.locator("#name").fill(name);
-  await page.getByRole("button", { name: "Create instance" }).click();
+  await submitCreate(page);
   await expect(page.locator(`#instance-${name}`)).toContainText("Stopped");
 
   // Rebuild… in the kebab menu navigates to the rebuild page (stopped only).
@@ -173,12 +219,9 @@ test("rebuild a stopped instance from a new image", async ({ page }) => {
 
 test("create with profile, pool, network, and initial config", async ({ page }) => {
   const name = "e2e-wizard";
-  await page.goto("/instances/new");
+  await openCreate(page);
 
-  await page.locator("#image-search").pressSequentially("debian");
-  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
-  await expect(firstImage).toBeVisible();
-  await firstImage.check();
+  await selectDebianImage(page);
   await page.locator("#name").fill(name);
 
   // Optional selectors: gpu profile, explicit pool + network, a config key.
@@ -188,7 +231,7 @@ test("create with profile, pool, network, and initial config", async ({ page }) 
   await page.getByText("Advanced: initial config").click();
   await page.locator('form[action="/instances"] input[name="key"]').first().fill("user.e2e");
   await page.locator('form[action="/instances"] textarea[name="value"]').first().fill("wizard");
-  await page.getByRole("button", { name: "Create instance" }).click();
+  await submitCreate(page);
 
   // The profile shows on the detail summary; the config key in the editor.
   await expect(page.locator(`#instance-${name}`)).toBeVisible();
@@ -209,7 +252,7 @@ test("create with profile, pool, network, and initial config", async ({ page }) 
 });
 
 test("create page arch and type filters narrow the image list", async ({ page }) => {
-  await page.goto("/instances/new");
+  await openCreate(page);
   const results = page.locator("#image-results");
   await expect(results).toContainText("debian/12");
 
@@ -229,13 +272,10 @@ test("create page arch and type filters narrow the image list", async ({ page })
 
 test("rename and move an instance from the list row", async ({ page }) => {
   const name = "e2e-move";
-  await page.goto("/instances/new");
-  await page.locator("#image-search").pressSequentially("debian");
-  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
-  await expect(firstImage).toBeVisible();
-  await firstImage.check();
+  await openCreate(page);
+  await selectDebianImage(page);
   await page.locator("#name").fill(name);
-  await page.getByRole("button", { name: "Create instance" }).click();
+  await submitCreate(page);
   await expect(page.locator(`#instance-${name}`)).toBeVisible();
 
   // Rename via the kebab dialog (full-page POST, navigates to the new detail page).
@@ -265,11 +305,12 @@ test("export downloads a tarball that re-imports as a new instance", async ({ pa
   const file = await download.path();
   expect(file).toBeTruthy();
 
-  await page.goto("/instances/import");
+  await openImport(page);
   const imported = "e2e-imported";
-  await page.locator("#name").fill(imported);
-  await page.locator("#backup").setInputFiles(file as string);
-  await page.getByRole("button", { name: "Import instance" }).click();
+  const importDialog = page.locator("#import-instance dialog");
+  await importDialog.locator("#import-name").fill(imported);
+  await importDialog.locator("#import-backup").setInputFiles(file as string);
+  await importDialog.getByRole("button", { name: "Import instance" }).click();
 
   await expect(page.locator(`#instance-${imported}`)).toBeVisible();
 
@@ -282,14 +323,11 @@ test("restart, pause, and resume an instance from the list row", async ({ page }
   const name = "e2e-lifecycle";
 
   // Create a running instance to exercise the lifecycle controls.
-  await page.goto("/instances/new");
-  await page.locator("#image-search").pressSequentially("debian");
-  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
-  await expect(firstImage).toBeVisible();
-  await firstImage.check();
+  await openCreate(page);
+  await selectDebianImage(page);
   await page.locator("#name").fill(name);
   await page.locator("input[name=start]").check();
-  await page.getByRole("button", { name: "Create instance" }).click();
+  await submitCreate(page);
 
   const row = page.locator(`#instance-${name}`);
   await expect(row).toContainText("Running");

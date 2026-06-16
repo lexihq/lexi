@@ -14,9 +14,11 @@ import (
 // stop a runaway upload. A var (not const) so tests can lower it.
 var maxImportBytes int64 = 8 << 30 // 8 GiB
 
-// importForm renders the backup-upload page.
+// importForm previously served a dedicated import page; the upload form now
+// lives in a header-button dialog on the instance list, so the old route just
+// redirects there (keeps deep links / bookmarks from 404ing).
 func (h handlers) importForm(w http.ResponseWriter, r *http.Request) {
-	h.renderShell(w, r, http.StatusOK, ui.ImportPage(h.backend.Capabilities(r.Context())))
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 // importInstance restores an instance from an uploaded backup tarball. The file

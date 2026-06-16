@@ -15,7 +15,7 @@ import (
 	"github.com/adam/lxcon/internal/components/table"
 )
 
-templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, pools []backend.StoragePool) {
+templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, images []backend.Image, profiles []backend.Profile, pools []backend.StoragePool, networks []backend.Network) {
 	@Layout("Instances", caps, Nav{Section: NavInstances}) {
 		if caps.Move && len(pools) > 0 {
 			// One shared datalist for every row's move-to-pool input, so the
@@ -33,14 +33,18 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, poo
 			</div>
 			<div class="flex gap-2">
 				if caps.Backup {
-					@button.Button(button.Props{Href: "/instances/import", Variant: button.VariantOutline}) {
-						@icon.Icon("upload")(icon.Props{Class: "size-4"})
-						Import
+					@dialog.Trigger(dialog.TriggerProps{For: "import-instance"}) {
+						@button.Button(button.Props{Variant: button.VariantOutline}) {
+							@icon.Icon("upload")(icon.Props{Class: "size-4"})
+							Import
+						}
 					}
 				}
-				@button.Button(button.Props{Href: "/instances/new"}) {
-					@icon.Icon("plus")(icon.Props{Class: "size-4"})
-					Create instance
+				@dialog.Trigger(dialog.TriggerProps{For: "create-instance"}) {
+					@button.Button(button.Props{}) {
+						@icon.Icon("plus")(icon.Props{Class: "size-4"})
+						Create instance
+					}
 				}
 			</div>
 		</div>
@@ -72,6 +76,10 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, poo
 					@InstanceRow(caps, inst)
 				}
 			}
+		}
+		@CreateInstanceDialog(images, profiles, pools, networks)
+		if caps.Backup {
+			@ImportInstanceDialog()
 		}
 		@dropdown.Script()
 		@dialog.Script()

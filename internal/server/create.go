@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -10,47 +11,49 @@ import (
 	"github.com/adam/lxcon/internal/ui"
 )
 
+// createForm previously served a dedicated create page; the create form now
+// lives in a header-button dialog on the instance list, so the old route just
+// redirects there (keeps deep links / bookmarks from 404ing).
 func (h handlers) createForm(w http.ResponseWriter, r *http.Request) {
-	images, err := h.backend.ListImages(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
 
-	// Profiles/pools/networks feed the optional create-form selectors, each
-	// gated on its capability. A listing failure shouldn't take down the
-	// create page — the affected selector just doesn't render.
-	caps := h.backend.Capabilities(r.Context())
-	var profiles []backend.Profile
+// createDialogData loads the image catalog and the optional profile/pool/network
+// selectors the create-instance dialog renders. Each listing is capability-gated
+// and best-effort: a failure drops just that selector rather than failing the
+// whole instance list the dialog is mounted on.
+func (h handlers) createDialogData(ctx context.Context, caps backend.Capabilities) (images []backend.Image, profiles []backend.Profile, pools []backend.StoragePool, networks []backend.Network) {
+	if got, err := h.backend.ListImages(ctx); err == nil {
+		images = got
+	} else {
+		slog.Warn("list images for create dialog", "err", err)
+	}
 	if caps.Profiles {
-		if got, err := h.backend.ListProfiles(r.Context()); err == nil {
+		if got, err := h.backend.ListProfiles(ctx); err == nil {
 			profiles = got
 		} else {
-			slog.Warn("list profiles for create form", "err", err)
+			slog.Warn("list profiles for create dialog", "err", err)
 		}
 	}
-	var pools []backend.StoragePool
 	if caps.Storage {
-		if got, err := h.backend.ListStoragePools(r.Context()); err == nil {
+		if got, err := h.backend.ListStoragePools(ctx); err == nil {
 			pools = got
 		} else {
-			slog.Warn("list storage pools for create form", "err", err)
+			slog.Warn("list storage pools for create dialog", "err", err)
 		}
 	}
-	var networks []backend.Network
 	if caps.Networks {
-		if got, err := h.backend.ListNetworks(r.Context()); err == nil {
+		if got, err := h.backend.ListNetworks(ctx); err == nil {
 			for _, n := range got {
 				if n.Managed {
 					networks = append(networks, n)
 				}
 			}
 		} else {
-			slog.Warn("list networks for create form", "err", err)
+			slog.Warn("list networks for create dialog", "err", err)
 		}
 	}
-
-	h.renderShell(w, r, http.StatusOK, ui.CreatePage(h.backend.Capabilities(r.Context()), images, profiles, pools, networks))
+	return
 }
 
 // imagePicker renders the HTMX-driven image search results for the create

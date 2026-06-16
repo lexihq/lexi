@@ -1,7 +1,6 @@
 package server
 
 import (
-	"log/slog"
 	"net/http"
 	"strings"
 
@@ -16,21 +15,14 @@ func (h handlers) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Pools feed the shared move-to-pool datalist; only fetched when the move
-	// form renders. A pool listing failure shouldn't take down the instance
-	// list, so it degrades to a plain text input.
+	// The catalog and optional selectors feed the create-instance dialog (and
+	// pools double as the move-to-pool datalist). All best-effort: a listing
+	// failure just drops that selector, never the instance list.
 	caps := h.backend.Capabilities(r.Context())
-	var pools []backend.StoragePool
-	if caps.Move && caps.Storage {
-		if got, err := h.backend.ListStoragePools(r.Context()); err == nil {
-			pools = got
-		} else {
-			slog.Warn("list storage pools for move datalist", "err", err)
-		}
-	}
+	images, profiles, pools, networks := h.createDialogData(r.Context(), caps)
 
 	// The list already has the instances the sidebar needs; reuse them.
-	h.renderWithSidebar(w, r, http.StatusOK, instances, ui.InstancesPage(caps, instances, pools))
+	h.renderWithSidebar(w, r, http.StatusOK, instances, ui.InstancesPage(caps, instances, images, profiles, pools, networks))
 }
 
 // sidebar renders the self-refreshing instance list for the shell sidebar. The

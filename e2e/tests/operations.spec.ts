@@ -1,4 +1,36 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+// submitCreate clicks the create dialog's submit and waits for the POST; a late
+// image-search swap can shift the button and eat the click, so retry until the
+// create request actually fires (suite-wide swap-then-click pattern).
+const submitCreate = async (page: Page) => {
+  await expect(async () => {
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().endsWith("/instances") && r.request().method() === "POST",
+        { timeout: 3000 },
+      ),
+      page
+        .locator("#create-instance dialog")
+        .getByRole("button", { name: "Create instance" })
+        .click(),
+    ]);
+  }).toPass({ timeout: 15000 });
+};
+
+const selectDebianImage = async (page: Page) => {
+  await page.locator("#image-search").pressSequentially("debian");
+  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
+  // The debounced catalog search swaps #image-results, recreating (unchecking)
+  // the radios. Re-check until the selection survives a full debounce window — a
+  // required radio left unchecked silently blocks the native form submit.
+  await expect(async () => {
+    await expect(firstImage).toBeVisible();
+    await firstImage.check();
+    await page.waitForTimeout(400);
+    await expect(firstImage).toBeChecked();
+  }).toPass({ timeout: 15000 });
+};
 
 // The bottom Tasks panel: operation listing, SSE push updates, and cancel.
 // All tests run against the shared fake-backed server (instance "demo" seeded).
@@ -7,13 +39,13 @@ test("tasks panel lists operations and picks up new ones", async ({ page }) => {
   const name = "e2e-task";
 
   // Creating an instance records an operation in the fake's task log.
-  await page.goto("/instances/new");
-  await page.locator("#image-search").pressSequentially("debian");
-  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
-  await expect(firstImage).toBeVisible();
-  await firstImage.check();
-  await page.locator("#name").fill(name);
+  await page.goto("/");
   await page.getByRole("button", { name: "Create instance" }).click();
+  const createDialog = page.locator("#create-instance dialog");
+  await expect(createDialog).toBeVisible();
+  await selectDebianImage(page);
+  await page.locator("#name").fill(name);
+  await submitCreate(page);
   const row = page.locator(`#instance-${name}`);
   await expect(row).toBeVisible();
 

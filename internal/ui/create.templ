@@ -5,118 +5,192 @@ import (
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/dialog"
 	"github.com/adam/lxcon/internal/components/icon"
 )
 
-templ CreatePage(caps backend.Capabilities, images []backend.Image, profiles []backend.Profile, pools []backend.StoragePool, networks []backend.Network) {
-	@Layout("Create instance", caps, Nav{Section: NavInstances}) {
-		<div class="mb-6">
-			<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>
-			<h1 class="mt-2 text-2xl font-semibold">Create instance</h1>
-			<p class="text-muted-foreground">Launch a new Incus instance from the public image catalog.</p>
-		</div>
-		<form method="post" action="/instances" hx-boost="false" class="max-w-xl space-y-5 rounded-lg border bg-card p-6">
-			<div class="space-y-2">
-				<label class="text-sm font-medium" for="name">
-					Name
-					@requiredMark()
-				</label>
-				<input id="name" name="name" class="h-10 w-full rounded-md border bg-background px-3 text-sm" required/>
-			</div>
-			<div class="space-y-2">
-				<label class="text-sm font-medium" for="image-search">
-					Image
-					@requiredMark()
-				</label>
-				<div class="flex gap-2">
-					<input
-						id="image-search"
-						type="search"
-						name="q"
-						placeholder="Search images…"
-						autocomplete="off"
-						class="h-10 w-full rounded-md border bg-background px-3 text-sm"
-						hx-get="/partials/images"
-						hx-trigger="keyup changed delay:300ms, search"
-						hx-target="#image-results"
-						hx-include="closest form"
-					/>
-					<select name="arch" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/partials/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
-						<option value="">Any arch</option>
-						<option value="aarch64">aarch64</option>
-						<option value="x86_64">x86_64</option>
-					</select>
-					<select name="type" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/partials/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
-						<option value="">Any type</option>
-						<option value="container">container</option>
-						<option value="virtual-machine">virtual-machine</option>
-					</select>
+// CreateInstanceDialog is the header-button modal for launching a new instance.
+// It posts the same plain form as the old create page (hx-boost=false → redirect
+// to the list on success); the wide two-column layout keeps the image picker
+// beside the options so the dialog fits without scrolling.
+templ CreateInstanceDialog(images []backend.Image, profiles []backend.Profile, pools []backend.StoragePool, networks []backend.Network) {
+	@dialog.Dialog(dialog.Props{ID: "create-instance"}) {
+		@dialog.Content(dialog.ContentProps{Class: "sm:max-w-3xl"}) {
+			@dialog.Header() {
+				@dialog.Title() {
+					Create instance
+				}
+				@dialog.Description() {
+					Launch a new Incus instance from the public image catalog.
+				}
+			}
+			<form method="post" action="/instances" hx-boost="false" class="flex flex-col gap-4">
+				<div class="space-y-1.5">
+					<label class="text-sm font-medium" for="name">
+						Name
+						@requiredMark()
+					</label>
+					<input id="name" name="name" class="h-10 w-full rounded-md border bg-background px-3 text-sm" required/>
 				</div>
-				<div id="image-results">
-					@ImageResults(images)
-				</div>
-			</div>
-			if len(profiles) > 0 {
-				<div class="space-y-2">
-					<span class="text-sm font-medium">Profiles</span>
-					<p class="text-xs text-muted-foreground">Applied in order; none selected means the default profile.</p>
-					<div class="space-y-1">
-						for _, p := range profiles {
-							<label class="flex items-center gap-2 text-sm">
-								<input type="checkbox" name="profile" value={ p.Name }/>
-								<span class="font-medium">{ p.Name }</span>
-								if p.Description != "" {
-									<span class="truncate text-muted-foreground">{ p.Description }</span>
-								}
-							</label>
+				<div class="grid gap-4 sm:grid-cols-2">
+					<div class="space-y-1.5">
+						<span class="block text-sm font-medium">
+							Image
+							@requiredMark()
+						</span>
+						@imagePickerField(images)
+					</div>
+					<div class="space-y-3">
+						if len(profiles) > 0 {
+							<div class="space-y-1.5">
+								<span class="block text-sm font-medium">Profiles</span>
+								<p class="text-xs text-muted-foreground">Applied in order; none selected means the default profile.</p>
+								<div class="max-h-28 space-y-1 overflow-y-auto rounded-md border p-2">
+									for _, p := range profiles {
+										<label class="flex items-center gap-2 text-sm">
+											<input type="checkbox" name="profile" value={ p.Name }/>
+											<span class="font-medium">{ p.Name }</span>
+											if p.Description != "" {
+												<span class="truncate text-muted-foreground">{ p.Description }</span>
+											}
+										</label>
+									}
+								</div>
+							</div>
 						}
+						if len(pools) > 0 {
+							<div class="space-y-1.5">
+								<label class="block text-sm font-medium" for="create-pool">Storage pool</label>
+								<select id="create-pool" name="pool" class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+									<option value="">Profile default</option>
+									for _, p := range pools {
+										<option value={ p.Name }>{ p.Name } ({ p.Driver })</option>
+									}
+								</select>
+							</div>
+						}
+						if len(networks) > 0 {
+							<div class="space-y-1.5">
+								<label class="block text-sm font-medium" for="create-network">Network</label>
+								<select id="create-network" name="network" class="h-10 w-full rounded-md border bg-background px-3 text-sm">
+									<option value="">Profile default</option>
+									for _, n := range networks {
+										<option value={ n.Name }>{ n.Name }</option>
+									}
+								</select>
+							</div>
+						}
+						<details class="rounded-md border p-3">
+							<summary class="cursor-pointer text-sm font-medium">Advanced: initial config</summary>
+							<p class="mb-2 mt-2 text-xs text-muted-foreground">Config keys applied at create, e.g. limits.cpu or user.user-data (cloud-init).</p>
+							<div class="space-y-2">
+								for i := 0; i < 3; i++ {
+									<div class="flex gap-2">
+										<input name="key" placeholder="limits.cpu" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+										<textarea name="value" rows="1" placeholder="2" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm"></textarea>
+									</div>
+								}
+							</div>
+						</details>
+						<label class="flex items-center gap-2 text-sm">
+							<input type="checkbox" name="start"/>
+							Start after create
+						</label>
 					</div>
 				</div>
-			}
-			if len(pools) > 0 {
-				<div class="space-y-2">
-					<label class="text-sm font-medium" for="create-pool">Storage pool</label>
-					<select id="create-pool" name="pool" class="h-10 w-full rounded-md border bg-background px-3 text-sm">
-						<option value="">Profile default</option>
-						for _, p := range pools {
-							<option value={ p.Name }>{ p.Name } ({ p.Driver })</option>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) {
+							Cancel
 						}
-					</select>
-				</div>
-			}
-			if len(networks) > 0 {
-				<div class="space-y-2">
-					<label class="text-sm font-medium" for="create-network">Network</label>
-					<select id="create-network" name="network" class="h-10 w-full rounded-md border bg-background px-3 text-sm">
-						<option value="">Profile default</option>
-						for _, n := range networks {
-							<option value={ n.Name }>{ n.Name }</option>
-						}
-					</select>
-				</div>
-			}
-			<details class="rounded-md border p-3">
-				<summary class="cursor-pointer text-sm font-medium">Advanced: initial config</summary>
-				<p class="mb-2 mt-2 text-xs text-muted-foreground">Config keys applied at create, e.g. limits.cpu or user.user-data (cloud-init).</p>
-				<div class="space-y-2">
-					for i := 0; i < 3; i++ {
-						<div class="flex gap-2">
-							<input name="key" placeholder="limits.cpu" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
-							<textarea name="value" rows="1" placeholder="2" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 font-mono text-sm"></textarea>
-						</div>
 					}
-				</div>
-			</details>
-			<label class="flex items-center gap-2 text-sm">
-				<input type="checkbox" name="start"/>
-				Start after create
-			</label>
-			@button.Button(button.Props{Type: button.TypeSubmit}) {
-				@icon.Icon("plus")(icon.Props{Class: "size-4"})
-				Create instance
-			}
-		</form>
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						@icon.Icon("plus")(icon.Props{Class: "size-4"})
+						Create instance
+					}
+				}
+			</form>
+		}
 	}
+}
+
+// ImportInstanceDialog is the header-button modal that restores an instance from
+// a backup tarball produced by Export. It posts a normal multipart form (file
+// uploads don't fit the HTMX partial pattern) and redirects to the list.
+templ ImportInstanceDialog() {
+	@dialog.Dialog(dialog.Props{ID: "import-instance"}) {
+		@dialog.Content() {
+			@dialog.Header() {
+				@dialog.Title() {
+					Import instance
+				}
+				@dialog.Description() {
+					Restore an instance from a backup tarball produced by Export.
+				}
+			}
+			<form method="post" action="/instances/import" enctype="multipart/form-data" hx-boost="false" class="flex flex-col gap-4">
+				<div class="space-y-1.5">
+					<label class="text-sm font-medium" for="import-name">
+						Name
+						@requiredMark()
+					</label>
+					<input id="import-name" name="name" class="h-10 w-full rounded-md border bg-background px-3 text-sm" required/>
+				</div>
+				<div class="space-y-1.5">
+					<label class="text-sm font-medium" for="import-backup">
+						Backup file
+						@requiredMark()
+					</label>
+					<input id="import-backup" name="backup" type="file" accept=".tar,.tar.gz,.gz,application/octet-stream" class="w-full rounded-md border bg-background px-3 py-2 text-sm" required/>
+				</div>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) {
+							Cancel
+						}
+					}
+					@button.Button(button.Props{Type: button.TypeSubmit}) {
+						@icon.Icon("upload")(icon.Props{Class: "size-4"})
+						Import instance
+					}
+				}
+			</form>
+		}
+	}
+}
+
+// imagePickerField is the HTMX-driven image search shared by the create dialog
+// and the rebuild page: a search box and arch/type filters that swap the result
+// list (each result a radio bound to name="image"). The result list caps its own
+// height and scrolls, so it never grows its container.
+templ imagePickerField(images []backend.Image) {
+	<div class="flex gap-2">
+		<input
+			id="image-search"
+			type="search"
+			name="q"
+			placeholder="Search images…"
+			autocomplete="off"
+			class="h-10 w-full rounded-md border bg-background px-3 text-sm"
+			hx-get="/partials/images"
+			hx-trigger="keyup changed delay:300ms, search"
+			hx-target="#image-results"
+			hx-include="closest form"
+		/>
+		<select name="arch" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/partials/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
+			<option value="">Any arch</option>
+			<option value="aarch64">aarch64</option>
+			<option value="x86_64">x86_64</option>
+		</select>
+		<select name="type" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/partials/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
+			<option value="">Any type</option>
+			<option value="container">container</option>
+			<option value="virtual-machine">virtual-machine</option>
+		</select>
+	</div>
+	<div id="image-results">
+		@ImageResults(images)
+	</div>
 }
 
 // RebuildPage reinstalls a stopped instance from a catalog image. It reuses
@@ -141,70 +215,11 @@ templ RebuildPage(caps backend.Capabilities, inst backend.Instance, images []bac
 					Image
 					@requiredMark()
 				</label>
-				<div class="flex gap-2">
-					<input
-						id="image-search"
-						type="search"
-						name="q"
-						placeholder="Search images…"
-						autocomplete="off"
-						class="h-10 w-full rounded-md border bg-background px-3 text-sm"
-						hx-get="/partials/images"
-						hx-trigger="keyup changed delay:300ms, search"
-						hx-target="#image-results"
-						hx-include="closest form"
-					/>
-					<select name="arch" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/partials/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
-						<option value="">Any arch</option>
-						<option value="aarch64">aarch64</option>
-						<option value="x86_64">x86_64</option>
-					</select>
-					<select name="type" class="h-10 rounded-md border bg-background px-3 text-sm" hx-get="/partials/images" hx-trigger="change" hx-target="#image-results" hx-include="closest form">
-						<option value="">Any type</option>
-						<option value="container">container</option>
-						<option value="virtual-machine">virtual-machine</option>
-					</select>
-				</div>
-				<div id="image-results">
-					@ImageResults(images)
-				</div>
+				@imagePickerField(images)
 			</div>
 			@button.Button(button.Props{Type: button.TypeSubmit}) {
 				@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
 				Rebuild instance
-			}
-		</form>
-	}
-}
-
-// ImportPage is the upload form that restores an instance from a backup tarball
-// produced by Export. It posts a normal multipart form (file uploads don't fit
-// the HTMX partial pattern) and redirects to the list on success.
-templ ImportPage(caps backend.Capabilities) {
-	@Layout("Import instance", caps, Nav{Section: NavInstances}) {
-		<div class="mb-6">
-			<a href="/" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Instances</a>
-			<h1 class="mt-2 text-2xl font-semibold">Import instance</h1>
-			<p class="text-muted-foreground">Restore an instance from a backup tarball produced by Export.</p>
-		</div>
-		<form method="post" action="/instances/import" enctype="multipart/form-data" hx-boost="false" class="max-w-xl space-y-5 rounded-lg border bg-card p-6">
-			<div class="space-y-2">
-				<label class="text-sm font-medium" for="name">
-					Name
-					@requiredMark()
-				</label>
-				<input id="name" name="name" class="h-10 w-full rounded-md border bg-background px-3 text-sm" required/>
-			</div>
-			<div class="space-y-2">
-				<label class="text-sm font-medium" for="backup">
-					Backup file
-					@requiredMark()
-				</label>
-				<input id="backup" name="backup" type="file" accept=".tar,.tar.gz,.gz,application/octet-stream" class="w-full rounded-md border bg-background px-3 py-2 text-sm" required/>
-			</div>
-			@button.Button(button.Props{Type: button.TypeSubmit}) {
-				@icon.Icon("upload")(icon.Props{Class: "size-4"})
-				Import instance
 			}
 		</form>
 	}

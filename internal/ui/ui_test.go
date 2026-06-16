@@ -13,7 +13,7 @@ import (
 )
 
 func TestInstancesPageRendersListAndActions(t *testing.T) {
-	html := render(t, InstancesPage(testCaps(), []backend.Instance{{Name: "demo", Status: "Stopped", IPv4: []string{"10.0.3.12"}, Snapshots: 2}}, nil))
+	html := render(t, InstancesPage(testCaps(), []backend.Instance{{Name: "demo", Status: "Stopped", IPv4: []string{"10.0.3.12"}, Snapshots: 2}}, nil, nil, nil, nil))
 
 	assertContains(t, html, "fake backend")
 	assertContains(t, html, "demo")
@@ -109,12 +109,12 @@ func TestConsolePageOptsOutOfBoost(t *testing.T) {
 		t.Fatalf("console page must opt out of hx-boost, got %q", console)
 	}
 
-	list := render(t, InstancesPage(testCaps(), nil, nil))
+	list := render(t, InstancesPage(testCaps(), nil, nil, nil, nil, nil))
 	assertContains(t, list, `hx-boost="true"`)
 }
 
-func TestCreatePageRendersImageForm(t *testing.T) {
-	html := render(t, CreatePage(testCaps(), []backend.Image{{
+func TestCreateInstanceDialogRendersImageForm(t *testing.T) {
+	html := render(t, CreateInstanceDialog([]backend.Image{{
 		Alias:       "debian/12",
 		Description: "Debian 12",
 		Fingerprint: "debian-fingerprint",
@@ -128,8 +128,8 @@ func TestCreatePageRendersImageForm(t *testing.T) {
 	assertContains(t, html, "container")
 }
 
-func TestCreatePageRendersOptionalSelectors(t *testing.T) {
-	html := render(t, CreatePage(testCaps(), nil,
+func TestCreateInstanceDialogRendersOptionalSelectors(t *testing.T) {
+	html := render(t, CreateInstanceDialog(nil,
 		[]backend.Profile{{Name: "gpu", Description: "GPU passthrough"}},
 		[]backend.StoragePool{{Name: "fast0", Driver: "zfs"}},
 		[]backend.Network{{Name: "incusbr0", Managed: true}}))
@@ -369,11 +369,11 @@ func TestInstanceBodyGatesFilesTab(t *testing.T) {
 func TestLayoutGatesOperationsPanel(t *testing.T) {
 	caps := testCaps()
 	caps.Operations = true
-	with := render(t, InstancesPage(caps, nil, nil))
+	with := render(t, InstancesPage(caps, nil, nil, nil, nil, nil))
 	assertContains(t, with, `hx-get="/partials/operations"`)
 	assertContains(t, with, "Tasks")
 
-	without := render(t, InstancesPage(testCaps(), nil, nil))
+	without := render(t, InstancesPage(testCaps(), nil, nil, nil, nil, nil))
 	if strings.Contains(without, "/partials/operations") {
 		t.Fatalf("operations panel must be hidden without the capability, got %q", without)
 	}
@@ -675,7 +675,7 @@ func TestListPagesRenderEmptyStates(t *testing.T) {
 		page templ.Component
 		want string
 	}{
-		{"instances", InstancesPage(testCaps(), nil, nil), "No instances yet"},
+		{"instances", InstancesPage(testCaps(), nil, nil, nil, nil, nil), "No instances yet"},
 		{"projects", ProjectsPage(testCaps(), nil, "default", nil), "No projects yet"},
 		{"networks", NetworksPage(testCaps(), nil), "No networks yet"},
 		{"storage", StoragePoolsPage(testCaps(), nil), "No storage pools yet"},
@@ -741,7 +741,7 @@ func TestProjectsPageCreateFormIsLabeledCard(t *testing.T) {
 	html := render(t, ProjectsPage(testCaps(), []backend.Project{{Name: "default"}}, "default", nil))
 	assertContains(t, html, "Create project")
 	assertContains(t, html, `for="project-name">Name`) // required field, labeled with a marker
-	assertContains(t, html, ">Description</label>")     // optional field, no marker
+	assertContains(t, html, ">Description</label>")    // optional field, no marker
 	assertContains(t, html, "shared from default")
 }
 
@@ -852,14 +852,14 @@ func TestTasksPanelUsesSSEWhenEventsCapable(t *testing.T) {
 	caps := testCaps()
 	caps.Operations = true
 	caps.Events = true
-	html := render(t, InstancesPage(caps, nil, nil))
+	html := render(t, InstancesPage(caps, nil, nil, nil, nil, nil))
 	assertContains(t, html, `sse-connect="/events/operations"`)
 	assertContains(t, html, `sse-swap="operations"`)
 	assertContains(t, html, "htmx-ext-sse.min.js")
 	assertNotContains(t, html, "every 5s")
 
 	caps.Events = false
-	html = render(t, InstancesPage(caps, nil, nil))
+	html = render(t, InstancesPage(caps, nil, nil, nil, nil, nil))
 	assertContains(t, html, `hx-trigger="load, every 5s"`)
 	assertNotContains(t, html, "sse-connect")
 }
@@ -872,7 +872,7 @@ func TestSidebarRendersRemoteSwitcher(t *testing.T) {
 		{Name: "secondary"},
 	})
 	var buf bytes.Buffer
-	if err := InstancesPage(caps, nil, nil).Render(ctx, &buf); err != nil {
+	if err := InstancesPage(caps, nil, nil, nil, nil, nil).Render(ctx, &buf); err != nil {
 		t.Fatal(err)
 	}
 	html := buf.String()
@@ -881,7 +881,7 @@ func TestSidebarRendersRemoteSwitcher(t *testing.T) {
 	assertContains(t, html, `<option value="secondary">`)
 
 	caps.Remotes = false
-	html = render(t, InstancesPage(caps, nil, nil))
+	html = render(t, InstancesPage(caps, nil, nil, nil, nil, nil))
 	assertNotContains(t, html, `action="/remote"`)
 }
 
@@ -892,7 +892,7 @@ func TestInstanceRowOffersMigrateForStoppedWithTargets(t *testing.T) {
 	renderWith := func(status string) string {
 		ctx := WithRemoteSwitcher(context.Background(), remotes)
 		var buf bytes.Buffer
-		if err := InstancesPage(caps, []backend.Instance{{Name: "demo", Status: status}}, nil).Render(ctx, &buf); err != nil {
+		if err := InstancesPage(caps, []backend.Instance{{Name: "demo", Status: status}}, nil, nil, nil, nil).Render(ctx, &buf); err != nil {
 			t.Fatal(err)
 		}
 		return buf.String()
@@ -908,7 +908,7 @@ func TestInstanceRowOffersMigrateForStoppedWithTargets(t *testing.T) {
 	assertNotContains(t, running, "Migrate…")
 
 	caps.Migrate = false
-	html := render(t, InstancesPage(caps, []backend.Instance{{Name: "demo", Status: "Stopped"}}, nil))
+	html := render(t, InstancesPage(caps, []backend.Instance{{Name: "demo", Status: "Stopped"}}, nil, nil, nil, nil))
 	assertNotContains(t, html, "Migrate…")
 }
 

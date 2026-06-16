@@ -28,10 +28,18 @@ func TestExportUnknownInstanceIs404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, res.Code)
 }
 
-func TestImportFormRenders(t *testing.T) {
-	res := request(t, New(fake.New()), "GET", "/instances/import", "", false)
-	assert.Equal(t, http.StatusOK, res.Code)
-	assert.Contains(t, res.Body.String(), "Import instance")
+func TestImportFormRendersAsDialogOnList(t *testing.T) {
+	srv := New(fake.New())
+	// The old page route now redirects to the list, where the import form lives
+	// in a header-button dialog.
+	redirect := request(t, srv, "GET", "/instances/import", "", false)
+	assert.Equal(t, http.StatusSeeOther, redirect.Code)
+	assert.Equal(t, "/", redirect.Header().Get("Location"))
+
+	list := request(t, srv, "GET", "/", "", false)
+	assert.Equal(t, http.StatusOK, list.Code)
+	assert.Contains(t, list.Body.String(), "Import instance")
+	assert.Contains(t, list.Body.String(), `id="import-instance"`)
 }
 
 func TestImportCreatesInstanceFromUpload(t *testing.T) {

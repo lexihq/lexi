@@ -1,4 +1,36 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+// submitCreate clicks the create dialog's submit and waits for the POST; a late
+// image-search swap can shift the button and eat the click, so retry until the
+// create request actually fires (suite-wide swap-then-click pattern).
+const submitCreate = async (page: Page) => {
+  await expect(async () => {
+    await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().endsWith("/instances") && r.request().method() === "POST",
+        { timeout: 3000 },
+      ),
+      page
+        .locator("#create-instance dialog")
+        .getByRole("button", { name: "Create instance" })
+        .click(),
+    ]);
+  }).toPass({ timeout: 15000 });
+};
+
+const selectDebianImage = async (page: Page) => {
+  await page.locator("#image-search").pressSequentially("debian");
+  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
+  // The debounced catalog search swaps #image-results, recreating (unchecking)
+  // the radios. Re-check until the selection survives a full debounce window — a
+  // required radio left unchecked silently blocks the native form submit.
+  await expect(async () => {
+    await expect(firstImage).toBeVisible();
+    await firstImage.check();
+    await page.waitForTimeout(400);
+    await expect(firstImage).toBeChecked();
+  }).toPass({ timeout: 15000 });
+};
 
 // Remote switcher: the fake backend models two daemons ("local" with the
 // seeded demo instance, "secondary" bare). Switching must scope the whole UI.
@@ -18,13 +50,13 @@ test("remotes: switch scopes the UI and clears the project selection", async ({ 
   await expect(page.getByRole("link", { name: "demo" })).toHaveCount(0);
 
   // Resources created here land on this remote only.
-  await page.goto("/instances/new");
-  await page.locator("#image-search").pressSequentially("debian");
-  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
-  await expect(firstImage).toBeVisible();
-  await firstImage.check();
-  await page.locator("#name").fill("e2e-remote-inst");
+  await page.goto("/");
   await page.getByRole("button", { name: "Create instance" }).click();
+  const createDialog = page.locator("#create-instance dialog");
+  await expect(createDialog).toBeVisible();
+  await selectDebianImage(page);
+  await page.locator("#name").fill("e2e-remote-inst");
+  await submitCreate(page);
   await expect(page.locator("#instance-e2e-remote-inst")).toContainText("e2e-remote-inst");
 
   // Back on local: demo returns, the secondary instance is invisible.
@@ -76,13 +108,13 @@ test("remotes: migrate a stopped instance to another remote and back", async ({ 
   page.on("dialog", (d) => d.accept());
 
   // Create a stopped instance on local.
-  await page.goto("/instances/new");
-  await page.locator("#image-search").pressSequentially("debian");
-  const firstImage = page.locator("#image-results input[type=radio][name=image]").first();
-  await expect(firstImage).toBeVisible();
-  await firstImage.check();
-  await page.locator("#name").fill("e2e-mig");
+  await page.goto("/");
   await page.getByRole("button", { name: "Create instance" }).click();
+  const createDialog = page.locator("#create-instance dialog");
+  await expect(createDialog).toBeVisible();
+  await selectDebianImage(page);
+  await page.locator("#name").fill("e2e-mig");
+  await submitCreate(page);
   const row = page.locator("#instance-e2e-mig");
   await expect(row).toBeVisible();
 

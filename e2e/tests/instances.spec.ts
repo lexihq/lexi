@@ -312,3 +312,14 @@ test("restart, pause, and resume an instance from the list row", async ({ page }
   await menuAction(page, name, "Delete", { confirm: true });
   await expect(row).toHaveCount(0);
 });
+
+test("sidebar instance link exposes status as text, not color alone", async ({ page }) => {
+  await page.goto("/");
+
+  // The seeded "demo" instance is Stopped; its sidebar link must convey that
+  // status with screen-reader text (sr-only) and a hover title, so the colored
+  // dot is not the only status signal (WCAG 1.4.1).
+  const link = page.locator("aside").getByRole("link", { name: /demo.*Stopped/ });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute("title", "demo — Stopped");
+});

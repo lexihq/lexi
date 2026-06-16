@@ -91,9 +91,13 @@ func TestSidebarInstancesRendersStatusDotsAndActive(t *testing.T) {
 
 	assertContains(t, html, "running-one")
 	assertContains(t, html, "stopped-one")
-	assertContains(t, html, "bg-green-500")        // running status dot
-	assertContains(t, html, "bg-muted-foreground") // stopped status dot
-	assertContains(t, html, "bg-accent")           // active highlight on running-one
+	assertContains(t, html, "bg-green-500") // running status dot
+	assertContains(t, html, "bg-gray-400")  // stopped status dot
+	assertContains(t, html, "bg-accent")    // active highlight on running-one
+	// Status is conveyed as text too, not color alone (WCAG 1.4.1): each link
+	// carries a hover title and screen-reader-only status text.
+	assertContains(t, html, `title="running-one — Running"`)
+	assertContains(t, html, `<span class="sr-only">Stopped</span>`)
 }
 
 func TestConsolePageOptsOutOfBoost(t *testing.T) {

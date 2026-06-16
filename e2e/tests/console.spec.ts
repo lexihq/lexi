@@ -35,7 +35,7 @@ test("console page keeps the instance tab bar for navigation", async ({ page }) 
 
   // The instance name and status are shown above the tabs, as on the detail page.
   await expect(page.getByRole("heading", { name: "demo" })).toBeVisible();
-  await expect(page.getByText("Stopped")).toBeVisible();
+  await expect(page.getByRole("main").getByText("Stopped")).toBeVisible();
 
   // The full set of instance tabs is present, with Console highlighted.
   const console = page.getByRole("link", { name: "Console" });

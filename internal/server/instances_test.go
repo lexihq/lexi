@@ -115,8 +115,9 @@ func TestSidebarPartialListsInstancesWithActive(t *testing.T) {
 	assert.Equal(t, http.StatusOK, res.Code)
 	body := res.Body.String()
 	assert.Contains(t, body, "demo")
-	assert.Contains(t, body, "bg-accent")           // active=demo highlight threaded through
-	assert.Contains(t, body, "bg-muted-foreground") // stopped status dot
+	assert.Contains(t, body, "bg-accent")   // active=demo highlight threaded through
+	assert.Contains(t, body, "bg-gray-400") // stopped status dot
+	assert.Contains(t, body, "Stopped")     // status as screen-reader text, not color alone
 }
 
 func TestDetailTabReturnsFragmentForHXAndFullPageOtherwise(t *testing.T) {

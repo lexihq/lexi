@@ -37,8 +37,9 @@ test("remotes: switch scopes the UI and clears the project selection", async ({ 
   // between daemons): switch with a project selected and verify the switcher
   // is back on default.
   await page.goto("/projects");
+  await page.getByRole("button", { name: "Create project" }).click();
   await page.locator('input[name="name"]').fill("e2e-remote-proj");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/projects\/e2e-remote-proj$/);
   await page.locator('select[name="project"]').selectOption("e2e-remote-proj");
   await expect(page.locator('select[name="project"]')).toHaveValue("e2e-remote-proj");

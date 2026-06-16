@@ -7,6 +7,7 @@ import (
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/dialog"
 	"github.com/adam/lxcon/internal/components/icon"
 	"github.com/adam/lxcon/internal/components/table"
 )
@@ -16,52 +17,115 @@ import (
 // mutating actions re-render in place.
 templ ImagesPage(caps backend.Capabilities, images []backend.LocalImage, instances []backend.Instance) {
 	@Layout("Images", caps, Nav{Section: NavImages}) {
-		<div class="mb-6">
-			<h1 class="text-2xl font-semibold">Images</h1>
-			<p class="text-muted-foreground">Images stored on this host, ready to launch instances from.</p>
-		</div>
-		<div class="mb-6 grid gap-4 lg:grid-cols-2">
-			<form hx-post="/images/copy" hx-target="#images-table" hx-swap="outerHTML" class="rounded-lg border bg-card p-4">
-				<h2 class="mb-2 text-lg font-medium">Copy from remote</h2>
-				<p class="mb-3 text-sm text-muted-foreground">Pull a catalog image (e.g. debian/12) into the local store.</p>
-				<div class="flex gap-2">
-					<input name="alias" required placeholder="debian/12" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
-					@button.Button(button.Props{Type: button.TypeSubmit}) {
+		<div class="mb-6 flex items-center justify-between gap-4">
+			<div>
+				<h1 class="text-2xl font-semibold">Images</h1>
+				<p class="text-muted-foreground">Images stored on this host, ready to launch instances from.</p>
+			</div>
+			<div class="flex flex-wrap justify-end gap-2">
+				@dialog.Trigger(dialog.TriggerProps{For: "copy-image"}) {
+					@button.Button(button.Props{}) {
 						@icon.Icon("download")(icon.Props{Class: "size-4"})
-						Copy
+						Copy from remote
 					}
-				</div>
-			</form>
-			<form hx-post="/images/publish" hx-target="#images-table" hx-swap="outerHTML" class="rounded-lg border bg-card p-4">
-				<h2 class="mb-2 text-lg font-medium">Publish from instance</h2>
-				<p class="mb-3 text-sm text-muted-foreground">Turn a stopped instance into a reusable image.</p>
-				<div class="flex gap-2">
-					<select name="instance" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm">
-						for _, inst := range instances {
-							<option value={ inst.Name }>{ inst.Name }</option>
-						}
-					</select>
-					<input name="alias" placeholder="alias (optional)" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
-					@button.Button(button.Props{Type: button.TypeSubmit}) {
+				}
+				@dialog.Trigger(dialog.TriggerProps{For: "publish-image"}) {
+					@button.Button(button.Props{Variant: button.VariantOutline}) {
 						@icon.Icon("package")(icon.Props{Class: "size-4"})
-						Publish
+						Publish from instance
 					}
-				</div>
-			</form>
-			<form method="post" action="/images/import" enctype="multipart/form-data" hx-boost="false" class="rounded-lg border bg-card p-4">
-				<h2 class="mb-2 text-lg font-medium">Import from file</h2>
-				<p class="mb-3 text-sm text-muted-foreground">Upload a unified image tarball (as produced by Export).</p>
-				<div class="flex gap-2">
-					<input name="image" type="file" required accept=".tar,.tar.gz,.tar.xz,.gz,.xz,application/octet-stream" class="w-1/2 rounded-md border bg-background px-3 py-1.5 text-sm"/>
-					<input name="alias" placeholder="alias (optional)" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
-					@button.Button(button.Props{Type: button.TypeSubmit}) {
+				}
+				@dialog.Trigger(dialog.TriggerProps{For: "import-image"}) {
+					@button.Button(button.Props{Variant: button.VariantOutline}) {
 						@icon.Icon("upload")(icon.Props{Class: "size-4"})
-						Import
+						Import from file
 					}
-				</div>
-			</form>
+				}
+			</div>
 		</div>
+		@dialog.Dialog(dialog.Props{ID: "copy-image"}) {
+			@dialog.Content() {
+				@dialog.Header() {
+					@dialog.Title() { Copy from remote }
+					@dialog.Description() { Pull a catalog image (e.g. debian/12) into the local store. }
+				}
+				<form hx-post="/images/copy" hx-target="#images-table" hx-swap="outerHTML" hx-on::after-request="window.tui.dialog.close('copy-image')" class="space-y-3">
+					<div>
+						<label class="mb-1 block text-sm font-medium" for="copy-alias">Image alias</label>
+						<input id="copy-alias" name="alias" required placeholder="debian/12" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+					</div>
+					@dialog.Footer() {
+						@dialog.Close() {
+							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+						}
+						@button.Button(button.Props{Type: button.TypeSubmit}) {
+							@icon.Icon("download")(icon.Props{Class: "size-4"})
+							Copy
+						}
+					}
+				</form>
+			}
+		}
+		@dialog.Dialog(dialog.Props{ID: "publish-image"}) {
+			@dialog.Content() {
+				@dialog.Header() {
+					@dialog.Title() { Publish from instance }
+					@dialog.Description() { Turn a stopped instance into a reusable image. }
+				}
+				<form hx-post="/images/publish" hx-target="#images-table" hx-swap="outerHTML" hx-on::after-request="window.tui.dialog.close('publish-image')" class="space-y-3">
+					<div>
+						<label class="mb-1 block text-sm font-medium" for="publish-instance">Instance</label>
+						<select id="publish-instance" name="instance" class="h-9 w-full rounded-md border bg-background px-3 text-sm">
+							for _, inst := range instances {
+								<option value={ inst.Name }>{ inst.Name }</option>
+							}
+						</select>
+					</div>
+					<div>
+						<label class="mb-1 block text-sm font-medium" for="publish-alias">Alias (optional)</label>
+						<input id="publish-alias" name="alias" placeholder="alias" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+					</div>
+					@dialog.Footer() {
+						@dialog.Close() {
+							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+						}
+						@button.Button(button.Props{Type: button.TypeSubmit}) {
+							@icon.Icon("package")(icon.Props{Class: "size-4"})
+							Publish
+						}
+					}
+				</form>
+			}
+		}
+		@dialog.Dialog(dialog.Props{ID: "import-image"}) {
+			@dialog.Content() {
+				@dialog.Header() {
+					@dialog.Title() { Import from file }
+					@dialog.Description() { Upload a unified image tarball (as produced by Export). }
+				}
+				<form method="post" action="/images/import" enctype="multipart/form-data" hx-boost="false" class="space-y-3">
+					<div>
+						<label class="mb-1 block text-sm font-medium" for="import-file">Image tarball</label>
+						<input id="import-file" name="image" type="file" required accept=".tar,.tar.gz,.tar.xz,.gz,.xz,application/octet-stream" class="w-full rounded-md border bg-background px-3 py-1.5 text-sm"/>
+					</div>
+					<div>
+						<label class="mb-1 block text-sm font-medium" for="import-alias">Alias (optional)</label>
+						<input id="import-alias" name="alias" placeholder="alias" class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
+					</div>
+					@dialog.Footer() {
+						@dialog.Close() {
+							@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+						}
+						@button.Button(button.Props{Type: button.TypeSubmit}) {
+							@icon.Icon("upload")(icon.Props{Class: "size-4"})
+							Import
+						}
+					}
+				</form>
+			}
+		}
 		@ImagesTable(caps, images)
+		@dialog.Script()
 	}
 }
 

@@ -9,9 +9,10 @@ test("projects: create, switch scope, edit, rename, and delete", async ({ page }
 
   // Create a project from the management page (networks stays unchecked).
   await page.goto("/projects");
+  await page.getByRole("button", { name: "Create project" }).click();
   await page.locator('input[name="name"]').fill("e2e-proj");
   await page.locator('input[name="description"]').fill("made by e2e");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/projects\/e2e-proj$/);
 
   // The sidebar switcher appears once a second project exists; switching
@@ -84,8 +85,9 @@ test("projects: create, switch scope, edit, rename, and delete", async ({ page }
 test("projects: delete an empty project straight from the list", async ({ page }) => {
   page.on("dialog", (d) => d.accept());
   await page.goto("/projects");
+  await page.getByRole("button", { name: "Create project" }).click();
   await page.locator('input[name="name"]').fill("e2e-rowdel");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/projects\/e2e-rowdel$/);
 
   await page.goto("/projects");
@@ -98,8 +100,9 @@ test("projects: delete an empty project straight from the list", async ({ page }
 test("projects: usage and validated limits on the detail page", async ({ page }) => {
   page.on("dialog", (d) => d.accept());
   await page.goto("/projects");
+  await page.getByRole("button", { name: "Create project" }).click();
   await page.locator('input[name="name"]').fill("e2e-limits");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/projects\/e2e-limits$/);
 
   // Scope to main: the collapsed Tasks footer echoes names in operation rows.

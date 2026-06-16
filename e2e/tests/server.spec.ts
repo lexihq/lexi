@@ -11,10 +11,11 @@ test("server section: add then remove a trusted certificate", async ({ page }) =
   const pem = readFileSync(join(__dirname, "..", "fixtures", "client.pem"), "utf8");
   await page.goto("/server");
 
+  await page.getByRole("button", { name: "Add certificate" }).click();
   await page.locator('form[action="/server/certificates"] input[name="name"]').fill("e2e-cert");
   await page.locator('form[action="/server/certificates"] select[name="type"]').selectOption("metrics");
   await page.locator('textarea[name="certificate"]').fill(pem);
-  await page.getByRole("button", { name: "Add certificate" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Add certificate" }).click();
 
   // Redirects back to /server with the new cert listed. On a reused dev
   // server the duplicate add 409-toasts instead, but the row still exists.
@@ -35,10 +36,11 @@ test("server section: edit a trusted certificate (rename + restrict)", async ({ 
   // Add a dedicated cert to edit. On a reused dev server the duplicate add
   // 409-toasts instead, but a row matching /e2e-cert-edit/ still exists
   // (possibly already renamed by an earlier run).
+  await page.getByRole("button", { name: "Add certificate" }).click();
   await page.locator('form[action="/server/certificates"] input[name="name"]').fill("e2e-cert-edit");
   await page.locator('form[action="/server/certificates"] select[name="type"]').selectOption("client");
   await page.locator('textarea[name="certificate"]').fill(pem);
-  await page.getByRole("button", { name: "Add certificate" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Add certificate" }).click();
 
   const certs = page.locator("#certificates");
   const row = certs.getByRole("row", { name: /e2e-cert-edit/ });

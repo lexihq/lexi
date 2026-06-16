@@ -13,13 +13,14 @@ test("manage local images: copy, publish, alias add/remove, delete", async ({ pa
   const table = page.locator("#images-table");
   await expect(table.getByText("debian/12")).toBeVisible();
 
-  // Copy a catalog alias into the local store. The copy/publish forms live
-  // outside the swapped table, so they have no swap-then-click race.
+  // Copy a catalog alias into the local store via the Copy-from-remote dialog.
+  await page.getByRole("button", { name: "Copy from remote" }).click();
   await page.locator('form[hx-post="/images/copy"] input[name="alias"]').fill("alpine/edge");
   await page.getByRole("button", { name: "Copy", exact: true }).click();
   await expect(table.getByText("alpine/edge")).toBeVisible();
 
   // Publish the seeded (stopped) instance as an image with an alias.
+  await page.getByRole("button", { name: "Publish from instance" }).click();
   await page.locator('form[hx-post="/images/publish"] select[name="instance"]').selectOption("demo");
   await page.locator('form[hx-post="/images/publish"] input[name="alias"]').fill("e2e-pub");
   await page.getByRole("button", { name: "Publish", exact: true }).click();
@@ -72,8 +73,9 @@ test("edit image details, export, and re-import", async ({ page }) => {
   const download = await downloadPromise;
   expect(download.suggestedFilename()).toMatch(/\.tar$/);
 
-  // Re-import the downloaded blob with a fresh alias.
+  // Re-import the downloaded blob with a fresh alias via the import dialog.
   const path = await download.path();
+  await page.getByRole("button", { name: "Import from file" }).click();
   await page.locator('form[action="/images/import"] input[name="image"]').setInputFiles({
     name: "image.tar",
     mimeType: "application/octet-stream",
@@ -106,6 +108,7 @@ test("export a split (VM) image as a zip and re-import it", async ({ page }) => 
 
   // Re-importing the zip restores a VM image under a fresh alias.
   const path = await download.path();
+  await page.getByRole("button", { name: "Import from file" }).click();
   await page.locator('form[action="/images/import"] input[name="image"]').setInputFiles({
     name: "image.zip",
     mimeType: "application/octet-stream",
@@ -131,6 +134,7 @@ test("image lifecycle: auto-update, expiry, and refresh on a copied image", asyn
   const table = page.locator("#images-table");
 
   // Copy a catalog image so there is an update source to manage.
+  await page.getByRole("button", { name: "Copy from remote" }).click();
   await page.locator('form[hx-post="/images/copy"] input[name="alias"]').fill("alpine/edge");
   await page.getByRole("button", { name: "Copy", exact: true }).click();
   const row = table.getByRole("row", { name: /alpine\/edge/ });

@@ -28,9 +28,10 @@ test("create, edit, and delete a profile", async ({ page }) => {
   await page.goto("/profiles");
 
   // Create.
+  await page.getByRole("button", { name: "Create profile" }).click();
   await page.locator('input[name="name"]').fill("e2e-prof");
   await page.locator('input[name="description"]').fill("made by e2e");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page).toHaveURL(/\/profiles\/e2e-prof$/);
 
   // Edit config via the trailing blank row.

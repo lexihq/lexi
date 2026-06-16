@@ -104,4 +104,38 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Visible keyboard focus for hand-rolled native form controls. The templui
+     components style their own focus rings; this gives the same treatment to
+     the bare <input>/<select>/<textarea> elements pages compose directly so
+     keyboard users never lose the focus indicator (WCAG 2.4.7). */
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    @apply border-ring ring-ring/50 ring-[3px] outline-none;
+  }
+
+  /* In-flight feedback for HTMX actions: htmx adds .htmx-request to the element
+     that issued the request for its duration. Dim and disable the triggering
+     button/link so the action reads as "in progress" and can't be double-fired.
+     Scoped to buttons/links so polled containers (ops footer, sidebar) don't
+     flash. */
+  button.htmx-request,
+  a.htmx-request {
+    @apply pointer-events-none opacity-60;
+    cursor: progress;
+  }
+}
+
+/* Honor the OS "reduce motion" setting: collapse animations, transitions, and
+   smooth scrolling to near-instant rather than removing functionality. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

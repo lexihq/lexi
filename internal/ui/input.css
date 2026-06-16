@@ -116,13 +116,15 @@
   }
 
   /* In-flight feedback for HTMX actions: htmx adds .htmx-request to the element
-     that issued the request for its duration. Dim the triggering button/link and
-     switch the cursor so the action reads as "in progress". Scoped to
-     buttons/links so polled containers (ops footer, sidebar) don't flash.
+     that issued the request for its duration. Dim the triggering button and
+     switch the cursor so the action reads as "in progress". Scoped to <button>
+     only: every in-place action (start/stop/delete/apply) is a button, while
+     plain <a> are hx-boost page navigations — flashing a progress cursor on
+     every link click read as the UI stuttering. Polled containers (sidebar,
+     ops footer) are <div>, so they never match either.
      (No pointer-events:none — it doesn't change behavior here and would only
      race rapid/retry-driven clicks.) */
-  button.htmx-request,
-  a.htmx-request {
+  button.htmx-request {
     @apply opacity-60;
     cursor: progress;
   }

@@ -177,7 +177,20 @@ func (h handlers) storageVolume(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.StorageVolumePage(h.backend.Capabilities(r.Context()), v, snaps))
+	caps := h.backend.Capabilities(r.Context())
+	var backups []backend.VolumeBackup
+	var pools []backend.StoragePool
+	if caps.VolumeStoredBackups {
+		if backups, err = h.backend.ListVolumeBackups(r.Context(), pool, volume); err != nil {
+			h.fail(w, err)
+			return
+		}
+		if pools, err = h.backend.ListStoragePools(r.Context()); err != nil {
+			h.fail(w, err)
+			return
+		}
+	}
+	h.renderShell(w, r, http.StatusOK, ui.StorageVolumePage(caps, v, snaps, backups, pools))
 }
 
 func (h handlers) createVolumeSnapshot(w http.ResponseWriter, r *http.Request) {

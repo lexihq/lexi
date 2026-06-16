@@ -6,6 +6,7 @@ import (
 
 	"github.com/adam/lxcon/internal/backend"
 	"github.com/adam/lxcon/internal/components/button"
+	"github.com/adam/lxcon/internal/components/dialog"
 	"github.com/adam/lxcon/internal/components/icon"
 	"github.com/adam/lxcon/internal/components/table"
 )
@@ -348,10 +349,14 @@ templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
 	</section>
 }
 
-// StorageVolumePage shows a custom volume's config and its snapshots.
-templ StorageVolumePage(caps backend.Capabilities, v backend.StorageVolume, snapshots []backend.StorageVolumeSnapshot) {
+// StorageVolumePage shows a custom volume's config, snapshots, and (when the
+// daemon supports it) its server-side backups.
+templ StorageVolumePage(caps backend.Capabilities, v backend.StorageVolume, snapshots []backend.StorageVolumeSnapshot, backups []backend.VolumeBackup, pools []backend.StoragePool) {
 	{{ volBase := "/storage/" + url.PathEscape(v.Pool) + "/volumes/" + url.PathEscape(v.Name) }}
 	@Layout(v.Name, caps, Nav{Section: NavStorage}) {
+		if caps.VolumeStoredBackups {
+			@dialog.Script()
+		}
 		<div class="mb-6 flex items-start justify-between gap-4">
 			<div>
 				<a href={ templ.URL("/storage/" + url.PathEscape(v.Pool)) } class="text-sm text-muted-foreground underline-offset-4 hover:underline">← { v.Pool }</a>
@@ -399,6 +404,130 @@ templ StorageVolumePage(caps backend.Capabilities, v backend.StorageVolume, snap
 			</form>
 		</section>
 		@StorageVolumeSnapshotsTable(v.Pool, v.Name, snapshots)
+		if caps.VolumeStoredBackups {
+			<div class="mt-8">
+				@VolumeBackupsTable(caps, v.Pool, v.Name, backups, pools)
+			</div>
+		}
+	}
+}
+
+// VolumeBackupsTable is the swappable server-side backups section for a custom
+// volume: create/download/restore-as/delete. HTMX posts re-render it in place;
+// plain posts redirect to the volume page.
+templ VolumeBackupsTable(caps backend.Capabilities, pool, volume string, backups []backend.VolumeBackup, pools []backend.StoragePool) {
+	{{ ep := url.PathEscape(pool) }}
+	{{ ev := url.PathEscape(volume) }}
+	{{ base := "/storage/" + ep + "/volumes/" + ev + "/backups" }}
+	<section id="volume-backups" class="rounded-lg border bg-card p-4">
+		<div class="mb-4 flex items-center justify-between gap-4">
+			<h2 class="text-lg font-medium">Backups</h2>
+			<form method="post" action={ templ.URL(base) } hx-post={ base } hx-target="#volume-backups" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
+				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="name" placeholder="backup name (optional)"/>
+				<label class="flex items-center gap-1 text-sm text-muted-foreground">
+					<input type="datetime-local" name="expires_at" class="h-9 rounded-md border bg-background px-2 text-sm" title="Expiry in UTC (optional)"/> UTC
+				</label>
+				<label class="flex items-center gap-1 text-sm text-muted-foreground">
+					<input type="checkbox" name="volume_only"/> volume only
+				</label>
+				@button.Button(button.Props{Type: button.TypeSubmit}) {
+					@icon.Icon("archive")(icon.Props{Class: "size-4"})
+					Create backup
+				}
+			</form>
+		</div>
+		<p class="mb-3 text-sm text-muted-foreground">Stored on the server — download, restore, or delete without re-uploading. "Volume only" skips snapshots.</p>
+		@table.Table() {
+			@table.Header() {
+				@table.Row() {
+					@table.Head() { Name }
+					@table.Head() { Created }
+					@table.Head() { Expires }
+					@table.Head() { Contents }
+					@table.Head() { Actions }
+				}
+			}
+			@table.Body() {
+				if len(backups) == 0 {
+					@emptyRow("5", "No backups yet.")
+				}
+				for _, bk := range backups {
+					{{ eb := url.PathEscape(bk.Name) }}
+					@table.Row() {
+						@table.Cell() { { bk.Name } }
+						@table.Cell() {
+							<span class="text-xs text-muted-foreground">{ bk.CreatedAt.UTC().Format("2006-01-02 15:04") } UTC</span>
+						}
+						@table.Cell() {
+							if bk.ExpiresAt.IsZero() {
+								<span class="text-xs text-muted-foreground">never</span>
+							} else {
+								<span class="text-xs text-muted-foreground">{ bk.ExpiresAt.UTC().Format("2006-01-02 15:04") } UTC</span>
+							}
+						}
+						@table.Cell() {
+							if bk.VolumeOnly {
+								<span class="rounded bg-accent px-1.5 py-0.5 text-xs">volume only</span>
+							} else {
+								<span class="text-xs text-muted-foreground">with snapshots</span>
+							}
+						}
+						@table.Cell() {
+							<div class="flex flex-wrap items-center gap-2">
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: base + "/" + eb + "/export", Attributes: templ.Attributes{"hx-boost": "false", "download": ""}}) {
+									@icon.Icon("download")(icon.Props{Class: "size-4"})
+									Download
+								}
+								@dialog.Trigger(dialog.TriggerProps{For: "restore-vbk-" + bk.Name}) {
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline}) {
+										@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
+										Restore…
+									}
+								}
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Attributes: templ.Attributes{"hx-post": base + "/" + eb + "/delete", "hx-target": "#volume-backups", "hx-swap": "outerHTML", "hx-confirm": "Delete backup " + bk.Name + "?"}}) {
+									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+									Delete
+								}
+							</div>
+							@volumeBackupRestoreDialog(pool, volume, bk.Name, pools)
+						}
+					}
+				}
+			}
+		}
+	</section>
+}
+
+// volumeBackupRestoreDialog asks for a target pool and new volume name; restore
+// lands on the new volume, so the form posts full-page.
+templ volumeBackupRestoreDialog(pool, volume, backup string, pools []backend.StoragePool) {
+	{{ base := "/storage/" + url.PathEscape(pool) + "/volumes/" + url.PathEscape(volume) + "/backups/" + url.PathEscape(backup) }}
+	@dialog.Dialog(dialog.Props{ID: "restore-vbk-" + backup}) {
+		@dialog.Content() {
+			@dialog.Header() {
+				@dialog.Title() { Restore { backup } }
+			}
+			<form method="post" action={ templ.URL(base + "/restore") } hx-boost="false" class="flex flex-col gap-4">
+				<label class="flex flex-col gap-2 text-sm font-medium">
+					Target pool
+					<select name="target_pool" class="h-9 rounded-md border bg-background px-3 text-sm font-normal">
+						for _, p := range pools {
+							<option value={ p.Name }>{ p.Name }</option>
+						}
+					</select>
+				</label>
+				<label class="flex flex-col gap-2 text-sm font-medium">
+					New volume name
+					<input class="h-9 rounded-md border bg-background px-3 text-sm font-normal" name="name" required/>
+				</label>
+				@dialog.Footer() {
+					@dialog.Close() {
+						@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton}) { Cancel }
+					}
+					@button.Button(button.Props{Type: button.TypeSubmit}) { Restore }
+				}
+			</form>
+		}
 	}
 }
 

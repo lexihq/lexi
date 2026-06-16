@@ -59,6 +59,8 @@ type instanceServerStub struct {
 	createdVol *api.StorageVolumesPost // captured by CreateStoragePoolVolume
 	deletedVol [3]string               // pool/volType/name captured by DeleteStoragePoolVolume
 
+	volBackups        []api.StorageVolumeBackup            // returned by GetStorageVolumeBackups
+	extensions        map[string]bool                      // HasExtension lookups
 	volBackupOp       incusclient.Operation                // returned by CreateStorageVolumeBackup
 	volBackupDeleteOp incusclient.Operation                // returned by DeleteStorageVolumeBackup
 	volBackupBytes    []byte                               // written by GetStorageVolumeBackupFile
@@ -539,6 +541,14 @@ func (s *instanceServerStub) GetInstanceBackupFile(_ string, name string, req *i
 func (s *instanceServerStub) DeleteInstanceBackup(_ string, name string) (incusclient.Operation, error) {
 	s.deletedBackup = name
 	return s.backupDeleteOp, nil
+}
+
+func (s *instanceServerStub) HasExtension(name string) bool {
+	return s.extensions[name]
+}
+
+func (s *instanceServerStub) GetStorageVolumeBackups(_ string, _ string) ([]api.StorageVolumeBackup, error) {
+	return s.volBackups, s.storageErr
 }
 
 func (s *instanceServerStub) CreateStorageVolumeBackup(_ string, _ string, backup api.StorageVolumeBackupsPost) (incusclient.Operation, error) {

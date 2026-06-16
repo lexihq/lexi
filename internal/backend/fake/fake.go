@@ -57,6 +57,7 @@ type storageVolume struct {
 	backend.StorageVolume
 
 	snapshots []backend.StorageVolumeSnapshot
+	backups   map[string]*storedVolumeBackup
 	// version is the counter behind the Get/Update concurrency token, bumped
 	// on every volume config update.
 	version int
@@ -381,28 +382,29 @@ func (f *Fake) Capabilities(_ context.Context) backend.Capabilities {
 		Storage:    true,
 		Move:       true,
 
-		ImageManagement: true,
-		Operations:      true,
-		Files:           true,
-		FileDelete:      true,
-		FileMkdir:       true,
-		ServerAdmin:     true,
-		NetworkACLs:     true,
-		VolumeBackups:   true,
-		Projects:        true,
-		Events:          true,
-		Remotes:         true,
-		Migrate:         true,
-		NetworkForwards: true,
-		ImageRefresh:    true,
-		StoredBackups:   true,
-		CertificateEdit: true,
-		InstanceRebuild: true,
-		ISOVolumes:      true,
-		Hardware:        true,
-		ProjectUsage:    true,
-		NetworkZones:    true,
-		StorageBuckets:  true,
+		ImageManagement:     true,
+		Operations:          true,
+		Files:               true,
+		FileDelete:          true,
+		FileMkdir:           true,
+		ServerAdmin:         true,
+		NetworkACLs:         true,
+		VolumeBackups:       true,
+		Projects:            true,
+		Events:              true,
+		Remotes:             true,
+		Migrate:             true,
+		NetworkForwards:     true,
+		ImageRefresh:        true,
+		StoredBackups:       true,
+		VolumeStoredBackups: true,
+		CertificateEdit:     true,
+		InstanceRebuild:     true,
+		ISOVolumes:          true,
+		Hardware:            true,
+		ProjectUsage:        true,
+		NetworkZones:        true,
+		StorageBuckets:      true,
 	}
 }
 

@@ -512,7 +512,7 @@ templ volumeBackupRestoreDialog(pool, volume, backup string, pools []backend.Sto
 					Target pool
 					<select name="target_pool" class="h-9 rounded-md border bg-background px-3 text-sm font-normal">
 						for _, p := range pools {
-							<option value={ p.Name }>{ p.Name }</option>
+							<option value={ p.Name } selected?={ p.Name == pool }>{ p.Name }</option>
 						}
 					</select>
 				</label>

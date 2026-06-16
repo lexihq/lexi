@@ -704,7 +704,8 @@ func TestStoragePoolBucketsSectionGatedByCapability(t *testing.T) {
 
 func TestStorageVolumeBackupsSectionGatedByCapability(t *testing.T) {
 	vol := backend.StorageVolume{Pool: "default", Name: "vol0"}
-	pools := []backend.StoragePool{{Name: "default"}, {Name: "fast"}}
+	// "fast" first so pre-selection can't pass by virtue of DOM order.
+	pools := []backend.StoragePool{{Name: "fast"}, {Name: "default"}}
 	backups := []backend.VolumeBackup{{Name: "weekly"}}
 
 	caps := testCaps()
@@ -715,6 +716,8 @@ func TestStorageVolumeBackupsSectionGatedByCapability(t *testing.T) {
 	assertContains(t, html, `action="/storage/default/volumes/vol0/backups"`)
 	// The restore dialog offers the other pool as a target.
 	assertContains(t, html, "fast")
+	// The volume's own pool is pre-selected as the restore target.
+	assertContains(t, html, `<option value="default" selected>default</option>`)
 
 	plain := render(t, StorageVolumePage(testCaps(), vol, nil, nil, nil))
 	assertNotContains(t, plain, `action="/storage/default/volumes/vol0/backups"`)

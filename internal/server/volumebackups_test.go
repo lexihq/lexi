@@ -49,6 +49,15 @@ func TestVolumeBackupHandlers(t *testing.T) {
 	_, err = b.GetVolume(context.Background(), "pool", "vol2")
 	require.NoError(t, err)
 
+	// Restore-as with no target_pool falls back to the source pool.
+	res = formRequest(t, srv, "/storage/pool/volumes/vol/backups/weekly/restore", url.Values{"name": {"vol3"}}, false)
+	assertStatus(t, res, http.StatusSeeOther)
+	if !strings.HasPrefix(res.Header().Get("Location"), "/storage/pool/volumes/vol3") {
+		t.Fatalf("restore without target_pool should land in the source pool, got %q", res.Header().Get("Location"))
+	}
+	_, err = b.GetVolume(context.Background(), "pool", "vol3")
+	require.NoError(t, err)
+
 	// Delete.
 	res = formRequest(t, srv, "/storage/pool/volumes/vol/backups/weekly/delete", url.Values{}, false)
 	assertStatus(t, res, http.StatusSeeOther)

@@ -49,6 +49,8 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ title } · lxcon</title>
+			// Synchronous so the stored theme is applied to <html> before first paint.
+			<script src="/static/js/theme.js"></script>
 			<link href="/static/css/app.css" rel="stylesheet"/>
 			<script src="/static/js/htmx.min.js" defer></script>
 			if caps.Events {
@@ -67,11 +69,23 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 				<header class="flex items-center justify-between border-b bg-card px-4 py-3">
 					<div class="flex items-center gap-2">
 						<label for="sidebar-toggle" class="cursor-pointer rounded-md border p-1.5 md:hidden" aria-label="Toggle sidebar">☰</label>
-						<a href="/" class="text-xl font-semibold">lxcon</a>
+						<a href="/" class="flex items-center gap-2 text-xl font-semibold">
+							@icon.Icon("container")(icon.Props{Class: "size-6 text-primary"})
+							lxcon
+						</a>
 					</div>
 					<div class="flex items-center gap-3 text-sm text-muted-foreground">
 						<span>{ caps.ServerInfo }</span>
 						<span class="rounded-md border px-2 py-1">{ string(caps.Tier) }</span>
+						<button
+							type="button"
+							onclick="toggleTheme()"
+							class="cursor-pointer rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none"
+							aria-label="Toggle dark mode"
+						>
+							@icon.Icon("moon")(icon.Props{Class: "size-4 dark:hidden"})
+							@icon.Icon("sun")(icon.Props{Class: "hidden size-4 dark:block"})
+						</button>
 					</div>
 				</header>
 				<div class="flex flex-1 overflow-hidden">

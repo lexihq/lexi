@@ -47,6 +47,17 @@ func TestInstancePageSnapshotsTabRendersControls(t *testing.T) {
 	assertContains(t, html, `hx-post="/instances/demo/snapshots/snap0/restore"`)
 }
 
+func TestLazyTabRendersLoadingPlaceholder(t *testing.T) {
+	// A lazy-loaded tab (e.g. metrics) mounts an empty hx-get div; it must carry
+	// a loading placeholder so the tab body doesn't flash blank before the panel
+	// swaps in. The placeholder lives inside the div HTMX replaces on load.
+	html := render(t, InstancePage(backend.Capabilities{Metrics: true}, backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "metrics"))
+
+	assertContains(t, html, `hx-get="/instances/demo/metrics"`)
+	assertContains(t, html, `role="status"`)
+	assertContains(t, html, "Loading…")
+}
+
 func TestInstancePageGatesDisabledTabsToSummary(t *testing.T) {
 	// A direct ?tab= URL for a capability the backend lacks must fall back to
 	// Summary, never emitting the panel's poller/controls. We assert on the

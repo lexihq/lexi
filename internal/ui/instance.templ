@@ -79,6 +79,18 @@ templ InstanceHeader(caps backend.Capabilities, inst backend.Instance) {
 	</div>
 }
 
+// panelLoading is the placeholder shown inside a lazy-loaded tab <div> until its
+// HTMX request swaps the real panel in (hx-swap="outerHTML" replaces it whole).
+// It reserves space and announces progress (role=status) so the tab body shows a
+// loading cue instead of flashing empty on slower fetches. The spin is collapsed
+// by the global prefers-reduced-motion reset.
+templ panelLoading() {
+	<div class="flex items-center justify-center gap-2 rounded-lg border bg-card p-8 text-sm text-muted-foreground" role="status">
+		@icon.Icon("loader-circle")(icon.Props{Class: "size-4 animate-spin"})
+		Loading…
+	</div>
+}
+
 // InstanceBody is the swappable tab bar + active-tab content. HTMX tab links
 // target this element (outerHTML), so its id must match what the tab links
 // point at. Only the active tab is mounted, keeping panel ids (#metrics, #logs,
@@ -94,7 +106,9 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 					hx-get={ "/instances/" + url.PathEscape(inst.Name) + "/backups" }
 					hx-trigger="load"
 					hx-swap="outerHTML"
-				></div>
+				>
+					@panelLoading()
+				</div>
 			case "snapshots":
 				@SnapshotTable(inst.Name, snapshots)
 				<div
@@ -110,35 +124,45 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 					hx-get={ "/instances/" + inst.Name + "/metrics" }
 					hx-trigger="load, every 3s"
 					hx-swap="outerHTML"
-				></div>
+				>
+					@panelLoading()
+				</div>
 			case "logs":
 				<div
 					id="logs"
 					hx-get={ "/instances/" + inst.Name + "/logs" }
 					hx-trigger="load"
 					hx-swap="outerHTML"
-				></div>
+				>
+					@panelLoading()
+				</div>
 			case "config":
 				<div
 					id="config"
 					hx-get={ "/instances/" + inst.Name + "/config" }
 					hx-trigger="load"
 					hx-swap="outerHTML"
-				></div>
+				>
+					@panelLoading()
+				</div>
 			case "devices":
 				<div
 					id="devices"
 					hx-get={ "/instances/" + inst.Name + "/devices" }
 					hx-trigger="load"
 					hx-swap="outerHTML"
-				></div>
+				>
+					@panelLoading()
+				</div>
 			case "files":
 				<div
 					id="files"
 					hx-get={ "/instances/" + url.PathEscape(inst.Name) + "/files" }
 					hx-trigger="load"
 					hx-swap="outerHTML"
-				></div>
+				>
+					@panelLoading()
+				</div>
 			default:
 				<section class="mb-8 rounded-lg border bg-card p-4">
 					<h2 class="mb-3 text-lg font-medium">Details</h2>

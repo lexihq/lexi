@@ -38,7 +38,7 @@ templ ProfilesPage(caps backend.Capabilities, profiles []backend.Profile) {
 			}
 			@table.Body() {
 				if len(profiles) == 0 {
-					@emptyRow("3", "No profiles yet.")
+					@emptyRow("3", "No profiles yet — create one to get started.")
 				}
 				for _, p := range profiles {
 					@table.Row() {

@@ -103,7 +103,7 @@ templ ProjectsPage(caps backend.Capabilities, projects []backend.Project, curren
 			}
 			@table.Body() {
 				if len(projects) == 0 {
-					@emptyRow("4", "No projects yet.")
+					@emptyRow("4", "No projects yet — create one to get started.")
 				}
 				for _, p := range projects {
 					@table.Row() {

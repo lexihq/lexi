@@ -34,7 +34,7 @@ templ StoragePoolsPage(caps backend.Capabilities, pools []backend.StoragePool) {
 			}
 			@table.Body() {
 				if len(pools) == 0 {
-					@emptyRow("3", "No storage pools yet.")
+					@emptyRow("3", "No storage pools yet — create one to get started.")
 				}
 				for _, p := range pools {
 					@table.Row() {

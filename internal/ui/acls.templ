@@ -21,7 +21,7 @@ templ NetworkACLsPage(caps backend.Capabilities, acls []backend.NetworkACL) {
 			<p class="text-muted-foreground">Reusable traffic rules. Attach one by adding its name to a network's security.acls config key.</p>
 		</div>
 		if len(acls) == 0 {
-			<p class="mb-4 text-sm text-muted-foreground">No ACLs yet.</p>
+			<p class="mb-4 text-sm text-muted-foreground">No ACLs yet — create one to get started.</p>
 		} else {
 			@table.Table() {
 				@table.Header() {

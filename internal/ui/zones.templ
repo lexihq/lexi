@@ -24,7 +24,7 @@ templ NetworkZonesPage(caps backend.Capabilities, zones []backend.NetworkZone) {
 			<p class="text-muted-foreground">Managed DNS zones. Attach one by setting a network's dns.zone.forward (or reverse) config key to the zone name.</p>
 		</div>
 		if len(zones) == 0 {
-			<p class="mb-4 text-sm text-muted-foreground">No DNS zones yet.</p>
+			<p class="mb-4 text-sm text-muted-foreground">No DNS zones yet — create one to get started.</p>
 		} else {
 			@table.Table() {
 				@table.Header() {

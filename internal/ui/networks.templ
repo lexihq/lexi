@@ -58,7 +58,7 @@ templ NetworksTable(networks []backend.Network) {
 			}
 			@table.Body() {
 				if len(networks) == 0 {
-					@emptyRow("5", "No networks yet.")
+					@emptyRow("5", "No networks yet — create one to get started.")
 				}
 				for _, n := range networks {
 					@table.Row() {

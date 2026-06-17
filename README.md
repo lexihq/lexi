@@ -20,6 +20,27 @@ list · create-from-image · start/stop · snapshot · clone · delete.
 
 CSS, JS, and templates are embedded in the binary — nothing else to deploy.
 
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/dashboard-light.png" alt="Instances dashboard (light theme)" /></td>
+    <td width="50%"><img src=".github/assets/dashboard-dark.png" alt="Instances dashboard (dark theme)" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Instances dashboard — light</em></td>
+    <td align="center"><em>Instances dashboard — dark</em></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/metrics-light.png" alt="Live instance metrics (light theme)" /></td>
+    <td width="50%"><img src=".github/assets/metrics-dark.png" alt="Live instance metrics (dark theme)" /></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Live metrics — light</em></td>
+    <td align="center"><em>Live metrics — dark</em></td>
+  </tr>
+</table>
+
 ## Status
 
 v1 vertical slice (Incus tier, web UI) — under active development.

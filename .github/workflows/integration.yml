@@ -1,0 +1,44 @@
+name: integration
+
+# Integration tests need a live Incus daemon, so they're heavier and slower
+# than the unit/e2e suites (package install, image pulls, real containers).
+# They run on demand and nightly rather than gating every pull request.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 * * *' # nightly 04:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: integration (incus)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.x'
+
+      - name: Install Incus (zabbly stable)
+        run: |
+          set -eux
+          sudo mkdir -p /etc/apt/keyrings
+          sudo curl -fsSL https://pkgs.zabbly.com/key.asc -o /etc/apt/keyrings/zabbly.asc
+          echo "deb [signed-by=/etc/apt/keyrings/zabbly.asc] https://pkgs.zabbly.com/incus/stable $(. /etc/os-release && echo "$VERSION_CODENAME") main" \
+            | sudo tee /etc/apt/sources.list.d/zabbly-incus-stable.list
+          sudo apt-get update
+          sudo apt-get install -y incus
+
+      - name: Initialize Incus
+        run: |
+          set -eux
+          sudo incus admin init --minimal
+          sudo usermod -aG incus-admin "$USER"
+          # Wait for the daemon socket to be ready before the tests connect.
+          sudo incus info >/dev/null
+
+      - name: Run integration tests
+        run: sg incus-admin -c "make test-integration"

@@ -1,7 +1,20 @@
+<div align="center">
+
+<img src=".github/assets/logo.svg" alt="Lexi logo" width="120" height="120" />
+
 # Lexi
 
-> Proxmox-style LXC container management without the Proxmox overhead — a lean,
-> single-binary control plane that runs on **your** distro.
+**Proxmox-style LXC container management without the Proxmox overhead**
+
+A lean, single-binary control plane for [Incus](https://linuxcontainers.org/incus/) that runs on _your_ distro.
+
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE)
+&nbsp;![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)
+&nbsp;![Status](https://img.shields.io/badge/status-v1%20in%20development-orange)
+
+</div>
+
+---
 
 Lexi is a single static Go binary + server-rendered web UI for managing
 [Incus](https://linuxcontainers.org/incus/) LXC containers on one node:

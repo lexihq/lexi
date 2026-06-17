@@ -8,9 +8,7 @@
 
 A lean, single-binary control plane for [Incus](https://linuxcontainers.org/incus/) that runs on _your_ distro.
 
-[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE)
-&nbsp;![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)
-&nbsp;![Status](https://img.shields.io/badge/status-v1%20in%20development-orange)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue.svg)](LICENSE) ![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white) ![Status](https://img.shields.io/badge/status-v1%20in%20development-orange)
 
 </div>
 

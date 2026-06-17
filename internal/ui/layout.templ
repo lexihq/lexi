@@ -1,8 +1,8 @@
 package ui
 
 import (
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/components/icon"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/components/icon"
 )
 
 // NavInstances is the active-section key for the Instances nav entry.
@@ -48,7 +48,7 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-			<title>{ title } · lxcon</title>
+			<title>{ title } · Lexi</title>
 			// Synchronous so the stored theme is applied to <html> before first paint.
 			<script src="/static/js/theme.js"></script>
 			<link href="/static/css/app.css" rel="stylesheet"/>
@@ -76,7 +76,7 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 						</label>
 						<a href="/" class="flex items-center gap-2 text-xl font-semibold">
 							@icon.Icon("container")(icon.Props{Class: "size-6 text-primary"})
-							lxcon
+							Lexi
 						</a>
 					</div>
 					<div class="flex items-center gap-3 text-sm text-muted-foreground">

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the single self-contained lxcon binary:
+# Build the single self-contained lexi binary:
 #   templ generate -> tailwind build -> go build (CGO disabled, assets embedded).
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -14,6 +14,6 @@ echo "==> tailwind build"
 ./scripts/tailwind.sh
 
 echo "==> go build"
-CGO_ENABLED=0 go build -o lxcon ./cmd/lxcon
+CGO_ENABLED=0 go build -o lexi ./cmd/lexi
 
-echo "built ./lxcon"
+echo "built ./lexi"

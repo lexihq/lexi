@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/stretchr/testify/require"
 )
@@ -84,13 +84,13 @@ func TestServerAdminRoundTrip(t *testing.T) {
 	original, version, err := b.GetServerConfig(ctx)
 	require.NoError(t, err)
 	require.NotEmpty(t, version)
-	require.Empty(t, original["user.lxcon-test"], "leftover test key; unset user.lxcon-test and re-run")
+	require.Empty(t, original["user.lexi-test"], "leftover test key; unset user.lexi-test and re-run")
 
 	mod := maps.Clone(original)
 	if mod == nil {
 		mod = map[string]string{}
 	}
-	mod["user.lxcon-test"] = "1"
+	mod["user.lexi-test"] = "1"
 	// Unconditional write: the version token is exercised by stub/fake tests
 	// (see the comment above).
 	require.NoError(t, b.UpdateServerConfig(ctx, mod, ""))
@@ -104,15 +104,15 @@ func TestServerAdminRoundTrip(t *testing.T) {
 				return
 			}
 			cfg, _, err := b.GetServerConfig(ctx)
-			if err == nil && cfg["user.lxcon-test"] == "" {
+			if err == nil && cfg["user.lexi-test"] == "" {
 				return
 			}
 			time.Sleep(500 * time.Millisecond)
 		}
-		t.Error("restore never took effect; unset user.lxcon-test manually")
+		t.Error("restore never took effect; unset user.lexi-test manually")
 	})
 
-	waitForConfigKey(t, b, "user.lxcon-test", "1")
+	waitForConfigKey(t, b, "user.lexi-test", "1")
 
 	_, err = b.ListCertificates(ctx)
 	require.NoError(t, err)
@@ -130,7 +130,7 @@ func TestAddCertificateRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	tmpl := x509.Certificate{
 		SerialNumber: big.NewInt(time.Now().UnixNano()),
-		Subject:      pkix.Name{CommonName: "lxcon-integration"},
+		Subject:      pkix.Name{CommonName: "lexi-integration"},
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().Add(time.Hour),
 	}
@@ -145,7 +145,7 @@ func TestAddCertificateRoundTrip(t *testing.T) {
 		}
 	})
 
-	name := uniqueName("lxcon-cert")
+	name := uniqueName("lexi-cert")
 	require.NoError(t, b.AddCertificate(ctx, name, "metrics", pemData))
 
 	certs, err := b.ListCertificates(ctx)

@@ -37,6 +37,6 @@ vet: generate
 	go vet ./...
 
 clean:
-	rm -f lxcon
+	rm -f lexi
 	rm -rf dist
 	rm -f static/css/app.css

@@ -8,7 +8,7 @@ import (
 
 	"github.com/lxc/incus/v6/shared/api"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // ListOperations returns the daemon's running and recently finished

@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -103,12 +103,12 @@ func TestImageUpdateExportImportRoundTrip(t *testing.T) {
 	t.Cleanup(func() { _ = b.DeleteImage(ctx, fingerprint) })
 
 	// Update description + public and read both back.
-	require.NoError(t, b.UpdateImage(ctx, fingerprint, backend.ImageEdit{Description: "edited by lxcon", Public: true}))
+	require.NoError(t, b.UpdateImage(ctx, fingerprint, backend.ImageEdit{Description: "edited by lexi", Public: true}))
 	imgs, err = b.ListLocalImages(ctx)
 	require.NoError(t, err)
 	idx := slices.IndexFunc(imgs, func(i backend.LocalImage) bool { return i.Fingerprint == fingerprint })
 	require.GreaterOrEqual(t, idx, 0)
-	assert.Equal(t, "edited by lxcon", imgs[idx].Description)
+	assert.Equal(t, "edited by lexi", imgs[idx].Description)
 	assert.True(t, imgs[idx].Public)
 
 	// Export the unified tarball, delete the original, re-import under a new
@@ -150,7 +150,7 @@ func buildImageMetadata(t *testing.T, description string) []byte {
 	return buf.Bytes()
 }
 
-// buildSplitImageZip packs metadata + rootfs into the lxcon split-image zip.
+// buildSplitImageZip packs metadata + rootfs into the lexi split-image zip.
 func buildSplitImageZip(t *testing.T, meta, rootfs []byte) []byte {
 	t.Helper()
 	var buf bytes.Buffer
@@ -178,8 +178,8 @@ func TestSplitImageImportExportRoundTrip(t *testing.T) {
 	defer cancel()
 
 	alias := uniqueName("splitimg")
-	meta := buildImageMetadata(t, "lxcon split-image integration test")
-	rootfs := []byte("lxcon-fake-vm-rootfs-blob")
+	meta := buildImageMetadata(t, "lexi split-image integration test")
+	rootfs := []byte("lexi-fake-vm-rootfs-blob")
 
 	require.NoError(t, b.ImportImage(ctx, bytes.NewReader(buildSplitImageZip(t, meta, rootfs)), alias))
 

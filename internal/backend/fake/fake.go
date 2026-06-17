@@ -10,12 +10,12 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // fakeBackupMagic prefixes the deterministic blob ExportInstance writes so
-// ImportInstance can recognize a lxcon-produced backup and recover the image.
-const fakeBackupMagic = "lxcon-fake-backup\n"
+// ImportInstance can recognize a lexi-produced backup and recover the image.
+const fakeBackupMagic = "lexi-fake-backup\n"
 
 // Compile-time proof that Fake satisfies the Backend contract.
 var _ backend.Backend = (*Fake)(nil)

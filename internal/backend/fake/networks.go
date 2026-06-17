@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 func (f *Fake) ListNetworks(ctx context.Context) ([]backend.Network, error) {

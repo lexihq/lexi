@@ -18,7 +18,7 @@ test("console terminal round-trips typed input over the websocket", async ({ pag
 
   // Type a unique command into xterm's hidden input; each keystroke flows
   // through term.onData -> ws.send(binary).
-  const marker = "lxcon-e2e-ping";
+  const marker = "lexi-e2e-ping";
   const input = page.locator("textarea.xterm-helper-textarea");
   await input.focus();
   await input.pressSequentially(marker);

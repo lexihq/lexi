@@ -1,4 +1,4 @@
-// console.js wires the vendored xterm.js terminal to the lxcon exec WebSocket.
+// console.js wires the vendored xterm.js terminal to the lexi exec WebSocket.
 // Wire protocol (matches internal/server consoleWS):
 //   client → server  binary frame  = stdin bytes
 //   client → server  text frame    = {"cols":N,"rows":M} resize

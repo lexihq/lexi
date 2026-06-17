@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // cpuSample records a cumulative CPU-time reading so the next Metrics call can

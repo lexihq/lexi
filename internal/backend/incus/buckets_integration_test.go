@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,14 +53,14 @@ func TestStorageBucketRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, keys)
 
-	key, err := b.CreateBucketKey(ctx, "default", name, "lxcon-ci", "ci reader", "read-only")
+	key, err := b.CreateBucketKey(ctx, "default", name, "lexi-ci", "ci reader", "read-only")
 	require.NoError(t, err)
 	assert.Equal(t, "read-only", key.Role)
 	assert.NotEmpty(t, key.AccessKey)
 	assert.NotEmpty(t, key.SecretKey)
-	_, err = b.CreateBucketKey(ctx, "default", name, "lxcon-ci", "", "")
+	_, err = b.CreateBucketKey(ctx, "default", name, "lexi-ci", "", "")
 	require.ErrorIs(t, err, backend.ErrConflict)
-	require.NoError(t, b.DeleteBucketKey(ctx, "default", name, "lxcon-ci"))
+	require.NoError(t, b.DeleteBucketKey(ctx, "default", name, "lexi-ci"))
 
 	require.NoError(t, b.DeleteBucket(ctx, "default", name))
 	require.ErrorIs(t, b.DeleteBucket(ctx, "default", name), backend.ErrNotFound)

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // Exec echoes stdin back to stdout for an existing instance, which is enough to

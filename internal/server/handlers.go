@@ -8,9 +8,9 @@ import (
 	"net/url"
 
 	"github.com/a-h/templ"
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/metrics"
-	"github.com/adam/lxcon/internal/ui"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/metrics"
+	"github.com/lexihq/lexi/internal/ui"
 )
 
 type handlers struct {
@@ -117,7 +117,7 @@ func (h handlers) renderWithSidebar(w http.ResponseWriter, r *http.Request, code
 	}
 }
 
-// csrfGuard rejects cross-site browser mutations: every state change in lxcon
+// csrfGuard rejects cross-site browser mutations: every state change in lexi
 // is a POST, and trusting a pasted certificate or deleting a pool must not be
 // triggerable by a foreign page's form. Browsers mark cross-site requests via
 // Sec-Fetch-Site and send Origin on POSTs; requests carrying neither header

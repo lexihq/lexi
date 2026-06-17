@@ -6,7 +6,7 @@ import (
 
 	"github.com/lxc/incus/v6/shared/api"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // ListNetworkLeases reports a managed network's DHCP leases, gateway entries

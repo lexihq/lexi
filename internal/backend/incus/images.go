@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	incusclient "github.com/lxc/incus/v6/client"
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/lxc/incus/v6/shared/cancel"
@@ -263,11 +263,11 @@ func (b *incusBackend) ExportImage(ctx context.Context, fingerprint string) (str
 		return tmp, err
 	}
 
-	meta, err := newTemp("lxcon-image-export-meta-*")
+	meta, err := newTemp("lexi-image-export-meta-*")
 	if err != nil {
 		return "", nil, fmt.Errorf("export image %q: %w", fingerprint, err)
 	}
-	rootfs, err := newTemp("lxcon-image-export-rootfs-*")
+	rootfs, err := newTemp("lexi-image-export-rootfs-*")
 	if err != nil {
 		cleanup()
 		return "", nil, fmt.Errorf("export image %q: %w", fingerprint, err)
@@ -326,7 +326,7 @@ func shortFingerprint(fingerprint string) string {
 	return fingerprint
 }
 
-// zipSplitImage assembles the lxcon split-image packaging: a zip (spooled to
+// zipSplitImage assembles the lexi split-image packaging: a zip (spooled to
 // another temp file) with a "metadata" entry plus "rootfs" or "rootfs.img"
 // per the image type. Entries are stored, not deflated — the payloads are
 // already compressed, and ImportImage rejects compressed entries as a
@@ -335,7 +335,7 @@ func (b *incusBackend) zipSplitImage(fingerprint, imgType string, meta, rootfs *
 	if _, err := rootfs.Seek(0, io.SeekStart); err != nil {
 		return nil, fmt.Errorf("export image %q: %w", fingerprint, err)
 	}
-	zipTmp, err := newTemp("lxcon-image-export-zip-*")
+	zipTmp, err := newTemp("lexi-image-export-zip-*")
 	if err != nil {
 		return nil, fmt.Errorf("export image %q: %w", fingerprint, err)
 	}
@@ -372,11 +372,11 @@ var zipMagic = []byte("PK\x03\x04")
 // splitImageArgs spools a split-image zip to a temp file (zip reading needs
 // io.ReaderAt) and returns CreateImage args streaming its metadata and rootfs
 // entries, with the type the rootfs entry name encodes. Entries must be the
-// exact lxcon packaging and stored uncompressed (zip-bomb guard: stored
+// exact lexi packaging and stored uncompressed (zip-bomb guard: stored
 // entries cannot expand past the upload cap). The release func frees the
 // spool; call it once CreateImage has consumed the readers.
 func (b *incusBackend) splitImageArgs(ctx context.Context, r io.Reader) (*incusclient.ImageCreateArgs, func(), error) {
-	tmp, err := os.CreateTemp("", "lxcon-image-import-*")
+	tmp, err := os.CreateTemp("", "lexi-image-import-*")
 	if err != nil {
 		return nil, nil, fmt.Errorf("import image: %w", err)
 	}
@@ -442,7 +442,7 @@ func (b *incusBackend) splitImageArgs(ctx context.Context, r io.Reader) (*incusc
 	}, releaseAll, nil
 }
 
-// ImportImage creates a local image from a unified tarball or a lxcon
+// ImportImage creates a local image from a unified tarball or a lexi
 // split-image zip (detected by the zip signature; the rootfs entry name
 // carries the image type), tagging it with alias when given (a failed alias
 // rolls the import back, like PublishImage). The upload reader is

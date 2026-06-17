@@ -16,7 +16,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	incusclient "github.com/lxc/incus/v6/client"
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/lxc/incus/v6/shared/cancel"
@@ -276,7 +276,7 @@ func toVolumeSnapshot(s *api.StorageVolumeSnapshot) backend.StorageVolumeSnapsho
 // flow as ExportInstance, one level down. The temporary backup is removed via
 // deferred best-effort cleanup on every path.
 func (b *incusBackend) ExportVolume(ctx context.Context, pool, volume string, w io.Writer) error {
-	backupName := fmt.Sprintf("lxcon-export-%d", time.Now().UnixNano())
+	backupName := fmt.Sprintf("lexi-export-%d", time.Now().UnixNano())
 
 	// Capture the scoped client once: the deferred cleanup runs under its own
 	// detached context and must still target the request's project.
@@ -302,7 +302,7 @@ func (b *incusBackend) ExportVolume(ctx context.Context, pool, volume string, w 
 		return fmt.Errorf("create backup of volume %q/%q: %w", pool, volume, mapErr(err))
 	}
 
-	tmp, err := os.CreateTemp("", "lxcon-volume-export-*.tar.gz")
+	tmp, err := os.CreateTemp("", "lexi-volume-export-*.tar.gz")
 	if err != nil {
 		return fmt.Errorf("spool backup of volume %q/%q: %w", pool, volume, err)
 	}

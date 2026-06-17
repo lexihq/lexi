@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	incusclient "github.com/lxc/incus/v6/client"
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/lxc/incus/v6/shared/cancel"
@@ -21,7 +21,7 @@ import (
 // path, including errors between creation and streaming. The backup name is
 // timestamped to avoid colliding with concurrent runs.
 func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Writer) error {
-	backupName := fmt.Sprintf("lxcon-export-%d", time.Now().UnixNano())
+	backupName := fmt.Sprintf("lexi-export-%d", time.Now().UnixNano())
 
 	// Capture the scoped client once: the deferred cleanup runs under its own
 	// detached context and must still target the request's project.
@@ -48,7 +48,7 @@ func (b *incusBackend) ExportInstance(ctx context.Context, name string, w io.Wri
 		return fmt.Errorf("create backup of %q: %w", name, mapErr(err))
 	}
 
-	tmp, err := os.CreateTemp("", "lxcon-export-*.tar.gz")
+	tmp, err := os.CreateTemp("", "lexi-export-*.tar.gz")
 	if err != nil {
 		return fmt.Errorf("spool backup of %q: %w", name, err)
 	}

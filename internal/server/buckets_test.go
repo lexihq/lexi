@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend/fake"
+	"github.com/lexihq/lexi/internal/backend/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

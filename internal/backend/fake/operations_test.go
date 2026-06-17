@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 func TestListOperationsEmptyInitially(t *testing.T) {

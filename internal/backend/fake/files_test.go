@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // mustList lists a directory, failing the test on error.

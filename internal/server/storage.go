@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/ui"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/ui"
 )
 
 func (h handlers) storagePools(w http.ResponseWriter, r *http.Request) {

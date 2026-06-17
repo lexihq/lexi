@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // MigrateInstance relocates a stopped instance to another fake daemon's

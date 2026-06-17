@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 func (f *Fake) ListStoragePools(ctx context.Context) ([]backend.StoragePool, error) {
@@ -284,8 +284,8 @@ func (f *Fake) DeleteVolume(ctx context.Context, pool, name string) error {
 }
 
 // fakeVolumeBackupMagic prefixes the blob ExportVolume writes so ImportVolume
-// can recognize a lxcon-produced volume backup, mirroring fakeBackupMagic.
-const fakeVolumeBackupMagic = "lxcon-fake-volume-backup\n"
+// can recognize a lexi-produced volume backup, mirroring fakeBackupMagic.
+const fakeVolumeBackupMagic = "lexi-fake-volume-backup\n"
 
 // volumeBackupBlob is the JSON payload after the magic: just enough state to
 // make the export→import round-trip observable in tests.
@@ -321,7 +321,7 @@ func (f *Fake) ImportVolume(ctx context.Context, pool, volume string, r io.Reade
 	}
 	payload, ok := strings.CutPrefix(string(blob), fakeVolumeBackupMagic)
 	if !ok {
-		return fmt.Errorf("not a lxcon volume backup: %w", backend.ErrInvalid)
+		return fmt.Errorf("not a lexi volume backup: %w", backend.ErrInvalid)
 	}
 	var vb volumeBackupBlob
 	if err := json.Unmarshal([]byte(payload), &vb); err != nil {

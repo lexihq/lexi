@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // Key scopes a store entry by remote, project, and instance name so that

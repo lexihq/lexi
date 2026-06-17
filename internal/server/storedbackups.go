@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/ui"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/ui"
 )
 
 // backupsPanel is the lazy-loaded Backups tab body.

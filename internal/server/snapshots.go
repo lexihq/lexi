@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/ui"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/ui"
 )
 
 // snapshotExpiryLayout is the format an <input type="datetime-local"> submits.

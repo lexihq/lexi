@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // ExportInstance writes a deterministic backup blob for an existing instance so
@@ -35,7 +35,7 @@ func (f *Fake) ImportInstance(ctx context.Context, name string, r io.Reader) err
 	}
 	image, ok := strings.CutPrefix(string(blob), fakeBackupMagic)
 	if !ok {
-		return fmt.Errorf("not a lxcon backup: %w", backend.ErrInvalid)
+		return fmt.Errorf("not a lexi backup: %w", backend.ErrInvalid)
 	}
 
 	f.mu.Lock()

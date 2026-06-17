@@ -3,7 +3,7 @@ package fake
 import (
 	"context"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // Metrics returns deterministic canned counters for any existing instance, so

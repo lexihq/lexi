@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // storedVolumeBackup is one server-side volume backup: the metadata plus the

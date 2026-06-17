@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // testImage is small and fast to pull, keeping integration runs cheap.
@@ -44,7 +44,7 @@ func newBackend(t *testing.T) *incusBackend {
 var nameSerial atomic.Int64
 
 func uniqueName(prefix string) string {
-	return fmt.Sprintf("lxcon-it-%s-%d-%d", prefix, time.Now().UnixNano()%1_000_000, nameSerial.Add(1))
+	return fmt.Sprintf("lexi-it-%s-%d-%d", prefix, time.Now().UnixNano()%1_000_000, nameSerial.Add(1))
 }
 
 // Consecutive names must differ even within one clock tick — tests use

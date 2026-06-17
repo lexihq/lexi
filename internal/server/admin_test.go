@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend/fake"
+	"github.com/lexihq/lexi/internal/backend/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -83,12 +83,12 @@ func adminTestCertPEM(t *testing.T) string {
 	require.NoError(t, err)
 	der, err := x509.CreateCertificate(rand.Reader, &x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "lxcon-server-test"},
+		Subject:      pkix.Name{CommonName: "lexi-server-test"},
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().Add(time.Hour),
 	}, &x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "lxcon-server-test"},
+		Subject:      pkix.Name{CommonName: "lexi-server-test"},
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().Add(time.Hour),
 	}, &key.PublicKey, key)

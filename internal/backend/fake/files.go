@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // fakeFile is one node in a fake instance's filesystem: a directory, symlink,

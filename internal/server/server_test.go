@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend/fake"
+	"github.com/lexihq/lexi/internal/backend/fake"
 )
 
 func TestServerSetsReadHeaderTimeout(t *testing.T) {

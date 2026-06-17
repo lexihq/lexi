@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // Shared test helpers for the fake package, used across the per-feature

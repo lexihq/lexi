@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

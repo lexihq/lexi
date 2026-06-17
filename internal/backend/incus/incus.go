@@ -9,19 +9,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	incusclient "github.com/lxc/incus/v6/client"
 	"github.com/lxc/incus/v6/shared/api"
 )
 
-// imagesRemote is the public image server lxcon pulls base images from.
+// imagesRemote is the public image server lexi pulls base images from.
 const imagesRemote = "https://images.linuxcontainers.org"
 
 // imageCacheTTL bounds how long the full simplestreams catalog is reused before
 // a refetch, so per-keystroke filtering never hits the network.
 const imageCacheTTL = time.Hour
 
-// cpuSampleTTL bounds stale metric state for instances deleted outside lxcon or
+// cpuSampleTTL bounds stale metric state for instances deleted outside lexi or
 // requests that finish racing with deletion.
 const cpuSampleTTL = 10 * time.Minute
 

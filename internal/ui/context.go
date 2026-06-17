@@ -3,7 +3,7 @@ package ui
 import (
 	"context"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // sidebarCtxKey keys the instance list that full-page handlers preload so the

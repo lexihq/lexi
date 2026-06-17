@@ -1,4 +1,4 @@
-// Package server wires the HTTP routes for the lxcon web UI.
+// Package server wires the HTTP routes for the lexi web UI.
 package server
 
 import (
@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/metrics"
-	"github.com/adam/lxcon/static"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/metrics"
+	"github.com/lexihq/lexi/static"
 )
 
 const readHeaderTimeout = 5 * time.Second
@@ -36,7 +36,7 @@ func WithMetricsSampler(ctx context.Context) Option {
 	}
 }
 
-// New builds an HTTP server with all lxcon routes registered. The backend is
+// New builds an HTTP server with all lexi routes registered. The backend is
 // injected here so handlers stay driver-agnostic as the UI grows.
 func New(b backend.Backend, opts ...Option) *http.Server {
 	h := handlers{backend: b, samples: metrics.NewStore(metricsHistory)}

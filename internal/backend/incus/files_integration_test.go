@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,15 +22,15 @@ func TestFilePushPullRoundTrip(t *testing.T) {
 	t.Cleanup(func() { cleanupInstance(t, b, name) })
 	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
 
-	const target = "/root/lxcon-roundtrip.txt"
-	content := "lxcon file transfer\n"
+	const target = "/root/lexi-roundtrip.txt"
+	content := "lexi file transfer\n"
 	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader(content), backend.FileWriteOptions{}))
 
 	entries, err := b.ListFiles(ctx, name, "/root")
 	require.NoError(t, err)
 	var found bool
 	for _, e := range entries {
-		if e.Name == "lxcon-roundtrip.txt" && !e.Dir {
+		if e.Name == "lexi-roundtrip.txt" && !e.Dir {
 			found = true
 		}
 	}
@@ -51,7 +51,7 @@ func TestFileMetadataRoundTrip(t *testing.T) {
 	t.Cleanup(func() { cleanupInstance(t, b, name) })
 	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
 
-	const target = "/root/lxcon-meta.txt"
+	const target = "/root/lexi-meta.txt"
 	opts := backend.FileWriteOptions{Mode: "0600", UID: 1000, GID: 1000}
 	require.NoError(t, b.PushFile(ctx, name, target, strings.NewReader("v1\n"), opts))
 
@@ -109,7 +109,7 @@ func TestFileMkdirDeleteRoundTrip(t *testing.T) {
 	t.Cleanup(func() { cleanupInstance(t, b, name) })
 	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
 
-	const dir = "/root/lxcon-dir"
+	const dir = "/root/lexi-dir"
 	require.NoError(t, b.MakeDirectory(ctx, name, dir))
 
 	// Re-creating must conflict (the daemon would silently succeed; the
@@ -128,6 +128,6 @@ func TestFileMkdirDeleteRoundTrip(t *testing.T) {
 	entries, err := b.ListFiles(ctx, name, "/root")
 	require.NoError(t, err)
 	for _, e := range entries {
-		require.NotEqual(t, "lxcon-dir", e.Name, "directory should be gone")
+		require.NotEqual(t, "lexi-dir", e.Name, "directory should be gone")
 	}
 }

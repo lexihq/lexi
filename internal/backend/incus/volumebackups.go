@@ -12,7 +12,7 @@ import (
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/lxc/incus/v6/shared/cancel"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // ListVolumeBackups lists the named backups stored on the server for a custom
@@ -125,7 +125,7 @@ func (b *incusBackend) RestoreVolumeBackup(ctx context.Context, pool, volume, ba
 // spoolVolumeBackup downloads a stored backup into a rewound temp file. The
 // caller owns cleanup via cleanupExportTemp.
 func (b *incusBackend) spoolVolumeBackup(ctx context.Context, pool, volume, backup string) (*os.File, error) {
-	tmp, err := os.CreateTemp("", "lxcon-volbackup-*.tar.gz")
+	tmp, err := os.CreateTemp("", "lexi-volbackup-*.tar.gz")
 	if err != nil {
 		return nil, fmt.Errorf("spool backup %q of %q/%q: %w", backup, pool, volume, err)
 	}

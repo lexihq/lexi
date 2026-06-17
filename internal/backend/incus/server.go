@@ -8,7 +8,7 @@ import (
 	"maps"
 	"sort"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
 )
 

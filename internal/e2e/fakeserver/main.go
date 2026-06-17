@@ -1,7 +1,7 @@
-// Command fakeserver serves the lxcon web UI backed by the in-memory fake
+// Command fakeserver serves the lexi web UI backed by the in-memory fake
 // backend, seeded with one instance. It exists only to drive the Playwright
 // end-to-end tests without a real Incus daemon, so the test double never ships
-// in the production lxcon binary.
+// in the production lexi binary.
 package main
 
 import (
@@ -11,9 +11,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/backend/fake"
-	"github.com/adam/lxcon/internal/server"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/backend/fake"
+	"github.com/lexihq/lexi/internal/server"
 )
 
 func main() {

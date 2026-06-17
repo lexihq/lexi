@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/ui"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/ui"
 )
 
 // imagesPage lists the local image store with copy/publish/alias controls. The

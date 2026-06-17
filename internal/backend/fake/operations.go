@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // WatchOperations registers a watcher that receives a tick whenever any

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 func (f *Fake) ListNetworkACLs(ctx context.Context) ([]backend.NetworkACL, error) {

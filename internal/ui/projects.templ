@@ -5,15 +5,15 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/components/button"
-	"github.com/adam/lxcon/internal/components/dialog"
-	"github.com/adam/lxcon/internal/components/icon"
-	"github.com/adam/lxcon/internal/components/table"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/components/button"
+	"github.com/lexihq/lexi/internal/components/dialog"
+	"github.com/lexihq/lexi/internal/components/icon"
+	"github.com/lexihq/lexi/internal/components/table"
 )
 
 // projectFeatures are the scoping flags the create form offers, with the
-// daemon's create-time defaults. Buckets/zones exist daemon-side but lxcon
+// daemon's create-time defaults. Buckets/zones exist daemon-side but lexi
 // doesn't manage those resources.
 var projectFeatures = []struct {
 	Key     string

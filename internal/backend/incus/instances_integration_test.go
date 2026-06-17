@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,7 +56,7 @@ func TestRebuildInstanceRoundTrip(t *testing.T) {
 
 	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{
 		Name: name, Image: testImage,
-		Config: map[string]string{"user.lxcon": "keep"},
+		Config: map[string]string{"user.lexi": "keep"},
 	}))
 
 	require.NoError(t, b.RebuildInstance(ctx, name, testImage, ""))
@@ -66,7 +66,7 @@ func TestRebuildInstanceRoundTrip(t *testing.T) {
 	require.Equal(t, "Stopped", inst.Status)
 	cfg, err := b.GetInstanceConfig(ctx, name)
 	require.NoError(t, err)
-	require.Equal(t, "keep", cfg.Config["user.lxcon"], "config must survive a rebuild")
+	require.Equal(t, "keep", cfg.Config["user.lexi"], "config must survive a rebuild")
 
 	require.ErrorIs(t, b.RebuildInstance(ctx, uniqueName("ghost"), testImage, ""), backend.ErrNotFound)
 }
@@ -99,7 +99,7 @@ func TestCreateWithOptionsRoundTrip(t *testing.T) {
 		Profiles: []string{"default"},
 		Pool:     pools[0].Name,
 		Network:  network,
-		Config:   map[string]string{"limits.cpu": "1", "user.lxcon": "yes"},
+		Config:   map[string]string{"limits.cpu": "1", "user.lexi": "yes"},
 	}))
 
 	inst, err := b.GetInstance(ctx, name)
@@ -109,7 +109,7 @@ func TestCreateWithOptionsRoundTrip(t *testing.T) {
 
 	cfg, err := b.GetInstanceConfig(ctx, name)
 	require.NoError(t, err)
-	require.Equal(t, "yes", cfg.Config["user.lxcon"])
+	require.Equal(t, "yes", cfg.Config["user.lexi"])
 	require.Equal(t, pools[0].Name, cfg.LocalDevices["root"]["pool"])
 	require.Equal(t, network, cfg.LocalDevices["eth0"]["network"])
 }

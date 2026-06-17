@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/metrics"
-	"github.com/adam/lxcon/internal/ui"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/metrics"
+	"github.com/lexihq/lexi/internal/ui"
 )
 
 // metrics renders the self-refreshing live-metrics panel for an instance.

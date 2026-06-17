@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +28,7 @@ func TestImportInstanceRoundTrip(t *testing.T) {
 	require.NoError(t, b.ExportInstance(ctx(), "demo", &buf))
 	require.ErrorIs(t, b.ImportInstance(ctx(), "demo", &buf), backend.ErrConflict)
 
-	// A blob that isn't a lxcon backup → ErrInvalid.
+	// A blob that isn't a lexi backup → ErrInvalid.
 	require.ErrorIs(t, b.ImportInstance(ctx(), "x", strings.NewReader("garbage")), backend.ErrInvalid)
 }
 

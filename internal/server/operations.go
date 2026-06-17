@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adam/lxcon/internal/ui"
+	"github.com/lexihq/lexi/internal/ui"
 )
 
 // operationsPanel renders the polled body of the bottom Tasks panel.

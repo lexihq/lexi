@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 func TestGetServerOverviewStatic(t *testing.T) {
@@ -159,7 +159,7 @@ func testCertPEM(t *testing.T) (string, string) {
 	}
 	tmpl := x509.Certificate{
 		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: "lxcon-test"},
+		Subject:      pkix.Name{CommonName: "lexi-test"},
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().Add(time.Hour),
 	}

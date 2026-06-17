@@ -6,11 +6,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // remoteCookie persists the UI's remote selection across requests.
-const remoteCookie = "lxcon-remote"
+const remoteCookie = "lexi-remote"
 
 // withRemote tags every request context with the validated remote selection
 // from the cookie. A stale cookie — the remote left the config or was down at

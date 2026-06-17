@@ -1,4 +1,4 @@
-// Package static embeds the built CSS/JS assets so lxcon ships as a single
+// Package static embeds the built CSS/JS assets so lexi ships as a single
 // self-contained binary (no external asset directory required at runtime).
 package static
 

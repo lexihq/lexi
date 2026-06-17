@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,12 +31,12 @@ func TestNetworkZoneRoundTrip(t *testing.T) {
 	assert.Equal(t, "made by test", z.Description)
 
 	// Versioned update: stale etag conflicts after a successful write.
-	require.NoError(t, b.UpdateNetworkZone(ctx, name, "edited", map[string]string{"user.lxcon": "yes"}, z.Version))
+	require.NoError(t, b.UpdateNetworkZone(ctx, name, "edited", map[string]string{"user.lexi": "yes"}, z.Version))
 	require.ErrorIs(t, b.UpdateNetworkZone(ctx, name, "stale", nil, z.Version), backend.ErrConflict)
 	z, err = b.GetNetworkZone(ctx, name)
 	require.NoError(t, err)
 	assert.Equal(t, "edited", z.Description)
-	assert.Equal(t, "yes", z.Config["user.lxcon"])
+	assert.Equal(t, "yes", z.Config["user.lexi"])
 
 	// Record lifecycle.
 	rec := backend.ZoneRecord{

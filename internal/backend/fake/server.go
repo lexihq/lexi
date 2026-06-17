@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 func (f *Fake) GetServerOverview(ctx context.Context) (backend.ServerOverview, error) {

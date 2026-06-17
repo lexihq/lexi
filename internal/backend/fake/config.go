@@ -5,7 +5,7 @@ import (
 	"maps"
 	"strconv"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 func (f *Fake) GetInstanceConfig(ctx context.Context, name string) (backend.InstanceConfig, error) {

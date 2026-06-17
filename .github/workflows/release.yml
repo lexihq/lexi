@@ -32,6 +32,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/lxcon-linux-amd64
-            dist/lxcon-linux-arm64
+            dist/lexi-linux-amd64
+            dist/lexi-linux-arm64
             install.sh

@@ -7,11 +7,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // projectCookie persists the UI's project selection across requests.
-const projectCookie = "lxcon-project"
+const projectCookie = "lexi-project"
 
 // withProject tags every request context with the validated project selection
 // from the cookie. A stale cookie — the project was deleted or renamed since
@@ -75,7 +75,7 @@ func (h handlers) selectProject(w http.ResponseWriter, r *http.Request) {
 // setProjectCookie pins the project selection. The name is query-escaped:
 // the daemon allows characters in project names (e.g. ";") that Go silently
 // strips from cookie values, which could otherwise scope requests to a
-// different existing project. No Secure attribute: lxcon routinely serves
+// different existing project. No Secure attribute: lexi routinely serves
 // plain HTTP (dev, LAN), where a Secure cookie silently breaks selection;
 // the value is a non-secret UI preference.
 func setProjectCookie(w http.ResponseWriter, name string) {

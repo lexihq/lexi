@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 func (f *Fake) ListProjects(ctx context.Context) ([]backend.Project, error) {
@@ -127,7 +127,7 @@ func (f *Fake) CreateProject(ctx context.Context, name, description string, conf
 	}
 	// Daemon parity: omitted default-enabled features are injected as "true"
 	// at create (images/profiles/storage.volumes; buckets exist daemon-side
-	// but lxcon doesn't model them). Networks stay absent = shared.
+	// but lexi doesn't model them). Networks stay absent = shared.
 	cfg := maps.Clone(config)
 	if cfg == nil {
 		cfg = map[string]string{}

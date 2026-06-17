@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/adam/lxcon/internal/ui"
+	"github.com/lexihq/lexi/internal/ui"
 )
 
 // maxImportBytes caps an uploaded backup tarball so import cannot exhaust the

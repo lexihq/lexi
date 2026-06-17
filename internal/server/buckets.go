@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // createBucket makes a bucket (name + optional description/size) and

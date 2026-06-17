@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 func (f *Fake) ListInstances(ctx context.Context) ([]backend.Instance, error) {

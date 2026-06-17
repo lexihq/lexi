@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,13 +35,13 @@ func TestProjectCRUDRoundTrip(t *testing.T) {
 
 	// Versioned update: stale etag conflicts after a successful write.
 	cfg := p.Config
-	cfg["user.lxcon"] = "yes"
+	cfg["user.lexi"] = "yes"
 	require.NoError(t, b.UpdateProject(ctx, name, "edited", cfg, p.Version))
 	require.ErrorIs(t, b.UpdateProject(ctx, name, "stale", cfg, p.Version), backend.ErrConflict)
 	got, err := b.GetProject(ctx, name)
 	require.NoError(t, err)
 	assert.Equal(t, "edited", got.Description)
-	assert.Equal(t, "yes", got.Config["user.lxcon"])
+	assert.Equal(t, "yes", got.Config["user.lexi"])
 
 	// Default-project guards fire before any daemon call.
 	require.ErrorIs(t, b.RenameProject(ctx, "default", uniqueName("x")), backend.ErrInvalid)

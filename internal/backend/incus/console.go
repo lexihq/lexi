@@ -7,8 +7,8 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/adam/lxcon/internal/backend"
 	"github.com/gorilla/websocket"
+	"github.com/lexihq/lexi/internal/backend"
 	incusclient "github.com/lxc/incus/v6/client"
 	"github.com/lxc/incus/v6/shared/api"
 )

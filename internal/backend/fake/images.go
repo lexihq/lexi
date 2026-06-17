@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // catalogImages stands in for the full simplestreams catalog the incus driver
@@ -145,12 +145,12 @@ func (f *Fake) RemoveImageAlias(ctx context.Context, alias string) error {
 }
 
 // fakeImageMagic prefixes the deterministic blob ExportImage writes so
-// ImportImage can recognize a lxcon-produced image tarball, mirroring the
+// ImportImage can recognize a lexi-produced image tarball, mirroring the
 // instance backup round-trip.
-const fakeImageMagic = "lxcon-fake-image\n"
+const fakeImageMagic = "lexi-fake-image\n"
 
 // fakeRootfsMagic prefixes the rootfs entry of a fake split-image zip.
-const fakeRootfsMagic = "lxcon-fake-rootfs\n"
+const fakeRootfsMagic = "lexi-fake-rootfs\n"
 
 // SeedSplitImage adds a VM-type local image for tests and the e2e fakeserver
 // (PublishImage only makes container images). VM images export as split zips,
@@ -260,7 +260,7 @@ func parseFakeImageBlob(blob []byte) (fingerprint, imgType string, err error) {
 		return orig, "container", nil
 	}
 	if !bytes.HasPrefix(blob, []byte("PK\x03\x04")) {
-		return "", "", fmt.Errorf("not a lxcon image tarball: %w", backend.ErrInvalid)
+		return "", "", fmt.Errorf("not a lexi image tarball: %w", backend.ErrInvalid)
 	}
 	zr, err := zip.NewReader(bytes.NewReader(blob), int64(len(blob)))
 	if err != nil {

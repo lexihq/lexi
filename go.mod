@@ -1,4 +1,4 @@
-module github.com/adam/lxcon
+module github.com/lexihq/lexi
 
 go 1.26.4
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // storedBackup is one server-side backup: the metadata plus the blob

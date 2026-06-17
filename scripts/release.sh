@@ -28,11 +28,11 @@ echo "==> tailwind build"
 for target in "${TARGETS[@]}"; do
 	GOOS="${target%/*}"
 	GOARCH="${target#*/}"
-	OUT="$DIST_DIR/lxcon-$GOOS-$GOARCH"
+	OUT="$DIST_DIR/lexi-$GOOS-$GOARCH"
 
 	echo "==> build $OUT"
 	CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" go build \
-		-o "$OUT" ./cmd/lxcon
+		-o "$OUT" ./cmd/lexi
 	chmod +x "$OUT"
 done
 

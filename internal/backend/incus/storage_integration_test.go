@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -125,10 +125,10 @@ func TestVolumeSnapshotRoundTrip(t *testing.T) {
 func TestStoragePoolCreateDeleteRoundTrip(t *testing.T) {
 	b := newBackend(t)
 	ctx := context.Background()
-	name := uniqueName("lxcon-pool")
+	name := uniqueName("lexi-pool")
 
 	require.NoError(t, b.CreateStoragePool(ctx, backend.StoragePool{
-		Name: name, Driver: "dir", Description: "lxcon integration",
+		Name: name, Driver: "dir", Description: "lexi integration",
 	}))
 	t.Cleanup(func() {
 		if err := b.DeleteStoragePool(context.Background(), name); err != nil {
@@ -139,7 +139,7 @@ func TestStoragePoolCreateDeleteRoundTrip(t *testing.T) {
 	p, err := b.GetStoragePool(ctx, name)
 	require.NoError(t, err)
 	assert.Equal(t, "dir", p.Driver)
-	assert.Equal(t, "lxcon integration", p.Description)
+	assert.Equal(t, "lexi integration", p.Description)
 	require.NotEmpty(t, p.Version)
 
 	// Versioned update round-trips description + a config key; a stale etag
@@ -223,7 +223,7 @@ func TestCreateVolumeFromISOIntegration(t *testing.T) {
 	name := fmt.Sprintf("lxiso%d", time.Now().UnixNano()%100000)
 	t.Cleanup(func() { _ = b.DeleteVolume(ctx, pool.Name, name) })
 
-	iso := bytes.Repeat([]byte("lxcon-iso-test-payload\n"), 64)
+	iso := bytes.Repeat([]byte("lexi-iso-test-payload\n"), 64)
 	require.NoError(t, b.CreateVolumeFromISO(ctx, pool.Name, name, bytes.NewReader(iso)))
 
 	got, err := b.GetVolume(ctx, pool.Name, name)

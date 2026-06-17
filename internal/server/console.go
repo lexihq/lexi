@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/ui"
 	"github.com/goccy/go-json"
 	"github.com/gorilla/websocket"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/ui"
 )
 
 // wsUpgrader upgrades console requests to WebSocket. The default same-origin

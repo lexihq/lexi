@@ -1,4 +1,4 @@
-// Command lxcon serves the Lexicon web UI for managing Incus LXC containers.
+// Command lexi serves the Lexicon web UI for managing Incus LXC containers.
 package main
 
 import (
@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/adam/lxcon/internal/backend/incus"
-	"github.com/adam/lxcon/internal/server"
+	"github.com/lexihq/lexi/internal/backend/incus"
+	"github.com/lexihq/lexi/internal/server"
 )
 
 const defaultListenAddr = "127.0.0.1:8080"
@@ -19,7 +19,7 @@ func main() {
 	flag.Parse()
 
 	if *incusRemote != "" {
-		if err := os.Setenv("LXCON_INCUS_REMOTE", *incusRemote); err != nil {
+		if err := os.Setenv("LEXI_INCUS_REMOTE", *incusRemote); err != nil {
 			slog.Error("set incus remote", "err", err)
 			os.Exit(1)
 		}

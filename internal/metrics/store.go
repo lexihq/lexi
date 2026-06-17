@@ -7,7 +7,7 @@ package metrics
 import (
 	"sync"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // SeriesKey identifies a per-instance history buffer. Build one only via Key so

@@ -1,7 +1,7 @@
 {
   "componentsDir": "internal/components",
   "utilsDir": "internal/utils",
-  "moduleName": "github.com/adam/lxcon",
+  "moduleName": "github.com/lexihq/lexi",
   "jsDir": "static/js",
   "jsPublicPath": "/static/js"
 }

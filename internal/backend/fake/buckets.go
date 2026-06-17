@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // fakeBucket is one bucket plus its access keys.

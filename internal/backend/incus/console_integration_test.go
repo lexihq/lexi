@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,7 +56,7 @@ func TestExecRunsCommandWithResize(t *testing.T) {
 		})
 	}()
 
-	if _, err := io.WriteString(stdinW, "echo lxcon-exec-ok\n"); err != nil {
+	if _, err := io.WriteString(stdinW, "echo lexi-exec-ok\n"); err != nil {
 		t.Fatalf("write command: %v", err)
 	}
 	time.Sleep(500 * time.Millisecond)
@@ -66,5 +66,5 @@ func TestExecRunsCommandWithResize(t *testing.T) {
 	require.NoError(t, stdinW.Close())
 
 	require.NoError(t, <-done)
-	assert.Contains(t, out.String(), "lxcon-exec-ok")
+	assert.Contains(t, out.String(), "lexi-exec-ok")
 }

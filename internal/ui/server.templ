@@ -5,11 +5,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/adam/lxcon/internal/backend"
-	"github.com/adam/lxcon/internal/components/button"
-	"github.com/adam/lxcon/internal/components/dialog"
-	"github.com/adam/lxcon/internal/components/icon"
-	"github.com/adam/lxcon/internal/components/table"
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/components/button"
+	"github.com/lexihq/lexi/internal/components/dialog"
+	"github.com/lexihq/lexi/internal/components/icon"
+	"github.com/lexihq/lexi/internal/components/table"
 )
 
 // ServerPage is the Server section: host overview, hardware inventory, server
@@ -182,7 +182,7 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, har
 			<h2 class="mb-1 text-lg font-medium">Configuration</h2>
 			<p class="mb-3 text-sm text-muted-foreground">
 				Server config keys. Clearing a key's name removes it on apply.
-				Careful with <span class="font-mono">core.https_address</span>: pointing it elsewhere can cut lxcon off from the daemon.
+				Careful with <span class="font-mono">core.https_address</span>: pointing it elsewhere can cut lexi off from the daemon.
 			</p>
 			<form method="post" action="/server/config" class="max-w-xl space-y-2">
 				<input type="hidden" name="version" value={ configVersion }/>

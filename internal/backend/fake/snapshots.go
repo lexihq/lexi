@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 func (f *Fake) ListSnapshots(ctx context.Context, name string) ([]backend.Snapshot, error) {

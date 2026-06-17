@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // ListNetworkLeases derives DHCP leases from the running instances whose NIC

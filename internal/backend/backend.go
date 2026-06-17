@@ -1,4 +1,4 @@
-// Package backend defines the driver-agnostic contract lxcon drives the UI
+// Package backend defines the driver-agnostic contract lexi drives the UI
 // through. Domain types are intentionally decoupled from incus/shared/api so a
 // future liblxc driver can implement the same interface without a rewrite.
 package backend
@@ -201,7 +201,7 @@ type NetworkACL struct {
 }
 
 // StoragePool is an Incus storage pool. Pools are driver-specific infra
-// (dir/zfs/btrfs/lvm/ceph) created at host setup; lxcon lists them read-only.
+// (dir/zfs/btrfs/lvm/ceph) created at host setup; lexi lists them read-only.
 // Config/UsedBy are read-only outputs.
 type StoragePool struct {
 	Name        string
@@ -214,7 +214,7 @@ type StoragePool struct {
 	Version string
 }
 
-// StorageVolume is a custom storage volume within a pool. lxcon manages only the
+// StorageVolume is a custom storage volume within a pool. lexi manages only the
 // "custom" volume type; container/image/vm volumes are managed by their
 // instances. Type/UsedBy are read-only outputs (Type is always "custom" here).
 type StorageVolume struct {
@@ -557,8 +557,8 @@ type NetworkState struct {
 	Addresses []string
 }
 
-// Remote is a configured Incus server lxcon can scope requests to. The list
-// is read from the CLI config; lxcon does not add or trust remotes itself.
+// Remote is a configured Incus server lexi can scope requests to. The list
+// is read from the CLI config; lexi does not add or trust remotes itself.
 type Remote struct {
 	Name    string
 	Addr    string

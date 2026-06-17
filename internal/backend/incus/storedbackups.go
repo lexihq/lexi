@@ -12,7 +12,7 @@ import (
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/lxc/incus/v6/shared/cancel"
 
-	"github.com/adam/lxcon/internal/backend"
+	"github.com/lexihq/lexi/internal/backend"
 )
 
 // ListInstanceBackups lists the named backups stored on the server, oldest
@@ -125,7 +125,7 @@ func (b *incusBackend) RestoreInstanceBackup(ctx context.Context, instance, back
 // spoolBackup downloads a stored backup into a rewound temp file. The caller
 // owns cleanup via cleanupExportTemp.
 func (b *incusBackend) spoolBackup(ctx context.Context, instance, backup string) (*os.File, error) {
-	tmp, err := os.CreateTemp("", "lxcon-backup-*.tar.gz")
+	tmp, err := os.CreateTemp("", "lexi-backup-*.tar.gz")
 	if err != nil {
 		return nil, fmt.Errorf("spool backup %q of %q: %w", backup, instance, err)
 	}

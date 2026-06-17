@@ -56,6 +56,31 @@ test("metrics panel polls for updates", async ({ page }) => {
   await expect.poll(() => metricsRequests, { timeout: 8_000 }).toBeGreaterThanOrEqual(2);
 });
 
+test("metrics tab renders history charts that update", async ({ page }) => {
+  let seriesRequests = 0;
+  page.on("response", (r) => {
+    if (r.url().includes("/instances/demo/metrics/series")) seriesRequests += 1;
+  });
+
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Metrics" }).click();
+
+  const charts = page.locator("#metrics-charts");
+  await expect(charts).toContainText("Resource history");
+
+  // metrics-charts.js draws a uPlot canvas into each chart slot.
+  await expect(charts.locator("#mc-cpu canvas").first()).toBeVisible();
+  await expect(charts.locator("#mc-mem canvas").first()).toBeVisible();
+  await expect(charts.locator("#mc-net canvas").first()).toBeVisible();
+
+  // The charts poll the JSON series endpoint to accumulate history.
+  await expect.poll(() => seriesRequests, { timeout: 8_000 }).toBeGreaterThanOrEqual(2);
+
+  // Leaving the tab tears the charts down (the polling loop self-destructs).
+  await page.getByRole("link", { name: "Logs" }).click();
+  await expect(page.locator("#metrics-charts")).toHaveCount(0);
+});
+
 test("detail tabs expose summary limits, metrics, and logs", async ({ page }) => {
   await page.goto("/instances/demo");
 

@@ -52,7 +52,10 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 			// Synchronous so the stored theme is applied to <html> before first paint.
 			<script src="/static/js/theme.js"></script>
 			<link href="/static/css/app.css" rel="stylesheet"/>
+			<link href="/static/css/uplot.min.css" rel="stylesheet"/>
 			<script src="/static/js/htmx.min.js" defer></script>
+			<script src="/static/js/uplot.min.js" defer></script>
+			<script src="/static/js/metrics-charts.js" defer></script>
 			if caps.Events {
 				<script src="/static/js/htmx-ext-sse.min.js" defer></script>
 			}

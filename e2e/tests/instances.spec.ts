@@ -361,3 +361,34 @@ test("sidebar instance link exposes status as text, not color alone", async ({ p
   await expect(link).toBeVisible();
   await expect(link).toHaveAttribute("title", "demo — Stopped");
 });
+
+test("wide-screen columns and the Console button follow run state", async ({ page }) => {
+  const name = "e2e-columns";
+
+  // A wide viewport reveals the lg-only columns (Image, CPU/Mem, Profiles,
+  // Created); a running instance also gets a Console button next to Stop.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openCreate(page);
+  await selectDebianImage(page);
+  await page.locator("#name").fill(name);
+  await page.locator("input[name=start]").check();
+  await submitCreate(page);
+
+  const row = page.locator(`#instance-${name}`);
+  await expect(row).toContainText("Running");
+  // Wide-screen Image column shows the base image.
+  await expect(row).toContainText("debian/12");
+  // Console is a visible button (not a menu item) while running.
+  const console = row.getByRole("link", { name: "Console" });
+  await expect(console).toBeVisible();
+  await expect(console).toHaveAttribute("href", `/instances/${name}/console`);
+
+  // Stopping the instance removes the Console button.
+  await primaryAction(page, name, "Stop");
+  await expect(row).toContainText("Stopped");
+  await expect(row.getByRole("link", { name: "Console" })).toHaveCount(0);
+
+  // Clean up from the shared server state.
+  await menuAction(page, name, "Delete", { confirm: true });
+  await expect(row).toHaveCount(0);
+});

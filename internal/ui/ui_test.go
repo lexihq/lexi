@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"context"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -198,6 +199,79 @@ func TestInstanceRowPrimaryActionFollowsStatus(t *testing.T) {
 	assertContains(t, running, "/instances/demo/stop")
 	if strings.Contains(running, "/instances/demo/start") {
 		t.Fatalf("running instance must not offer Start, got %q", running)
+	}
+}
+
+func TestInstanceRowShowsConsoleButtonOnlyWhenRunning(t *testing.T) {
+	caps := testCaps()
+	caps.Console = true
+
+	running := render(t, InstanceRow(caps, backend.Instance{Name: "demo", Status: "Running"}))
+	assertContains(t, running, `href="/instances/demo/console"`)
+
+	for _, status := range []string{"Stopped", "Frozen"} {
+		html := render(t, InstanceRow(caps, backend.Instance{Name: "demo", Status: status}))
+		if strings.Contains(html, `href="/instances/demo/console"`) {
+			t.Fatalf("%s instance must not offer a Console button, got %q", status, html)
+		}
+	}
+
+	// Console must no longer live in the kebab menu now that it is a button.
+	noCaps := render(t, InstanceRow(backend.Capabilities{}, backend.Instance{Name: "demo", Status: "Running"}))
+	if strings.Contains(noCaps, "/instances/demo/console") {
+		t.Fatalf("Console must be gated by caps.Console, got %q", noCaps)
+	}
+}
+
+func TestInstanceRowRendersWideScreenColumns(t *testing.T) {
+	html := render(t, InstanceRow(testCaps(), backend.Instance{
+		Name:         "demo",
+		Status:       "Running",
+		Image:        "debian/12",
+		LimitsCPU:    "2",
+		LimitsMemory: "2GiB",
+		Profiles:     []string{"default", "web"},
+		CreatedAt:    time.Date(2026, 6, 16, 10, 0, 0, 0, time.UTC),
+	}))
+
+	assertContains(t, html, "debian/12")
+	assertContains(t, html, "2 / 2GiB")
+	assertContains(t, html, "default, web")
+	assertContains(t, html, "2026-06-16")
+	// Extra columns are hidden by default and revealed on wide screens. TwMerge
+	// reorders the merged class list (and the order differs between process
+	// runs), so check both responsive classes land on the same cell rather than
+	// relying on a fixed adjacency, which would be flaky.
+	assertWideScreenColumn(t, html)
+}
+
+// assertWideScreenColumn fails unless some <td> carries both "hidden" and
+// "lg:table-cell" — i.e. a column hidden by default and shown only at lg —
+// regardless of the order TwMerge emits the classes in.
+func assertWideScreenColumn(t *testing.T, html string) {
+	t.Helper()
+	for _, cell := range regexp.MustCompile(`class="[^"]*"`).FindAllString(html, -1) {
+		if strings.Contains(cell, "lg:table-cell") && strings.Contains(cell, "hidden") {
+			return
+		}
+	}
+	t.Fatalf("expected a wide-screen-only column (hidden + lg:table-cell on one cell), got %q", html)
+}
+
+func TestLimitsSummaryFillsUnsetHalvesWithDash(t *testing.T) {
+	cases := []struct {
+		cpu, mem, want string
+	}{
+		{"2", "2GiB", "2 / 2GiB"},
+		{"2", "", "2 / —"},
+		{"", "2GiB", "— / 2GiB"},
+		{"", "", "— / —"},
+	}
+	for _, c := range cases {
+		got := limitsSummary(backend.Instance{LimitsCPU: c.cpu, LimitsMemory: c.mem})
+		if got != c.want {
+			t.Errorf("limitsSummary(cpu=%q, mem=%q) = %q, want %q", c.cpu, c.mem, got, c.want)
+		}
 	}
 }
 

@@ -262,6 +262,14 @@ type Metrics struct {
 	Processes   int64
 }
 
+// MetricSample is a Metrics snapshot stamped with the time it was taken, used
+// to build the time-series history behind the metrics charts.
+type MetricSample struct {
+	Metrics
+
+	Time time.Time
+}
+
 // WinSize is a terminal window size in character cells.
 type WinSize struct {
 	Cols int

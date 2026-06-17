@@ -127,6 +127,7 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 				>
 					@panelLoading()
 				</div>
+				@MetricsCharts(inst.Name)
 			case "logs":
 				<div
 					id="logs"

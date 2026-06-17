@@ -45,7 +45,7 @@ func main() {
 	// round-trip (PublishImage only makes container images).
 	b.SeedSplitImage("fake-vm-noble-aarch64", "Ubuntu Noble VM image")
 
-	srv := server.New(b)
+	srv := server.New(b, server.WithMetricsSampler(context.Background()))
 	srv.Addr = *addr
 
 	slog.Info("fakeserver listening", "addr", *addr, "instance", *instance)

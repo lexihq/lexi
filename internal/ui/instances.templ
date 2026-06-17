@@ -52,25 +52,37 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, ima
 			@table.Header() {
 				@table.Row() {
 					@table.Head() {
-						Name 
+						Name
 					}
 					@table.Head() {
-						Status 
+						Status
+					}
+					@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+						Image
 					}
 					@table.Head() {
-						IPv4 
+						IPv4
+					}
+					@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+						CPU / Mem
+					}
+					@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+						Profiles
 					}
 					@table.Head() {
-						Snapshots 
+						Snapshots
+					}
+					@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+						Created
 					}
 					@table.Head() {
-						Actions 
+						Actions
 					}
 				}
 			}
 			@table.Body() {
 				if len(instances) == 0 {
-					@emptyRow("5", "No instances yet — create one to get started.")
+					@emptyRow("9", "No instances yet — create one to get started.")
 				}
 				for _, inst := range instances {
 					@InstanceRow(caps, inst)
@@ -94,6 +106,13 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 		@table.Cell() {
 			@statusBadge(inst.Status)
 		}
+		@table.Cell(table.CellProps{Class: "hidden lg:table-cell"}) {
+			if inst.Image != "" {
+				{ inst.Image }
+			} else {
+				<span class="text-muted-foreground">—</span>
+			}
+		}
 		@table.Cell() {
 			if len(inst.IPv4) > 0 {
 				{ strings.Join(inst.IPv4, ", ") }
@@ -101,12 +120,35 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 				<span class="text-muted-foreground">—</span>
 			}
 		}
+		@table.Cell(table.CellProps{Class: "hidden lg:table-cell"}) {
+			{ limitsSummary(inst) }
+		}
+		@table.Cell(table.CellProps{Class: "hidden lg:table-cell"}) {
+			if len(inst.Profiles) > 0 {
+				{ strings.Join(inst.Profiles, ", ") }
+			} else {
+				<span class="text-muted-foreground">—</span>
+			}
+		}
 		@table.Cell() {
 			{ fmt.Sprint(inst.Snapshots) }
+		}
+		@table.Cell(table.CellProps{Class: "hidden lg:table-cell"}) {
+			if inst.CreatedAt.IsZero() {
+				<span class="text-muted-foreground">—</span>
+			} else {
+				{ inst.CreatedAt.UTC().Format("2006-01-02") }
+			}
 		}
 		@table.Cell() {
 			<div class="flex items-center gap-2">
 				@instancePrimaryAction(caps, inst)
+				if caps.Console && inst.Status == "Running" {
+					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+						@icon.Icon("square-terminal")(icon.Props{Class: "size-4"})
+						Console
+					}
+				}
 				@instanceMenu(caps, inst)
 			</div>
 			@instanceDialogs(caps, inst)
@@ -156,11 +198,6 @@ templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 					@dropdown.Item(dropdown.ItemProps{Attributes: instanceActionAttrs(inst.Name, "pause")}) {
 						Pause
 					}
-				}
-			}
-			if caps.Console {
-				@dropdown.Item(dropdown.ItemProps{Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
-					Console
 				}
 			}
 			if caps.Backup {
@@ -303,6 +340,20 @@ templ instanceActionDialog(id, title, action, field, label, submit string, input
 			</form>
 		}
 	}
+}
+
+// limitsSummary renders an instance's CPU and memory limits as "cpu / mem",
+// using an em dash for either half that is unset.
+func limitsSummary(inst backend.Instance) string {
+	cpu := inst.LimitsCPU
+	if cpu == "" {
+		cpu = "—"
+	}
+	mem := inst.LimitsMemory
+	if mem == "" {
+		mem = "—"
+	}
+	return cpu + " / " + mem
 }
 
 func instanceActionAttrs(name, action string) templ.Attributes {

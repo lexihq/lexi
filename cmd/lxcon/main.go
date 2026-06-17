@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"os"
@@ -30,7 +31,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	srv := server.New(b)
+	srv := server.New(b, server.WithMetricsSampler(context.Background()))
 	srv.Addr = *addr
 
 	slog.Info("listening", "addr", *addr)

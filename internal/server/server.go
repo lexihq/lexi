@@ -2,20 +2,47 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/metrics"
 	"github.com/adam/lxcon/static"
 )
 
 const readHeaderTimeout = 5 * time.Second
 
+// metricsHistory is the number of samples retained per instance. At the 3s
+// chart cadence this is ~5 minutes of history.
+const metricsHistory = 100
+
+// metricsInterval is how often the background sampler polls running instances.
+// Keep it in sync with the metrics panel's HTMX "every 3s" refresh
+// (instance.templ) and the chart JS POLL_MS (metrics-charts.js) so all three
+// cadences line up and the chart spacing stays even.
+const metricsInterval = 3 * time.Second
+
+// Option customizes the server built by New.
+type Option func(*handlers)
+
+// WithMetricsSampler starts a background goroutine that records per-instance
+// metrics into the history store on every metricsInterval tick, so charts have
+// data before the metrics tab is opened. The goroutine stops when ctx is done.
+func WithMetricsSampler(ctx context.Context) Option {
+	return func(h *handlers) {
+		go metrics.NewSampler(h.backend, h.samples, metricsInterval).Run(ctx)
+	}
+}
+
 // New builds an HTTP server with all lxcon routes registered. The backend is
 // injected here so handlers stay driver-agnostic as the UI grows.
-func New(b backend.Backend) *http.Server {
-	h := handlers{backend: b}
+func New(b backend.Backend, opts ...Option) *http.Server {
+	h := handlers{backend: b, samples: metrics.NewStore(metricsHistory)}
+	for _, opt := range opts {
+		opt(&h)
+	}
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static.FS)))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -125,6 +152,7 @@ func New(b backend.Backend) *http.Server {
 	mux.HandleFunc("GET /instances/{name}/rebuild", h.rebuildForm)
 	mux.HandleFunc("POST /instances/{name}/rebuild", h.rebuild)
 	mux.HandleFunc("GET /instances/{name}/metrics", h.metrics)
+	mux.HandleFunc("GET /instances/{name}/metrics/series", h.metricsSeries)
 	mux.HandleFunc("GET /instances/{name}/logs", h.logs)
 	mux.HandleFunc("GET /instances/{name}/backups", h.backupsPanel)
 	mux.HandleFunc("POST /instances/{name}/backups", h.createStoredBackup)

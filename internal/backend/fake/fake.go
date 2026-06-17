@@ -31,6 +31,10 @@ type instance struct {
 	// configVersion bumps on every config/device mutation; the
 	// GetInstanceConfig/UpdateDevice version token.
 	configVersion int
+	// metricsTick counts Metrics calls so the canned sample varies over time,
+	// giving the history charts a non-flat series. Tick 0 returns the documented
+	// canonical values the metrics tests assert on.
+	metricsTick int
 }
 
 type storagePool struct {

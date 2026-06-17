@@ -9,11 +9,13 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/adam/lxcon/internal/backend"
+	"github.com/adam/lxcon/internal/metrics"
 	"github.com/adam/lxcon/internal/ui"
 )
 
 type handlers struct {
 	backend backend.Backend
+	samples *metrics.Store
 }
 
 func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, action func(string) error) {

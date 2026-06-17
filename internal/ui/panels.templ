@@ -398,6 +398,35 @@ templ MetricsPanel(name string, m backend.Metrics) {
 	</section>
 }
 
+// MetricsCharts renders the time-series history charts. It is a static sibling
+// of the self-polling MetricsPanel — kept out of that 3s outerHTML swap so the
+// uPlot instances persist. metrics-charts.js (loaded globally) finds this
+// container, draws the charts, and polls the series endpoint to update them.
+templ MetricsCharts(name string) {
+	<section
+		id="metrics-charts"
+		data-instance={ name }
+		data-series-url={ "/instances/" + name + "/metrics/series" }
+		class="mb-8 rounded-lg border bg-card p-4"
+	>
+		<h2 class="mb-3 text-lg font-medium">Resource history</h2>
+		<div class="grid gap-6 lg:grid-cols-3">
+			<div>
+				<div class="mb-1 text-sm text-muted-foreground">CPU</div>
+				<div id="mc-cpu"></div>
+			</div>
+			<div>
+				<div class="mb-1 text-sm text-muted-foreground">Memory</div>
+				<div id="mc-mem"></div>
+			</div>
+			<div>
+				<div class="mb-1 text-sm text-muted-foreground">Network</div>
+				<div id="mc-net"></div>
+			</div>
+		</div>
+	</section>
+}
+
 // LogsPanel renders the instance console log with a manual refresh that swaps
 // the panel in place. The initial load is driven by the logs tab case in
 // InstanceBody.

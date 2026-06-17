@@ -13,16 +13,22 @@ func (f *Fake) Metrics(ctx context.Context, name string) (backend.Metrics, error
 	defer f.mu.Unlock()
 	sp := f.space(ctx)
 
-	if _, ok := sp.instances[name]; !ok {
+	in, ok := sp.instances[name]
+	if !ok {
 		return backend.Metrics{}, notFound(name)
 	}
+	// Vary the sample with each call so the history charts show movement; tick 0
+	// returns the canonical values the metrics tests assert on. Network counters
+	// climb monotonically, mirroring real cumulative byte counters.
+	n := int64(in.metricsTick)
+	in.metricsTick++
 	return backend.Metrics{
-		CPUPercent:  12.5,
-		MemoryUsage: 256 << 20,
+		CPUPercent:  12.5 + float64((n*7)%40),
+		MemoryUsage: (256 + (n%8)*16) << 20,
 		MemoryTotal: 1024 << 20,
-		DiskUsage:   512 << 20,
-		NetworkRx:   1 << 20,
-		NetworkTx:   2 << 20,
+		DiskUsage:   (512 + (n%4)*8) << 20,
+		NetworkRx:   (1 + n) << 20,
+		NetworkTx:   (2 + n) << 20,
 		Processes:   7,
 	}, nil
 }

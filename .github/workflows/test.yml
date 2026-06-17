@@ -39,7 +39,7 @@ jobs:
         with:
           go-version: '1.26.x'
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: npm
@@ -47,6 +47,13 @@ jobs:
 
       - name: Install templ
         run: go install github.com/a-h/templ/cmd/templ@v0.3.1020
+
+      - name: Install Tailwind CLI (standalone binary, like the vendored dev one)
+        run: |
+          mkdir -p bin
+          curl -fsSL -o bin/tailwindcss \
+            https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-x64
+          chmod +x bin/tailwindcss
 
       - name: Install e2e deps and browser
         run: make e2e-setup
@@ -56,7 +63,7 @@ jobs:
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: e2e/playwright-report/

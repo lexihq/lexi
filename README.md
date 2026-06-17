@@ -11,9 +11,7 @@ CSS, JS, and templates are embedded in the binary — nothing else to deploy.
 
 ## Status
 
-v1 vertical slice (Incus tier, web UI) — under active development. See
-[`docs/plans/2026-06-07-lexicon-v1-incus-slice.md`](docs/plans/2026-06-07-lexicon-v1-incus-slice.md)
-and [`docs/progress.md`](docs/progress.md).
+v1 vertical slice (Incus tier, web UI) — under active development.
 
 ## Prerequisites
 

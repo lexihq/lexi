@@ -21,5 +21,9 @@
     try {
       localStorage.setItem("theme", dark ? "dark" : "light");
     } catch (e) {}
+    // Canvas-drawn UI (uPlot charts, xterm) can't use CSS tokens, so notify it to
+    // re-read theme colors and redraw. DOM/Tailwind elements re-theme via the
+    // .dark class alone and ignore this.
+    window.dispatchEvent(new CustomEvent("lexi:themechange", { detail: { dark: dark } }));
   };
 })();

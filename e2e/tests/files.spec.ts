@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 // The instance Files tab: browse/upload/download, mkdir/delete, the text
 // editor, and the read-only viewer.

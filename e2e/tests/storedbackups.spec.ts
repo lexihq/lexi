@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 // Server-side named backups: the Backups tab on the instance detail page.
 // All tests run against the shared fake-backed server (instance "demo" seeded).

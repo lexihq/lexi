@@ -126,7 +126,11 @@ templ Content(props ...ContentProps) {
 	<dialog
 		class={
 			utils.TwMerge(
-				"fixed left-[50%] top-[50%] z-50 m-0 flex w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-hidden border bg-background p-6 text-foreground shadow-lg outline-none sm:max-w-lg",
+				// bg-popover (not bg-background): in dark mode the page background and a
+				// black shadow-lg give a modal zero figure/ground separation; the popover
+				// surface is a lighter elevated tone (matches cards). Identical to
+				// background in light mode, so no light-theme change.
+				"fixed left-[50%] top-[50%] z-50 m-0 flex w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-hidden border bg-popover p-6 text-popover-foreground shadow-lg outline-none sm:max-w-lg",
 				"[&:not([open]):not([data-tui-dialog-closing=true])]:hidden",
 				"rounded-lg",
 				"[&::backdrop]:transition-all [&::backdrop]:duration-200",

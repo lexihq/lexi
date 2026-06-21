@@ -26,7 +26,7 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, ima
 				}
 			</datalist>
 		}
-		<div class="mb-6 flex items-center justify-between gap-4">
+		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
 				<h1 class="text-2xl font-semibold">Instances</h1>
 				<p class="text-muted-foreground">Create and manage Incus containers on this node.</p>
@@ -48,9 +48,38 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, ima
 				}
 			</div>
 		</div>
+		@InstancesTable(caps, instances)
+		@CreateInstanceDialog(images, profiles, pools, networks)
+		if caps.Backup {
+			@ImportInstanceDialog()
+		}
+		@dropdown.Script()
+		@dialog.Script()
+	}
+}
+
+// InstancesTable is the swappable list body: a bulk-action bar (hidden until a
+// row is selected, driven by bulk-actions.js) over the instance table. The bulk
+// handler re-renders this whole fragment, so a bulk op resets selection and
+// reflects the new state. The select column is desktop-only — bulk is a
+// power-user affordance and would crowd the mobile table.
+templ InstancesTable(caps backend.Capabilities, instances []backend.Instance) {
+	<div id="instances-table">
+		<div data-bulk-bar class="mb-3 hidden flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-2">
+			<span data-bulk-count class="text-sm font-medium">0 selected</span>
+			<span class="text-muted-foreground" aria-hidden="true">·</span>
+			@bulkActionButton("start", "Start", "circle-play", false)
+			@bulkActionButton("stop", "Stop", "circle-stop", false)
+			@bulkActionButton("restart", "Restart", "rotate-cw", false)
+			@bulkActionButton("snapshot", "Snapshot", "camera", false)
+			@bulkActionButton("delete", "Delete", "trash-2", true)
+		</div>
 		@table.Table() {
 			@table.Header() {
 				@table.Row() {
+					@table.Head(table.HeadProps{Class: "hidden w-10 sm:table-cell"}) {
+						<input type="checkbox" data-bulk-all aria-label="Select all instances" class="size-4 cursor-pointer align-middle"/>
+					}
 					@table.Head() {
 						Name
 					}
@@ -82,24 +111,45 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, ima
 			}
 			@table.Body() {
 				if len(instances) == 0 {
-					@emptyRow("9", "No instances yet — create one to get started.")
+					@emptyRow("10", "No instances yet — create one to get started.")
 				}
 				for _, inst := range instances {
 					@InstanceRow(caps, inst)
 				}
 			}
 		}
-		@CreateInstanceDialog(images, profiles, pools, networks)
-		if caps.Backup {
-			@ImportInstanceDialog()
-		}
-		@dropdown.Script()
-		@dialog.Script()
+	</div>
+}
+
+// bulkActionButton is one button in the bulk bar. It posts the action plus the
+// checked rows ([data-bulk-cb]; unchecked checkboxes serialize nothing) and
+// swaps the table fragment. Destructive actions carry hx-confirm.
+templ bulkActionButton(action, label, iconName string, destructive bool) {
+	{{
+	attrs := templ.Attributes{
+		"hx-post":    "/instances/bulk",
+		"hx-include": "[data-bulk-cb]",
+		"hx-vals":    `{"action":"` + action + `"}`,
+		"hx-target":  "#instances-table",
+		"hx-swap":    "outerHTML",
+	}
+	cls := ""
+	if destructive {
+		attrs["hx-confirm"] = "Run “" + label + "” on the selected instances?"
+		cls = "text-destructive"
+	}
+	}}
+	@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: cls, Attributes: attrs}) {
+		@icon.Icon(iconName)(icon.Props{Class: "size-4"})
+		{ label }
 	}
 }
 
 templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 	@table.Row(table.RowProps{ID: "instance-" + inst.Name}) {
+		@table.Cell(table.CellProps{Class: "hidden sm:table-cell"}) {
+			<input type="checkbox" name="name" value={ inst.Name } data-bulk-cb aria-label={ "Select " + inst.Name } class="size-4 cursor-pointer align-middle"/>
+		}
 		@table.Cell() {
 			<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/instances/" + inst.Name) }>{ inst.Name }</a>
 		}
@@ -121,7 +171,10 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 			}
 		}
 		@table.Cell(table.CellProps{Class: "hidden lg:table-cell"}) {
-			{ limitsSummary(inst) }
+			<div class="space-y-1">
+				<div>{ limitsSummary(inst) }</div>
+				@cpuSparkline(instanceTrendFrom(ctx, inst.Name))
+			</div>
 		}
 		@table.Cell(table.CellProps{Class: "hidden lg:table-cell"}) {
 			if len(inst.Profiles) > 0 {
@@ -142,13 +195,17 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 		}
 		@table.Cell() {
 			<div class="flex items-center gap-2">
-				@instancePrimaryAction(caps, inst)
-				if caps.Console && inst.Status == "Running" {
-					@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
-						@icon.Icon("square-terminal")(icon.Props{Class: "size-4"})
-						Console
+				// Inline lifecycle + Console only fit from sm up; on mobile the table
+				// is too narrow, so these collapse into the kebab (see instanceMenu).
+				<div class="hidden items-center gap-2 sm:flex">
+					@instancePrimaryAction(caps, inst)
+					if caps.Console && inst.Status == "Running" {
+						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+							@icon.Icon("square-terminal")(icon.Props{Class: "size-4"})
+							Console
+						}
 					}
-				}
+				</div>
 				@instanceMenu(caps, inst)
 			</div>
 			@instanceDialogs(caps, inst)
@@ -182,6 +239,34 @@ templ instancePrimaryAction(caps backend.Capabilities, inst backend.Instance) {
 	}
 }
 
+// instanceMobileActions mirrors the inline primary lifecycle action and Console
+// as kebab items, shown only below sm (sm:hidden) where the inline buttons are
+// hidden. Same endpoints/attrs as the inline controls, so behaviour matches.
+templ instanceMobileActions(caps backend.Capabilities, inst backend.Instance) {
+	if inst.Status == "Running" {
+		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Attributes: instanceActionAttrs(inst.Name, "stop")}) {
+			Stop
+		}
+	} else if inst.Status == "Frozen" && caps.Pause {
+		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Attributes: instanceActionAttrs(inst.Name, "resume")}) {
+			Resume
+		}
+	} else if inst.Status == "Frozen" {
+		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Attributes: instanceActionAttrs(inst.Name, "stop")}) {
+			Stop
+		}
+	} else {
+		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Attributes: instanceActionAttrs(inst.Name, "start")}) {
+			Start
+		}
+	}
+	if caps.Console && inst.Status == "Running" {
+		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+			Console
+		}
+	}
+}
+
 templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 	@dropdown.Dropdown() {
 		@dropdown.Trigger() {
@@ -190,6 +275,9 @@ templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 			}
 		}
 		@dropdown.Content(dropdown.ContentProps{Placement: dropdown.PlacementBottomEnd, Class: "w-44"}) {
+			// Mobile-only: the inline lifecycle + Console buttons are hidden below
+			// sm, so mirror them here (sm:hidden) to keep every action reachable.
+			@instanceMobileActions(caps, inst)
 			if inst.Status == "Running" {
 				@dropdown.Item(dropdown.ItemProps{Attributes: instanceActionAttrs(inst.Name, "restart")}) {
 					Restart
@@ -340,6 +428,36 @@ templ instanceActionDialog(id, title, action, field, label, submit string, input
 			</form>
 		}
 	}
+}
+
+// cpuSparkline draws a tiny inline CPU% trend (0–100, oldest left) as an SVG
+// polyline so the list shows at-a-glance fleet load without opening each
+// instance. It uses currentColor (inherits the cell's text color, so it
+// re-themes for free); too little history renders nothing.
+templ cpuSparkline(cpu []float64) {
+	if len(cpu) >= 2 {
+		<svg viewBox="0 0 80 20" width="80" height="20" preserveAspectRatio="none" class="block text-muted-foreground" role="img" aria-label={ fmt.Sprintf("CPU around %.0f%%", cpu[len(cpu)-1]) }>
+			<polyline points={ sparkPoints(cpu, 80, 20) } fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"></polyline>
+		</svg>
+	}
+}
+
+// sparkPoints maps CPU% samples (0–100) to an SVG polyline points string across
+// a w×h box, oldest left. Values are clamped so an out-of-range sample can't
+// escape the box.
+func sparkPoints(cpu []float64, w, h int) string {
+	var b strings.Builder
+	n := len(cpu)
+	for i, v := range cpu {
+		v = max(0, min(100, v))
+		x := float64(i) / float64(n-1) * float64(w)
+		y := float64(h) - v/100*float64(h)
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		fmt.Fprintf(&b, "%.1f,%.1f", x, y)
+	}
+	return b.String()
 }
 
 // limitsSummary renders an instance's CPU and memory limits as "cpu / mem",

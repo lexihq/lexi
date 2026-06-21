@@ -141,7 +141,7 @@ templ ImportInstanceDialog() {
 						Backup file
 						@requiredMark()
 					</label>
-					<input id="import-backup" name="backup" type="file" accept=".tar,.tar.gz,.gz,application/octet-stream" class="w-full rounded-md border bg-background px-3 py-2 text-sm" required/>
+					<input id="import-backup" name="backup" type="file" accept=".tar,.tar.gz,.gz,application/octet-stream" class={ fileInputClass, "w-full" } required/>
 				</div>
 				@dialog.Footer() {
 					@dialog.Close() {
@@ -235,8 +235,8 @@ templ ImageResults(images []backend.Image) {
 			for _, img := range images {
 				<label class="flex cursor-pointer items-center gap-3 rounded-md p-2 text-sm hover:bg-muted/50">
 					<input type="radio" name="image" value={ img.Fingerprint } required/>
-					<span class="font-medium">{ img.Alias }</span>
-					<span class="truncate text-muted-foreground">{ img.Description }</span>
+					<span class="shrink-0 font-medium">{ img.Alias }</span>
+					<span class="min-w-0 flex-1 truncate text-muted-foreground" title={ img.Description }>{ img.Description }</span>
 					<span class="ml-auto shrink-0 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ img.Type }</span>
 					<span class="shrink-0 rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ img.Arch }</span>
 				</label>

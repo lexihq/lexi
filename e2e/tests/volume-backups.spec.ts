@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 // Server-side volume backups: the Backups section on the custom-volume page.
 // Runs against the shared fake-backed server (the "default" pool exists).

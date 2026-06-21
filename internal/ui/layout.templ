@@ -96,6 +96,9 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 			}
 			<script src="/static/js/toast.js" defer></script>
 			<script src="/static/js/errors.js" defer></script>
+			<script src="/static/js/command-palette.js" defer></script>
+			<script src="/static/js/confirm-dialog.js" defer></script>
+			<script src="/static/js/bulk-actions.js" defer></script>
 		</head>
 		<body
 			class="h-full bg-background text-foreground"
@@ -116,7 +119,8 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 						</a>
 					</div>
 					<div class="flex items-center gap-3 text-sm text-muted-foreground">
-						<span>{ caps.ServerInfo }</span>
+						@CommandPaletteTrigger()
+						<span class="hidden sm:inline">{ caps.ServerInfo }</span>
 						@popover.Root() {
 							@popover.Trigger() {
 								<button
@@ -190,6 +194,8 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 					</footer>
 				}
 			</div>
+			@CommandPalette()
+			@ConfirmDialog()
 			// Runtime for the header tier capability popover. OnceHandle dedupes
 			// if a page also mounts it (e.g. via selectbox).
 			@popover.Script()

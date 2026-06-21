@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./fixtures";
 
 // submitCreate clicks the create dialog's submit and waits for the POST; a late
 // image-search swap can shift the button and eat the click, so retry until the

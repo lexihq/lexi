@@ -18,17 +18,51 @@
     return (i === 0 ? n : n.toFixed(1)) + " " + units[i];
   }
 
+  // token reads a themed CSS custom property off <html>. The whole UI is authored
+  // in oklch tokens, so the browser already parses oklch for canvas fillStyle —
+  // we can hand uPlot the token string directly. Read live (not cached) so a
+  // theme toggle + redraw picks up the new value. uPlot accepts a function for
+  // axis/grid/tick stroke and calls it on every draw, so these re-theme for free.
+  function token(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+  const axisColor = () => token("--muted-foreground"); // tick labels + axis line
+  const gridColor = () => token("--border"); //            grid lines + tick marks
+
+  // ySize reserves just enough left gutter for the widest formatted y label.
+  // The old fixed 56px clipped byte labels ("400.0 MiB" ≈ 58px) to garbage like
+  // "3.7 MiB"; measuring the actual labels fits any unit (%, MiB, GiB, TiB).
+  function ySize(u, values) {
+    if (!values || !values.length) return 50;
+    const pr = u.pxRatio || window.devicePixelRatio || 1;
+    const ctx = u.ctx;
+    const prev = ctx.font;
+    ctx.font = Math.round(12 * pr) + "px system-ui, -apple-system, sans-serif";
+    let max = 0;
+    for (const v of values) {
+      const w = ctx.measureText(v).width;
+      if (w > max) max = w;
+    }
+    ctx.font = prev;
+    return Math.ceil(max / pr) + 18; // + tick + gap
+  }
+
   // makeChart builds a uPlot bound to a container's width, with a formatter for
   // the y-axis/value labels. series is the array of uPlot series specs after x.
   function makeChart(el, series, fmtY) {
+    const themedAxis = (extra) =>
+      Object.assign(
+        { stroke: axisColor, grid: { stroke: gridColor }, ticks: { stroke: gridColor } },
+        extra,
+      );
     const opts = {
       width: el.clientWidth || 320,
       height: 160,
       legend: { show: true },
       scales: { x: { time: true } },
       axes: [
-        {},
-        { size: 56, values: (u, vals) => vals.map(fmtY) },
+        themedAxis({}),
+        themedAxis({ size: ySize, values: (u, vals) => vals.map(fmtY) }),
       ],
       series: [{}].concat(series),
     };
@@ -94,8 +128,17 @@
     }
     window.addEventListener("resize", resize);
 
+    // The axis/grid stroke are functions reading live CSS tokens, so a theme
+    // toggle just needs a redraw to recolor the canvas (the .dark class is
+    // already on <html> by the time this fires).
+    function retheme() {
+      charts.forEach((c) => c.chart && c.chart.redraw());
+    }
+    window.addEventListener("lexi:themechange", retheme);
+
     function destroy() {
       window.removeEventListener("resize", resize);
+      window.removeEventListener("lexi:themechange", retheme);
       charts.forEach((c) => c.chart && c.chart.destroy());
     }
 

@@ -1,0 +1,51 @@
+package ui
+
+import "github.com/lexihq/lexi/internal/components/icon"
+
+// CommandPalette is the ⌘K / Ctrl-K quick switcher. It is a native <dialog>
+// (top layer, focus trap, Esc-to-close, backdrop for free) mounted once in the
+// shell. It carries no data: command-palette.js builds its list at open time by
+// scraping the sidebar's nav + instance links, which the server already renders
+// on every page — so the palette stays in sync with capabilities and the live
+// instance list without a second data source.
+templ CommandPalette() {
+	<dialog
+		id="command-palette"
+		aria-label="Command palette"
+		class="m-0 w-full max-w-lg rounded-lg border bg-popover p-0 text-popover-foreground shadow-lg backdrop:bg-black/50 sm:mx-auto sm:mt-[12vh]"
+	>
+		<div class="flex items-center gap-2 border-b px-3">
+			@icon.Icon("search")(icon.Props{Class: "size-4 shrink-0 text-muted-foreground"})
+			<input
+				id="cmdk-input"
+				type="text"
+				role="combobox"
+				aria-controls="cmdk-results"
+				aria-expanded="true"
+				aria-autocomplete="list"
+				autocomplete="off"
+				placeholder="Jump to an instance or page…"
+				class="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+			/>
+			<kbd class="hidden shrink-0 rounded border px-1.5 py-0.5 text-xs text-muted-foreground sm:block">Esc</kbd>
+		</div>
+		<ul id="cmdk-results" role="listbox" aria-label="Results" class="max-h-80 overflow-y-auto p-2"></ul>
+		<p id="cmdk-empty" class="hidden px-3 py-6 text-center text-sm text-muted-foreground">No matches.</p>
+	</dialog>
+}
+
+// CommandPaletteTrigger is the header affordance that opens the palette — a
+// search box on wide screens, an icon button on narrow ones — so the feature is
+// discoverable without knowing the shortcut (and reachable on touch).
+templ CommandPaletteTrigger() {
+	<button
+		type="button"
+		onclick="window.lexiOpenCommandPalette && window.lexiOpenCommandPalette()"
+		aria-label="Search instances and pages"
+		class="flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none"
+	>
+		@icon.Icon("search")(icon.Props{Class: "size-4"})
+		<span class="hidden text-sm md:inline">Search…</span>
+		<kbd class="hidden rounded border px-1.5 text-xs md:inline">⌘K</kbd>
+	</button>
+}

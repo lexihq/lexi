@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 // Instance snapshots: create/restore/delete, stateful flag, expiry, rename,
 // and the auto-snapshot schedule form.
@@ -52,9 +52,11 @@ test("snapshot stateful flag, expiry, and rename on the detail page", async ({ p
   await expect(body.getByText("e2e-state")).toBeVisible();
   await expect(body.getByText("stateful", { exact: true })).toBeVisible();
 
-  // Rename it (htmx swap-then-click retry).
+  // Rename it (htmx swap-then-click retry). Rename now lives behind the row's
+  // "Rename / set expiry" disclosure, so open it before driving the form.
   await expect(async () => {
     const row = page.locator("#snapshots tbody").getByRole("row").filter({ hasText: "e2e-state" });
+    await row.getByText("Rename / set expiry").click();
     await row.locator('input[name="new_name"]').fill("e2e-state2");
     await row.getByRole("button", { name: "Rename" }).click();
     await expect(page.locator("#snapshots tbody").getByText("e2e-state2")).toBeVisible({ timeout: 1000 });

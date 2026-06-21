@@ -15,7 +15,7 @@ import (
 // is swappable so delete can re-render it in place.
 templ NetworksPage(caps backend.Capabilities, networks []backend.Network) {
 	@Layout("Networks", caps, Nav{Section: NavNetworks}) {
-		<div class="mb-6 flex items-center justify-between gap-4">
+		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
 				<h1 class="text-2xl font-semibold">Networks</h1>
 				<p class="text-muted-foreground">Managed bridges and the host interfaces Incus knows about.</p>
@@ -136,12 +136,10 @@ templ NetworkDetailPage(caps backend.Capabilities, n backend.Network, st backend
 							<input name="value" value={ n.Config[k] } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
 						</div>
 					}
-					for i := 0; i < 3; i++ {
-						<div class="flex gap-2">
-							<input name="key" placeholder="ipv4.nat" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
-							<input name="value" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
-						</div>
-					}
+					<div class="flex gap-2">
+						<input name="key" placeholder="ipv4.nat" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+						<input name="value" class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
+					</div>
 					@button.Button(button.Props{Type: button.TypeSubmit}) {
 						@icon.Icon("check")(icon.Props{Class: "size-4"})
 						Apply config

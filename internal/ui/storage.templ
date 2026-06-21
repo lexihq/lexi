@@ -14,7 +14,7 @@ import (
 // StoragePoolsPage lists storage pools with a link to the create form.
 templ StoragePoolsPage(caps backend.Capabilities, pools []backend.StoragePool) {
 	@Layout("Storage", caps, Nav{Section: NavStorage}) {
-		<div class="mb-6 flex items-center justify-between gap-4">
+		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
 			<div>
 				<h1 class="text-2xl font-semibold">Storage</h1>
 				<p class="text-muted-foreground">Storage pools and their custom volumes.</p>
@@ -115,7 +115,7 @@ templ StoragePoolPage(caps backend.Capabilities, pool backend.StoragePool, volum
 				<h2 class="mb-2 text-lg font-medium">Import volume from file</h2>
 				<p class="mb-3 text-sm text-muted-foreground">Upload a volume backup tarball (as produced by Export).</p>
 				<div class="flex gap-2">
-					<input name="backup" type="file" required accept=".tar,.tar.gz,.tar.xz,.gz,.xz,application/octet-stream" class="w-1/2 rounded-md border bg-background px-3 py-1.5 text-sm"/>
+					<input name="backup" type="file" required accept=".tar,.tar.gz,.tar.xz,.gz,.xz,application/octet-stream" class={ fileInputClass, "w-1/2" }/>
 					<input name="name" placeholder="volume name" required class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
 					@button.Button(button.Props{Type: button.TypeSubmit}) {
 						@icon.Icon("upload")(icon.Props{Class: "size-4"})
@@ -129,7 +129,7 @@ templ StoragePoolPage(caps backend.Capabilities, pool backend.StoragePool, volum
 				<h2 class="mb-2 text-lg font-medium">Upload ISO</h2>
 				<p class="mb-3 text-sm text-muted-foreground">Create an ISO volume from an image file, attachable to a VM as install media.</p>
 				<div class="flex gap-2">
-					<input name="iso" type="file" required accept=".iso,application/octet-stream" class="w-1/2 rounded-md border bg-background px-3 py-1.5 text-sm"/>
+					<input name="iso" type="file" required accept=".iso,application/octet-stream" class={ fileInputClass, "w-1/2" }/>
 					<input name="name" placeholder="volume name" required class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
 					@button.Button(button.Props{Type: button.TypeSubmit}) {
 						@icon.Icon("disc")(icon.Props{Class: "size-4"})
@@ -306,7 +306,7 @@ templ StoragePoolCreatePage(caps backend.Capabilities) {
 templ StorageVolumesTable(pool string, vols []backend.StorageVolume) {
 	{{ ep := url.PathEscape(pool) }}
 	<section id="volumes" class="rounded-lg border bg-card p-4">
-		<div class="mb-4 flex items-center justify-between gap-4">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Volumes</h2>
 		</div>
 		<form method="post" action={ templ.URL("/storage/" + ep + "/volumes") } hx-post={ "/storage/" + ep + "/volumes" } hx-target="#volumes" hx-swap="outerHTML" class="mb-4 space-y-2">
@@ -443,7 +443,7 @@ templ VolumeBackupsTable(caps backend.Capabilities, pool, volume string, backups
 	{{ ev := url.PathEscape(volume) }}
 	{{ base := "/storage/" + ep + "/volumes/" + ev + "/backups" }}
 	<section id="volume-backups" class="rounded-lg border bg-card p-4">
-		<div class="mb-4 flex items-center justify-between gap-4">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Backups</h2>
 			<form method="post" action={ templ.URL(base) } hx-post={ base } hx-target="#volume-backups" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="name" placeholder="backup name (optional)"/>
@@ -579,7 +579,7 @@ templ StorageVolumeSnapshotsTable(pool, volume string, snapshots []backend.Stora
 	{{ ep := url.PathEscape(pool) }}
 	{{ ev := url.PathEscape(volume) }}
 	<section id="volume-snapshots" class="rounded-lg border bg-card p-4">
-		<div class="mb-4 flex items-center justify-between gap-4">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Snapshots</h2>
 			<form method="post" action={ templ.URL("/storage/" + ep + "/volumes/" + ev + "/snapshots") } hx-post={ "/storage/" + ep + "/volumes/" + ev + "/snapshots" } hx-target="#volume-snapshots" hx-swap="outerHTML" class="flex gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="snapshot" placeholder="snapshot name"/>

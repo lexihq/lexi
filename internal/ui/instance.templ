@@ -69,6 +69,13 @@ templ InstanceHeader(caps backend.Capabilities, inst backend.Instance) {
 					Resume
 				}
 			}
+			if caps.Pause && caps.Snapshots && inst.Status == "Running" {
+				// One-click recovery checkpoint: snapshot, then freeze for inspection.
+				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("rescue"), "hx-target": "#instance-header", "hx-swap": "outerHTML", "hx-confirm": "Snapshot “" + inst.Name + "” and freeze it for inspection?"}}) {
+					@icon.Icon("life-buoy")(icon.Props{Class: "size-4"})
+					Rescue
+				}
+			}
 			if caps.Backup {
 				@button.Button(button.Props{Size: button.SizeSm, Href: "/instances/" + inst.Name + "/export", Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-boost": "false"}}) {
 					@icon.Icon("download")(icon.Props{Class: "size-4"})

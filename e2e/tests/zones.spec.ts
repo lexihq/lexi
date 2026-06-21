@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 // DNS zones live under the Networks section. The fake backend starts with no
 // zones; the test creates, edits, records, and deletes its own.

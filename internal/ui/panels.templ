@@ -16,7 +16,7 @@ import (
 templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 	{{ en := url.PathEscape(name) }}
 	<section id="snapshots" class="rounded-lg border bg-card p-4">
-		<div class="mb-4 flex items-center justify-between gap-4">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Snapshots</h2>
 			<form method="post" action={ templ.URL("/instances/" + en + "/snapshots") } hx-post={ "/instances/" + en + "/snapshots" } hx-target="#snapshots" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="snapshot" placeholder="snapshot name"/>
@@ -70,27 +70,36 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 							}
 						}
 						@table.Cell() {
-							<div class="flex flex-wrap items-center gap-2">
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/restore", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
-									@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
-									Restore
-								}
-								<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/" + es + "/rename") } hx-post={ "/instances/" + en + "/snapshots/" + es + "/rename" } hx-target="#snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
-									<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="new_name" placeholder="new name"/>
-									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
-										Rename
+							<div class="space-y-2">
+								<div class="flex flex-wrap items-center gap-2">
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/restore", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
+										@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
+										Restore
 									}
-								</form>
-								<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/" + es + "/expiry") } hx-post={ "/instances/" + en + "/snapshots/" + es + "/expiry" } hx-target="#snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
-									<input type="datetime-local" name="expires_at" class="h-8 rounded-md border bg-background px-1 text-sm" title="Expiry in UTC (empty clears)"/>
-									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
-										Set expiry (UTC)
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/delete", "hx-target": "#snapshots", "hx-swap": "outerHTML", "hx-confirm": "Delete snapshot " + snap.Name + "?"}}) {
+										@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
+										Delete
 									}
-								</form>
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/delete", "hx-target": "#snapshots", "hx-swap": "outerHTML", "hx-confirm": "Delete snapshot " + snap.Name + "?"}}) {
-									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
-									Delete
-								}
+								</div>
+								// Rename + set-expiry are secondary; behind a disclosure so the row
+								// leads with Restore/Delete instead of two inputs and four buttons.
+								<details>
+									<summary class="cursor-pointer text-xs text-muted-foreground hover:text-foreground">Rename / set expiry</summary>
+									<div class="mt-2 flex flex-wrap gap-2">
+										<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/" + es + "/rename") } hx-post={ "/instances/" + en + "/snapshots/" + es + "/rename" } hx-target="#snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
+											<input class="h-8 w-28 rounded-md border bg-background px-2 text-sm" name="new_name" placeholder="new name"/>
+											@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+												Rename
+											}
+										</form>
+										<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/" + es + "/expiry") } hx-post={ "/instances/" + en + "/snapshots/" + es + "/expiry" } hx-target="#snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
+											<input type="datetime-local" name="expires_at" class="h-8 rounded-md border bg-background px-1 text-sm" title="Expiry in UTC (empty clears)"/>
+											@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
+												Set expiry (UTC)
+											}
+										</form>
+									</div>
+								</details>
 							</div>
 						}
 					}
@@ -433,7 +442,7 @@ templ MetricsCharts(name string) {
 // InstanceBody.
 templ LogsPanel(name string, log string) {
 	<section id="logs" class="mb-8 rounded-lg border bg-card p-4">
-		<div class="mb-3 flex items-center justify-between gap-4">
+		<div class="mb-3 flex flex-wrap items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Console log</h2>
 			@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-get": "/instances/" + name + "/logs", "hx-target": "#logs", "hx-swap": "outerHTML"}}) {
 				@icon.Icon("refresh-cw")(icon.Props{Class: "size-4"})

@@ -81,6 +81,37 @@ test("metrics tab renders history charts that update", async ({ page }) => {
   await expect(page.locator("#metrics-charts")).toHaveCount(0);
 });
 
+test("metrics chart axes are theme-aware (legible) in dark mode", async ({ page }) => {
+  // theme.js applies the stored preference to <html> before first paint.
+  await page.addInitScript(() => localStorage.setItem("theme", "dark"));
+  await page.goto("/instances/demo");
+  await expect(page.locator("html")).toHaveClass(/dark/);
+
+  await page.getByRole("link", { name: "Metrics" }).click();
+  const cpuCanvas = page.locator("#metrics-charts #mc-cpu canvas").first();
+  await expect(cpuCanvas).toBeVisible();
+
+  // The pre-fix bug drew axis tick labels in uPlot's default pure black (~0
+  // luminance), invisible on the dark card; the fix paints them in the
+  // muted-foreground token (~rgb 161). Sample the left axis gutter (labels only,
+  // left of the plot/data line) and assert a label pixel is light. Polled because
+  // the labels draw once the first series tick sets the scale.
+  const maxGutterLuminance = () =>
+    cpuCanvas.evaluate((cv: HTMLCanvasElement) => {
+      const ctx = cv.getContext("2d");
+      if (!ctx) return 0;
+      const { data } = ctx.getImageData(0, 0, 36, cv.height);
+      let max = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 120) continue; // ignore translucent gridlines/edges
+        const lum = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+        if (lum > max) max = lum;
+      }
+      return max;
+    });
+  await expect.poll(maxGutterLuminance, { timeout: 8_000 }).toBeGreaterThan(120);
+});
+
 test("detail tabs expose summary limits, metrics, and logs", async ({ page }) => {
   await page.goto("/instances/demo");
 

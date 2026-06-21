@@ -1,5 +1,14 @@
 package ui
 
+// fileInputClass styles a native <input type="file"> so its picker button reads
+// as one of the app's controls instead of the bare browser default (which clashes
+// with the themed UI). It styles only the button via the file: variant and keeps
+// the native control, so the chosen filename still shows. Width is applied per use
+// site (e.g. class={ fileInputClass, "w-full" }).
+const fileInputClass = "rounded-md border bg-background px-3 py-1.5 text-sm text-muted-foreground " +
+	"file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-secondary file:px-2.5 file:py-1 " +
+	"file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-accent"
+
 // requiredMark is the shared required-field indicator, placed at the end of a
 // field's <label> text. The asterisk is purely visual — the input's native
 // `required` attribute is what assistive tech announces — so it is hidden from

@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Page } from "./fixtures";
 
 // Instance lifecycle through the list UI: create, start/stop/clone/delete,
 // rename/move, restart/pause/resume, and the export/import round-trip.
@@ -391,4 +391,31 @@ test("wide-screen columns and the Console button follow run state", async ({ pag
   // Clean up from the shared server state.
   await menuAction(page, name, "Delete", { confirm: true });
   await expect(row).toHaveCount(0);
+});
+
+test("rescue snapshots and freezes a running instance from the detail header", async ({ page }) => {
+  const name = "e2e-rescue";
+
+  // A throwaway running instance so the test cleans up after itself (deleting it
+  // removes its rescue snapshot too) instead of mutating the shared demo.
+  await openCreate(page);
+  await selectDebianImage(page);
+  await page.locator("#name").fill(name);
+  await page.locator("input[name=start]").check();
+  await submitCreate(page);
+  await expect(page.locator(`#instance-${name}`)).toContainText("Running");
+
+  // Rescue from the detail header: the styled confirm is auto-accepted by the
+  // fixture; the header then reflects Frozen and a rescue-* snapshot was taken.
+  await page.goto(`/instances/${name}`);
+  await page.getByRole("button", { name: "Rescue" }).click();
+  await expect(page.locator("#instance-header")).toContainText("Frozen");
+  await expect(page.locator('[data-tui-toast][data-variant="success"]')).toContainText("snapshot");
+  await page.getByRole("link", { name: "Snapshots" }).click();
+  await expect(page.locator("#snapshots")).toContainText("rescue-");
+
+  // Clean up the throwaway instance (and its snapshot) from the shared server.
+  await page.goto("/");
+  await menuAction(page, name, "Delete", { confirm: true });
+  await expect(page.locator(`#instance-${name}`)).toHaveCount(0);
 });

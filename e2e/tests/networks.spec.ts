@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 // Networks: create/delete, managed-network editing, and error toasts.
 // All tests run against the shared fake-backed server (instance "demo" seeded).

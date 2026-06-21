@@ -62,6 +62,28 @@ func remoteSwitcherFrom(ctx context.Context) []backend.Remote {
 	return nil
 }
 
+// instanceTrendsCtxKey keys the per-instance CPU-history sparkline data the list
+// preloads from the metrics store. Like the sidebar list it is row-level data
+// rendered by InstanceRow, so it travels via context rather than widening the
+// signature of every handler that re-renders a row.
+type instanceTrendsCtxKey struct{}
+
+// WithInstanceTrends returns a context carrying recent CPU% history per instance
+// name for the list sparklines.
+func WithInstanceTrends(ctx context.Context, trends map[string][]float64) context.Context {
+	return context.WithValue(ctx, instanceTrendsCtxKey{}, trends)
+}
+
+// instanceTrendFrom returns the preloaded CPU history for one instance, or nil
+// when a render path (a single-row swap, a unit test) didn't set any — in which
+// case the row simply omits its sparkline.
+func instanceTrendFrom(ctx context.Context, name string) []float64 {
+	if trends, ok := ctx.Value(instanceTrendsCtxKey{}).(map[string][]float64); ok {
+		return trends[name]
+	}
+	return nil
+}
+
 // sidebarInstancesFrom returns the preloaded sidebar instance list, or nil when
 // a render path (e.g. a unit test rendering a page directly) didn't set one —
 // in which case the sidebar's poll fills it in shortly after load.

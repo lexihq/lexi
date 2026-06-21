@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 // Storage buckets live on the pool detail page. The fake seeds the admin key
 // on bucket creation, mirroring the daemon.

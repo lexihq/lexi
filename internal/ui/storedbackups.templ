@@ -16,7 +16,7 @@ import (
 templ BackupsPanel(name string, backups []backend.InstanceBackup) {
 	{{ en := url.PathEscape(name) }}
 	<section id="backups" class="rounded-lg border bg-card p-4">
-		<div class="mb-4 flex items-center justify-between gap-4">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Backups</h2>
 			<form method="post" action={ templ.URL("/instances/" + en + "/backups") } hx-post={ "/instances/" + en + "/backups" } hx-target="#backups" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="name" placeholder="backup name (optional)"/>

@@ -203,7 +203,7 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, har
 			</form>
 		</section>
 		<section class="mb-8 rounded-lg border bg-card p-4">
-			<div class="mb-3 flex items-center justify-between gap-4">
+			<div class="mb-3 flex flex-wrap items-center justify-between gap-4">
 				<h2 class="text-lg font-medium">Trusted certificates</h2>
 				@dialog.Trigger(dialog.TriggerProps{For: "add-certificate"}) {
 					@button.Button(button.Props{Size: button.SizeSm}) {

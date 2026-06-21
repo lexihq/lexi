@@ -27,7 +27,7 @@ func (h handlers) updateLimits(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isHTMX(r) {
-		h.render(w, r, http.StatusOK, ui.LimitsForm(inst))
+		h.renderWithToast(w, r, http.StatusOK, ui.LimitsForm(inst), "Limits applied")
 		return
 	}
 	redirectToInstance(w, name)

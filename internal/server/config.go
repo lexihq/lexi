@@ -26,7 +26,7 @@ func (h handlers) config(w http.ResponseWriter, r *http.Request) {
 // devicesPanel renders the lazy-loaded Devices tab: local devices (editable),
 // inherited devices (read-only), and the typed add forms.
 func (h handlers) devicesPanel(w http.ResponseWriter, r *http.Request) {
-	h.renderDevices(w, r, r.PathValue("name"))
+	h.renderDevices(w, r, r.PathValue("name"), "")
 }
 
 // updateConfig replaces the instance's editable config from the parallel
@@ -48,7 +48,7 @@ func (h handlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isHTMX(r) {
-		h.render(w, r, http.StatusOK, ui.ConfigPanel(name, cfg))
+		h.renderWithToast(w, r, http.StatusOK, ui.ConfigPanel(name, cfg), "Configuration saved")
 		return
 	}
 	redirectToInstance(w, name)
@@ -72,7 +72,7 @@ func (h handlers) addDevice(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderDevices(w, r, name)
+	h.renderDevices(w, r, name, "Device added")
 }
 
 // updateDevice applies the per-device edit form: the device type's known
@@ -108,7 +108,7 @@ func (h handlers) updateDevice(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderDevices(w, r, name)
+	h.renderDevices(w, r, name, "Device updated")
 }
 
 // removeDevice detaches a local device, then re-renders the devices section.
@@ -118,20 +118,27 @@ func (h handlers) removeDevice(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderDevices(w, r, name)
+	h.renderDevices(w, r, name, "Device removed")
 }
 
-func (h handlers) renderDevices(w http.ResponseWriter, r *http.Request, name string) {
+// renderDevices re-renders the devices section. A non-empty msg emits an
+// out-of-band success toast (mutations); the lazy GET passes "" for no toast.
+func (h handlers) renderDevices(w http.ResponseWriter, r *http.Request, name, msg string) {
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
 	if err != nil {
 		h.fail(w, err)
 		return
 	}
-	if isHTMX(r) {
-		h.render(w, r, http.StatusOK, ui.DevicesSection(h.backend.Capabilities(r.Context()), name, cfg))
+	if !isHTMX(r) {
+		redirectToInstance(w, name)
 		return
 	}
-	redirectToInstance(w, name)
+	section := ui.DevicesSection(h.backend.Capabilities(r.Context()), name, cfg)
+	if msg == "" {
+		h.render(w, r, http.StatusOK, section)
+		return
+	}
+	h.renderWithToast(w, r, http.StatusOK, section, msg)
 }
 
 // mergeDeviceFields applies a device-edit form onto the device's current config:

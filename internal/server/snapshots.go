@@ -34,7 +34,7 @@ func (h handlers) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderSnapshotsOrRedirect(w, r, name)
+	h.renderSnapshotsOrRedirect(w, r, name, "Snapshot created")
 }
 
 func (h handlers) renameSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +52,7 @@ func (h handlers) renameSnapshot(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderSnapshotsOrRedirect(w, r, name)
+	h.renderSnapshotsOrRedirect(w, r, name, "Snapshot renamed")
 }
 
 func (h handlers) updateSnapshotExpiry(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +70,7 @@ func (h handlers) updateSnapshotExpiry(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderSnapshotsOrRedirect(w, r, name)
+	h.renderSnapshotsOrRedirect(w, r, name, "Expiry updated")
 }
 
 // snapshotSchedule renders the (lazily loaded) auto-snapshot schedule form.
@@ -136,7 +136,7 @@ func (h handlers) restoreSnapshot(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderSnapshotsOrRedirect(w, r, name)
+	h.renderSnapshotsOrRedirect(w, r, name, "Snapshot restored")
 }
 
 func (h handlers) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -145,10 +145,12 @@ func (h handlers) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	h.renderSnapshotsOrRedirect(w, r, name)
+	h.renderSnapshotsOrRedirect(w, r, name, "Snapshot deleted")
 }
 
-func (h handlers) renderSnapshotsOrRedirect(w http.ResponseWriter, r *http.Request, name string) {
+// renderSnapshotsOrRedirect re-renders the snapshot table on HTMX (else
+// redirects), appending an out-of-band success toast carrying msg.
+func (h handlers) renderSnapshotsOrRedirect(w http.ResponseWriter, r *http.Request, name, msg string) {
 	if !isHTMX(r) {
 		redirectToInstance(w, name)
 		return
@@ -158,5 +160,5 @@ func (h handlers) renderSnapshotsOrRedirect(w http.ResponseWriter, r *http.Reque
 		h.fail(w, err)
 		return
 	}
-	h.render(w, r, http.StatusOK, ui.SnapshotTable(name, snapshots))
+	h.renderWithToast(w, r, http.StatusOK, ui.SnapshotTable(name, snapshots), msg)
 }

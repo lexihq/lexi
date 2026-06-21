@@ -17,6 +17,8 @@ test("add and remove a proxy device in the Devices tab", async ({ page }) => {
   await proxyForm.locator('input[name="connect"]').fill("tcp:127.0.0.1:80");
   await proxyForm.getByRole("button", { name: "Add proxy" }).click();
   await expect(devices.getByText("web", { exact: true })).toBeVisible();
+  // The add emits an out-of-band success toast alongside the swapped section.
+  await expect(page.locator('[data-tui-toast][data-variant="success"]')).toBeVisible();
 
   // Remove it via the Remove button on the local device row. htmx wires the
   // freshly-swapped-in button a tick after it renders, so a single click can be

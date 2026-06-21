@@ -19,6 +19,8 @@ test("edit instance config in the Configuration tab", async ({ page }) => {
     config.getByRole("button", { name: "Apply config" }).click(),
   ]);
   await expect(page.locator('#config input[value="security.nesting"]')).toBeVisible();
+  // The save emits an out-of-band success toast without clobbering the panel.
+  await expect(page.locator('[data-tui-toast][data-variant="success"]')).toBeVisible();
 
   // Remove it: clear the key and apply.
   await page.locator('#config input[value="security.nesting"]').fill("");

@@ -73,6 +73,20 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, code int, compo
 	}
 }
 
+// renderWithToast renders the success fragment and appends an out-of-band
+// success toast so the action is affirmed without disturbing the swapped target.
+// Callers gate this to HTMX requests (the non-HTMX path redirects instead).
+func (h handlers) renderWithToast(w http.ResponseWriter, r *http.Request, code int, component templ.Component, msg string) {
+	writeHTML(w, code)
+	if err := component.Render(r.Context(), w); err != nil {
+		slog.Warn("render after headers", "err", err)
+		return
+	}
+	if err := ui.SuccessToastOOB(msg).Render(r.Context(), w); err != nil {
+		slog.Warn("render success toast", "err", err)
+	}
+}
+
 // renderShell renders a full-page component with the sidebar instance list
 // preloaded, so the shell paints (and hx-boost re-swaps) with a populated
 // sidebar instead of flashing an empty one. It fetches the list here (the

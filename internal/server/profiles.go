@@ -194,7 +194,7 @@ func (h handlers) setInstanceProfiles(w http.ResponseWriter, r *http.Request) {
 	}
 	inst.Profiles = ordered
 	if isHTMX(r) {
-		h.render(w, r, http.StatusOK, ui.InstanceProfilesForm(inst, all))
+		h.renderWithToast(w, r, http.StatusOK, ui.InstanceProfilesForm(inst, all), "Profiles applied")
 		return
 	}
 	redirectToInstance(w, name)

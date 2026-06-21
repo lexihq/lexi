@@ -20,6 +20,8 @@ test("snapshot create, restore, and delete on the detail page", async ({ page })
   await snapshots.locator("input[name=snapshot]").fill(snap);
   await page.getByRole("button", { name: "Create snapshot" }).click();
   await expect(snapshots).toContainText(snap);
+  // The create emits an out-of-band success toast alongside the swapped table.
+  await expect(page.locator('[data-tui-toast][data-variant="success"]')).toBeVisible();
 
   await snapshots.getByRole("button", { name: "Restore" }).click();
   await expect(snapshots).toContainText(snap);
@@ -63,6 +65,16 @@ test("snapshot stateful flag, expiry, and rename on the detail page", async ({ p
     await page.locator("#snapshots tbody").getByRole("button", { name: "Delete" }).click();
     await expect(page.locator("#snapshots tbody").getByText("e2e-state2")).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
+});
+
+test("creating a snapshot with no name surfaces an error toast", async ({ page }) => {
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Snapshots" }).click();
+  await expect(page.locator("#snapshots")).toBeVisible();
+
+  // Submitting the blank name field is a 400; the error path still toasts.
+  await page.getByRole("button", { name: "Create snapshot" }).click();
+  await expect(page.locator('[data-tui-toast][data-variant="error"]')).toBeVisible();
 });
 
 test("set an instance snapshot schedule", async ({ page }) => {

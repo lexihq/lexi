@@ -17,3 +17,22 @@ templ ErrorToast(message string) {
 		Attributes: templ.Attributes{"role": "alert", "aria-live": "assertive"},
 	})
 }
+
+// SuccessToastOOB renders a success toast that out-of-band-appends itself to
+// <body> on a 200 HTMX response, so the main swap target is untouched.
+// toast.js's MutationObserver initializes it (same as ErrorToast).
+templ SuccessToastOOB(message string) {
+	<div hx-swap-oob="beforeend:body">
+		@toast.Toast(toast.Props{
+			Variant:     toast.VariantSuccess,
+			Position:    toast.PositionTopRight,
+			Description: message,
+			Duration:    4000,
+			Dismissible: true,
+			Icon:        true,
+			// Success is non-urgent, so announce politely (contrast with the
+			// error toast's assertive live region).
+			Attributes: templ.Attributes{"role": "status", "aria-live": "polite"},
+		})
+	</div>
+}

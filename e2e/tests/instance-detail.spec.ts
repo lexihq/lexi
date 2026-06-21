@@ -92,6 +92,8 @@ test("detail tabs expose summary limits, metrics, and logs", async ({ page }) =>
   // The form re-renders in place reflecting the applied values.
   await expect(page.locator("#cpu")).toHaveValue("2");
   await expect(page.locator("#memory")).toHaveValue("512MiB");
+  // Applying limits emits an out-of-band success toast without disturbing the form.
+  await expect(page.locator('[data-tui-toast][data-variant="success"]')).toBeVisible();
 
   // The Metrics and Logs panels each live behind their own tab.
   await page.getByRole("link", { name: "Metrics" }).click();

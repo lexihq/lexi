@@ -29,3 +29,16 @@ test("theme toggle switches and persists dark mode across navigation", async ({
   await expect(page.locator("html")).not.toHaveClass(/dark/);
   expect(await page.evaluate(() => localStorage.getItem("theme"))).toBe("light");
 });
+
+// The skip-to-content link: visually hidden until focused, first in tab order,
+// and it targets the main content region for keyboard users.
+test("skip-to-content link is the first focusable element and targets #main", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  await page.keyboard.press("Tab");
+  const focused = page.locator(":focus");
+  await expect(focused).toHaveText("Skip to content");
+  await expect(focused).toHaveAttribute("href", /#main$/);
+});

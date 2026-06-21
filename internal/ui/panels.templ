@@ -400,8 +400,9 @@ templ MetricsPanel(name string, m backend.Metrics) {
 
 // MetricsCharts renders the time-series history charts. It is a static sibling
 // of the self-polling MetricsPanel — kept out of that 3s outerHTML swap so the
-// uPlot instances persist. metrics-charts.js (loaded globally) finds this
-// container, draws the charts, and polls the series endpoint to update them.
+// uPlot instances persist. metrics-charts.js (loaded by the layout on instance
+// pages) finds this container, draws the charts, and polls the series endpoint
+// to update them.
 templ MetricsCharts(name string) {
 	<section
 		id="metrics-charts"

@@ -42,3 +42,28 @@ test("skip-to-content link is the first focusable element and targets #main", as
   await expect(focused).toHaveText("Skip to content");
   await expect(focused).toHaveAttribute("href", /#main$/);
 });
+
+// The header tier badge: a button that opens a read-only popover listing the
+// active driver tier's supported capabilities (only enabled ones are shown).
+test("tier badge popover lists the active tier's capabilities", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  const trigger = page.getByRole("button", { name: "Tier capabilities" });
+  // Scope to the capability popover by its unique "Tier:" heading; the list page
+  // also has selectbox popovers and a "Snapshots" column header.
+  const popover = page
+    .locator("[data-tui-popover-content]")
+    .filter({ hasText: "Tier:" });
+
+  await expect(popover).toBeHidden();
+  await trigger.click();
+  await expect(popover).toBeVisible();
+  // The e2e fakeserver enables these features, so they appear in the list.
+  await expect(popover.getByText("Snapshots")).toBeVisible();
+  await expect(popover.getByText("Metrics")).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  await expect(popover).toBeHidden();
+});

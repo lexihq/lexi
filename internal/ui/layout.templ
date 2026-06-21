@@ -3,7 +3,40 @@ package ui
 import (
 	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lexihq/lexi/internal/components/icon"
+	"github.com/lexihq/lexi/internal/components/popover"
 )
+
+// tierCapabilities is the curated, headline set of capabilities the active tier
+// supports, shown in the header tier popover. It lists only enabled features —
+// consistent with the app-wide rule that the UI never surfaces what the driver
+// can't do — from a short hand-picked list (not a dump of every flag) so the
+// popover stays a glance, not a wall.
+func tierCapabilities(caps backend.Capabilities) []string {
+	all := []struct {
+		Label string
+		On    bool
+	}{
+		{"Snapshots", caps.Snapshots},
+		{"Backups", caps.StoredBackups},
+		{"Console", caps.Console},
+		{"Metrics", caps.Metrics},
+		{"Files", caps.Files},
+		{"Profiles", caps.Profiles},
+		{"Networks", caps.Networks},
+		{"Storage", caps.Storage},
+		{"Images", caps.ImageManagement},
+		{"Projects", caps.Projects},
+		{"Migrate", caps.Migrate},
+		{"Server admin", caps.ServerAdmin},
+	}
+	var on []string
+	for _, c := range all {
+		if c.On {
+			on = append(on, c.Label)
+		}
+	}
+	return on
+}
 
 // NavInstances is the active-section key for the Instances nav entry.
 const NavInstances = "instances"
@@ -84,7 +117,31 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 					</div>
 					<div class="flex items-center gap-3 text-sm text-muted-foreground">
 						<span>{ caps.ServerInfo }</span>
-						<span class="rounded-md border px-2 py-1">{ string(caps.Tier) }</span>
+						@popover.Root() {
+							@popover.Trigger() {
+								<button
+									type="button"
+									class="cursor-pointer rounded-md border px-2 py-1 transition-colors hover:bg-accent hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none"
+									aria-label="Tier capabilities"
+								>{ string(caps.Tier) }</button>
+							}
+							@popover.Content(popover.ContentProps{Placement: popover.PlacementBottomEnd, ShowArrow: true, Class: "p-3"}) {
+								<div class="flex flex-col gap-2">
+									<div>
+										<p class="text-sm font-medium text-foreground">Tier: { string(caps.Tier) }</p>
+										<p class="text-xs text-muted-foreground">{ caps.ServerInfo }</p>
+									</div>
+									<ul class="grid grid-cols-2 gap-x-6 gap-y-1">
+										for _, label := range tierCapabilities(caps) {
+											<li class="flex items-center gap-1.5 text-sm">
+												@icon.Icon("check")(icon.Props{Class: "size-3.5 text-green-500"})
+												<span class="text-foreground">{ label }</span>
+											</li>
+										}
+									</ul>
+								</div>
+							}
+						}
 						<button
 							type="button"
 							onclick="toggleTheme()"
@@ -133,6 +190,9 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 					</footer>
 				}
 			</div>
+			// Runtime for the header tier capability popover. OnceHandle dedupes
+			// if a page also mounts it (e.g. via selectbox).
+			@popover.Script()
 		</body>
 	</html>
 }

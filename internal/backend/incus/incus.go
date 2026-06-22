@@ -3,7 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -133,12 +133,12 @@ func New(remote string) (*incusBackend, error) {
 			}
 			rsrv, err := conf.GetInstanceServer(name)
 			if err != nil {
-				log.Printf("remote %q unreachable, excluded until restart: %v", name, err)
+				slog.Warn("remote unreachable, excluded until restart", "remote", name, "err", err)
 				continue
 			}
 			rcaps, err := probeCaps(rsrv)
 			if err != nil {
-				log.Printf("remote %q probe failed, excluded until restart: %v", name, err)
+				slog.Warn("remote probe failed, excluded until restart", "remote", name, "err", err)
 				continue
 			}
 			remotes[name] = &remoteConn{srv: rsrv, caps: rcaps, addr: r.Addr}

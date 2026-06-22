@@ -14,7 +14,7 @@ import (
 func (b *incusBackend) ListInstances(ctx context.Context) ([]backend.Instance, error) {
 	full, err := b.project(ctx).GetInstancesFull(api.InstanceTypeAny)
 	if err != nil {
-		return nil, fmt.Errorf("list instances: %w", err)
+		return nil, fmt.Errorf("list instances: %w", mapErr(err))
 	}
 	out := make([]backend.Instance, 0, len(full))
 	for i := range full {

@@ -51,7 +51,7 @@ func (b *incusBackend) ListImages(ctx context.Context) ([]backend.Image, error) 
 	}
 	images, err := is.GetImages()
 	if err != nil {
-		return nil, fmt.Errorf("list images: %w", err)
+		return nil, fmt.Errorf("list images: %w", mapErr(err))
 	}
 
 	b.imgCache = toImages(images)

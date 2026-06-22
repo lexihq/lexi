@@ -196,7 +196,7 @@ func (b *incusBackend) ListWarnings(ctx context.Context) ([]backend.Warning, err
 			UUID:        w.UUID,
 			Type:        w.Type,
 			Severity:    w.Severity,
-			Status:      w.Status,
+			Status:      backend.WarningStatus(w.Status),
 			Count:       w.Count,
 			LastMessage: w.LastMessage,
 			LastSeenAt:  w.LastSeenAt,
@@ -213,7 +213,7 @@ func (b *incusBackend) AcknowledgeWarning(ctx context.Context, uuid string) erro
 	if err != nil {
 		return fmt.Errorf("get warning %q: %w", uuid, mapErr(err))
 	}
-	if err := b.server(ctx).UpdateWarning(uuid, api.WarningPut{Status: "acknowledged"}, etag); err != nil {
+	if err := b.server(ctx).UpdateWarning(uuid, api.WarningPut{Status: string(backend.WarningAcknowledged)}, etag); err != nil {
 		return fmt.Errorf("acknowledge warning %q: %w", uuid, mapErr(err))
 	}
 	return nil

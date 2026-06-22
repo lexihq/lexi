@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,7 +41,7 @@ func TestListOperationsMapsAndSortsNewestFirst(t *testing.T) {
 	assert.Equal(t, "op-new", got[0].ID)
 	assert.Equal(t, "websocket", got[0].Class)
 	assert.Equal(t, "Executing command", got[0].Description)
-	assert.Equal(t, "Failure", got[0].Status)
+	assert.Equal(t, backend.OpFailure, got[0].Status)
 	assert.Equal(t, "boom", got[0].Err)
 	assert.Equal(t, newer, got[0].CreatedAt)
 	assert.Equal(t, "op-old", got[1].ID)

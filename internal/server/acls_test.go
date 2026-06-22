@@ -29,7 +29,7 @@ func TestNetworkACLCreateBlankNameIs400(t *testing.T) {
 
 func TestNetworkACLPagesRender(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateNetworkACL(t.Context(), "web", "web traffic"))
+	require.NoError(t, b.CreateNetworkACL(t.Context(), backend.NetworkACL{Name: "web", Description: "web traffic"}))
 
 	list := request(t, New(b), "GET", "/network-acls", "", false)
 	assertStatus(t, list, http.StatusOK)
@@ -42,7 +42,7 @@ func TestNetworkACLPagesRender(t *testing.T) {
 
 func TestNetworkACLAddAndDeleteRule(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateNetworkACL(t.Context(), "web", ""))
+	require.NoError(t, b.CreateNetworkACL(t.Context(), backend.NetworkACL{Name: "web", Description: ""}))
 	acl, err := b.GetNetworkACL(t.Context(), "web")
 	require.NoError(t, err)
 
@@ -83,7 +83,7 @@ func TestNetworkACLAddAndDeleteRule(t *testing.T) {
 
 func TestNetworkACLRenameAndDelete(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateNetworkACL(t.Context(), "web", ""))
+	require.NoError(t, b.CreateNetworkACL(t.Context(), backend.NetworkACL{Name: "web", Description: ""}))
 
 	res := formRequest(t, New(b), "/network-acls/web/rename", url.Values{"new_name": {"frontend"}}, false)
 	assertStatus(t, res, http.StatusSeeOther)
@@ -97,7 +97,7 @@ func TestNetworkACLRenameAndDelete(t *testing.T) {
 
 func TestNetworkACLDeleteReferencedIs409(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateNetworkACL(t.Context(), "web", ""))
+	require.NoError(t, b.CreateNetworkACL(t.Context(), backend.NetworkACL{Name: "web", Description: ""}))
 	n, err := b.GetNetwork(t.Context(), "incusbr0")
 	require.NoError(t, err)
 	cfg := n.Config

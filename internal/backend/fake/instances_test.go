@@ -16,17 +16,17 @@ func TestRestartPauseResumeLifecycle(t *testing.T) {
 	require.NoError(t, f.RestartInstance(ctx(), "demo"))
 	got, err := f.GetInstance(ctx(), "demo")
 	require.NoError(t, err)
-	assert.Equal(t, "Running", got.Status)
+	assert.Equal(t, backend.StatusRunning, got.Status)
 
 	require.NoError(t, f.PauseInstance(ctx(), "demo"))
 	got, err = f.GetInstance(ctx(), "demo")
 	require.NoError(t, err)
-	assert.Equal(t, "Frozen", got.Status)
+	assert.Equal(t, backend.StatusFrozen, got.Status)
 
 	require.NoError(t, f.ResumeInstance(ctx(), "demo"))
 	got, err = f.GetInstance(ctx(), "demo")
 	require.NoError(t, err)
-	assert.Equal(t, "Running", got.Status)
+	assert.Equal(t, backend.StatusRunning, got.Status)
 
 	require.ErrorIs(t, f.RestartInstance(ctx(), "ghost"), backend.ErrNotFound)
 	require.ErrorIs(t, f.PauseInstance(ctx(), "ghost"), backend.ErrNotFound)
@@ -42,7 +42,7 @@ func TestRebuildInstanceSwapsImage(t *testing.T) {
 	got, err := f.GetInstance(ctx(), "demo")
 	require.NoError(t, err)
 	assert.Equal(t, "alpine/3.20", got.Image)
-	assert.Equal(t, "Stopped", got.Status)
+	assert.Equal(t, backend.StatusStopped, got.Status)
 }
 
 func TestRebuildInstanceRunningIsInvalid(t *testing.T) {

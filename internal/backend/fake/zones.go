@@ -43,18 +43,18 @@ func (f *Fake) GetNetworkZone(ctx context.Context, name string) (backend.Network
 	return z, nil
 }
 
-func (f *Fake) CreateNetworkZone(ctx context.Context, name, description string) error {
+func (f *Fake) CreateNetworkZone(ctx context.Context, zone backend.NetworkZone) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.zoneSpace(ctx)
 
-	if !validZoneName(name) {
-		return invalid("invalid network zone name %q", name)
+	if !validZoneName(zone.Name) {
+		return invalid("invalid network zone name %q", zone.Name)
 	}
-	if _, ok := sp.zones[name]; ok {
-		return conflict("network zone %q already exists", name)
+	if _, ok := sp.zones[zone.Name]; ok {
+		return conflict("network zone %q already exists", zone.Name)
 	}
-	sp.zones[name] = backend.NetworkZone{Name: name, Description: description, Config: map[string]string{}}
+	sp.zones[zone.Name] = backend.NetworkZone{Name: zone.Name, Description: zone.Description, Config: map[string]string{}}
 	return nil
 }
 

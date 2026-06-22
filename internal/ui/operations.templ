@@ -23,7 +23,7 @@ templ OperationRows(ops []backend.Operation) {
 							<td class="py-1.5 pr-3">{ op.Description }</td>
 							<td class="py-1.5 pr-3 text-xs text-muted-foreground">{ op.Class }</td>
 							<td class="py-1.5 pr-3">
-								<span class={ "rounded border px-1.5 py-0.5 text-xs", opStatusClass(op.Status) } title={ op.Err }>{ op.Status }</span>
+								<span class={ "rounded border px-1.5 py-0.5 text-xs", opStatusClass(op.Status) } title={ op.Err }>{ string(op.Status) }</span>
 							</td>
 							<td class="py-1.5 pr-3 text-right text-xs text-muted-foreground">{ op.CreatedAt.Format("15:04:05") }</td>
 							<td class="py-1.5 text-right">
@@ -44,11 +44,11 @@ templ OperationRows(ops []backend.Operation) {
 
 // opStatusClass colors the status badge: green success, red failure, blue
 // anything still in flight.
-func opStatusClass(status string) string {
+func opStatusClass(status backend.OperationStatus) string {
 	switch status {
-	case "Success":
+	case backend.OpSuccess:
 		return "text-green-500"
-	case "Failure":
+	case backend.OpFailure:
 		return "text-red-500"
 	default:
 		return "text-blue-500"

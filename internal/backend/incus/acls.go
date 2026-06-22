@@ -33,18 +33,18 @@ func (b *incusBackend) GetNetworkACL(ctx context.Context, name string) (backend.
 	return out, nil
 }
 
-func (b *incusBackend) CreateNetworkACL(ctx context.Context, name, description string) error {
+func (b *incusBackend) CreateNetworkACL(ctx context.Context, acl backend.NetworkACL) error {
 	post := api.NetworkACLsPost{}
-	post.Name = name
-	post.Description = description
+	post.Name = acl.Name
+	post.Description = acl.Description
 	if err := b.project(ctx).CreateNetworkACL(post); err != nil {
 		// The daemon reports a duplicate as a plain 400 ("The network ACL
 		// already exists"), which mapErr's typed BadRequest branch would turn
 		// into ErrInvalid before the string fallback can see it.
 		if strings.Contains(err.Error(), "already exists") {
-			return fmt.Errorf("network ACL %q already exists: %w", name, backend.ErrConflict)
+			return fmt.Errorf("network ACL %q already exists: %w", acl.Name, backend.ErrConflict)
 		}
-		return fmt.Errorf("create network ACL %q: %w", name, mapErr(err))
+		return fmt.Errorf("create network ACL %q: %w", acl.Name, mapErr(err))
 	}
 	return nil
 }

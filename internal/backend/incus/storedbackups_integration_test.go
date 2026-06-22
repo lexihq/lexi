@@ -55,7 +55,7 @@ func TestStoredBackupLifecycle(t *testing.T) {
 	require.NoError(t, b.RestoreInstanceBackup(ctx, name, "it-keep", restored))
 	inst, err := b.GetInstance(ctx, restored)
 	require.NoError(t, err)
-	require.Equal(t, "Stopped", inst.Status)
+	require.Equal(t, backend.StatusStopped, inst.Status)
 
 	require.NoError(t, b.DeleteInstanceBackup(ctx, name, "it-keep"))
 	require.NoError(t, b.DeleteInstanceBackup(ctx, name, "backup0"))

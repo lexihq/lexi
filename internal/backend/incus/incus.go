@@ -110,12 +110,13 @@ func probeCaps(srv incusclient.InstanceServer) (backend.Capabilities, error) {
 	}, nil
 }
 
-// New connects to Incus and probes capabilities. The default remote failing
-// is fatal; every other instance-server remote in the CLI config is dialed
-// best-effort — one that's down at startup is logged and excluded from the
-// switcher until restart.
-func New() (*incusBackend, error) {
-	srv, remoteName, remoteAddr, conf, err := Connect()
+// New connects to Incus and probes capabilities. The remote selects the CLI
+// config remote to dial (empty uses LEXI_INCUS_REMOTE or the config default).
+// The chosen remote failing is fatal; every other instance-server remote in
+// the CLI config is dialed best-effort — one that's down at startup is logged
+// and excluded from the switcher until restart.
+func New(remote string) (*incusBackend, error) {
+	srv, remoteName, remoteAddr, conf, err := Connect(remote)
 	if err != nil {
 		return nil, fmt.Errorf("connect to incus: %w", err)
 	}

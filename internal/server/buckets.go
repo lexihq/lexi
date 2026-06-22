@@ -23,7 +23,7 @@ func (h handlers) createBucket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	size := strings.TrimSpace(r.Form.Get("size"))
-	if err := h.backend.CreateBucket(r.Context(), pool, name, r.Form.Get("description"), size); err != nil {
+	if err := h.backend.CreateBucket(r.Context(), pool, backend.StorageBucket{Name: name, Description: r.Form.Get("description"), Size: size}); err != nil {
 		h.fail(w, err)
 		return
 	}

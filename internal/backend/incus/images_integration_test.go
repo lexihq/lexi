@@ -189,7 +189,7 @@ func TestSplitImageImportExportRoundTrip(t *testing.T) {
 	require.GreaterOrEqual(t, idx, 0, "imported split image missing")
 	fingerprint := imgs[idx].Fingerprint
 	t.Cleanup(func() { _ = b.DeleteImage(ctx, fingerprint) })
-	assert.Equal(t, "virtual-machine", imgs[idx].Type, "rootfs.img entry imports as a VM image")
+	assert.Equal(t, backend.TypeVirtualMachine, imgs[idx].Type, "rootfs.img entry imports as a VM image")
 
 	// Export comes back as a split zip with both parts intact.
 	filename, rc, err := b.ExportImage(ctx, fingerprint)

@@ -45,12 +45,12 @@ func (b *incusBackend) GetProjectUsage(ctx context.Context, name string) ([]back
 	return out, nil
 }
 
-func (b *incusBackend) CreateProject(ctx context.Context, name, description string, config map[string]string) error {
-	req := api.ProjectsPost{Name: name}
-	req.Description = description
-	req.Config = config
+func (b *incusBackend) CreateProject(ctx context.Context, project backend.Project) error {
+	req := api.ProjectsPost{Name: project.Name}
+	req.Description = project.Description
+	req.Config = project.Config
 	if err := b.server(ctx).CreateProject(req); err != nil {
-		return fmt.Errorf("create project %q: %w", name, mapErr(err))
+		return fmt.Errorf("create project %q: %w", project.Name, mapErr(err))
 	}
 	return nil
 }

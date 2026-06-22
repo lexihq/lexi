@@ -22,8 +22,8 @@ func TestNetworkZoneRoundTrip(t *testing.T) {
 	name := uniqueName("lxzone") + ".example.org"
 	t.Cleanup(func() { _ = b.DeleteNetworkZone(ctx, name) })
 
-	require.NoError(t, b.CreateNetworkZone(ctx, name, "made by test"))
-	require.ErrorIs(t, b.CreateNetworkZone(ctx, name, ""), backend.ErrConflict)
+	require.NoError(t, b.CreateNetworkZone(ctx, backend.NetworkZone{Name: name, Description: "made by test"}))
+	require.ErrorIs(t, b.CreateNetworkZone(ctx, backend.NetworkZone{Name: name, Description: ""}), backend.ErrConflict)
 
 	z, err := b.GetNetworkZone(ctx, name)
 	require.NoError(t, err)

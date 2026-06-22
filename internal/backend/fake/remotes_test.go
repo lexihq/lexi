@@ -78,7 +78,7 @@ func TestMigrateInstanceMovesAcrossRemotes(t *testing.T) {
 	require.ErrorIs(t, err, backend.ErrNotFound)
 	inst, err := f.GetInstance(secondaryCtx(), "mig2")
 	require.NoError(t, err)
-	assert.Equal(t, "Stopped", inst.Status)
+	assert.Equal(t, backend.StatusStopped, inst.Status)
 
 	// Name conflicts on the target are rejected and the source is kept.
 	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "mig2", Image: "debian/12"}))

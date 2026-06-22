@@ -32,7 +32,7 @@ func TestBulkStartOnlyActsOnSelected(t *testing.T) {
 	if body := res.Body.String(); !strings.Contains(body, "data-tui-toast") {
 		t.Fatalf("expected a summary toast, got %q", body)
 	}
-	for n, want := range map[string]string{"web-1": "Running", "web-2": "Stopped", "web-3": "Running"} {
+	for n, want := range map[string]backend.InstanceStatus{"web-1": "Running", "web-2": "Stopped", "web-3": "Running"} {
 		inst, err := b.GetInstance(t.Context(), n)
 		if err != nil {
 			t.Fatal(err)

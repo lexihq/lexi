@@ -122,10 +122,53 @@ type Capabilities struct {
 	StorageBuckets bool
 }
 
+// InstanceStatus is an instance's runtime state, mirroring the Incus status
+// vocabulary. Only the values the UI gates behavior on are named here; the
+// driver may carry through other transient daemon states (e.g. "Starting") as
+// raw values for display.
+type InstanceStatus string
+
+const (
+	StatusRunning InstanceStatus = "Running"
+	StatusStopped InstanceStatus = "Stopped"
+	StatusFrozen  InstanceStatus = "Frozen"
+	StatusError   InstanceStatus = "Error"
+)
+
+// InstanceType distinguishes a system container from a virtual machine. Shared
+// by Instance, Image, and CreateOptions, which all carry the same vocabulary.
+type InstanceType string
+
+const (
+	TypeContainer      InstanceType = "container"
+	TypeVirtualMachine InstanceType = "virtual-machine"
+)
+
+// OperationStatus is an async operation's lifecycle state, mirroring the Incus
+// operation vocabulary. Only the values the UI styles are named; the driver
+// carries through other daemon states as raw values for display.
+type OperationStatus string
+
+const (
+	OpRunning   OperationStatus = "Running"
+	OpSuccess   OperationStatus = "Success"
+	OpFailure   OperationStatus = "Failure"
+	OpCancelled OperationStatus = "Cancelled"
+)
+
+// WarningStatus is a server warning's acknowledgement state.
+type WarningStatus string
+
+const (
+	WarningNew          WarningStatus = "new"
+	WarningAcknowledged WarningStatus = "acknowledged"
+	WarningResolved     WarningStatus = "resolved"
+)
+
 // Instance is a system container or virtual machine.
 type Instance struct {
 	Name         string
-	Status       string // Running | Stopped | ...
+	Status       InstanceStatus
 	Image        string // base image description, if known
 	IPv4         []string
 	Snapshots    int
@@ -321,10 +364,10 @@ type Image struct {
 	Description  string
 	Arch         string // incus arch name, e.g. "aarch64", "x86_64"
 	SizeBytes    int64
-	Distribution string // e.g. "debian"
-	Release      string // e.g. "12"
-	Variant      string // e.g. "default", "cloud"
-	Type         string // "container" | "virtual-machine"
+	Distribution string       // e.g. "debian"
+	Release      string       // e.g. "12"
+	Variant      string       // e.g. "default", "cloud"
+	Type         InstanceType // "container" | "virtual-machine"
 }
 
 // ServerOverview is the host summary for the Server section: daemon and host
@@ -394,8 +437,8 @@ type Certificate struct {
 type Warning struct {
 	UUID        string
 	Type        string
-	Severity    string // low | moderate | high
-	Status      string // new | acknowledged | resolved
+	Severity    string        // low | moderate | high
+	Status      WarningStatus // new | acknowledged | resolved
 	Count       int
 	LastMessage string
 	LastSeenAt  time.Time
@@ -429,9 +472,9 @@ type FileWriteOptions struct {
 type Operation struct {
 	ID          string
 	Description string
-	Class       string // task | websocket | token
-	Status      string // Running | Success | Failure | ...
-	Err         string // failure detail, "" when none
+	Class       string          // task | websocket | token
+	Status      OperationStatus // Running | Success | Failure | ...
+	Err         string          // failure detail, "" when none
 	CreatedAt   time.Time
 	Cancelable  bool // the daemon will accept a cancel request for this op
 }
@@ -609,7 +652,7 @@ type LocalImage struct {
 	Description string
 	Arch        string // incus arch name, e.g. "aarch64", "x86_64"
 	SizeBytes   int64
-	Type        string // "container" | "virtual-machine"
+	Type        InstanceType // "container" | "virtual-machine"
 	CreatedAt   time.Time
 	Public      bool      // visible to unauthenticated clients
 	AutoUpdate  bool      // daemon re-pulls from the update source
@@ -633,9 +676,9 @@ type ImageEdit struct {
 // disk and network, no extra config.
 type CreateOptions struct {
 	Name        string
-	Image       string // display alias on the images remote
-	Fingerprint string // exact image identity; empty falls back to Image
-	Type        string // "container" | "virtual-machine"; empty defaults to container
+	Image       string       // display alias on the images remote
+	Fingerprint string       // exact image identity; empty falls back to Image
+	Type        InstanceType // "container" | "virtual-machine"; empty defaults to container
 	Start       bool
 	// Profiles to apply in order (later override earlier); empty keeps the
 	// daemon's default ([default]).
@@ -744,7 +787,10 @@ type Backend interface {
 
 	ListNetworkACLs(ctx context.Context) ([]NetworkACL, error)
 	GetNetworkACL(ctx context.Context, name string) (NetworkACL, error)
-	CreateNetworkACL(ctx context.Context, name, description string) error
+	// CreateNetworkACL makes an empty ACL from acl.Name and acl.Description;
+	// rules are added later via UpdateNetworkACL (the Incus API has no
+	// create-with-rules form), so Ingress/Egress on acl are ignored.
+	CreateNetworkACL(ctx context.Context, acl NetworkACL) error
 	// UpdateNetworkACL replaces the ACL's description and both rule lists. A
 	// non-empty version (from GetNetworkACL) makes the update conditional:
 	// ErrConflict if the ACL changed since that read.
@@ -774,9 +820,10 @@ type Backend interface {
 	ListNetworkZones(ctx context.Context) ([]NetworkZone, error)
 	// GetNetworkZone returns the zone with a populated Version token.
 	GetNetworkZone(ctx context.Context, name string) (NetworkZone, error)
-	// CreateNetworkZone creates a DNS zone; the name must be a valid zone
-	// name (ErrInvalid) and free (ErrConflict).
-	CreateNetworkZone(ctx context.Context, name, description string) error
+	// CreateNetworkZone creates a DNS zone from zone.Name and
+	// zone.Description; the name must be a valid zone name (ErrInvalid) and
+	// free (ErrConflict). Config is set later via UpdateNetworkZone.
+	CreateNetworkZone(ctx context.Context, zone NetworkZone) error
 	// UpdateNetworkZone replaces the zone's description and config,
 	// conditionally on version (ErrConflict when stale; empty version is
 	// unconditional).
@@ -809,9 +856,10 @@ type Backend interface {
 	// configured limits, sorted by resource name. An unknown project is
 	// ErrNotFound.
 	GetProjectUsage(ctx context.Context, name string) ([]ProjectUsage, error)
-	// CreateProject creates a project; config carries the features.* keys
-	// (the daemon defaults unset features for new projects).
-	CreateProject(ctx context.Context, name, description string, config map[string]string) error
+	// CreateProject creates a project from project.Name, project.Description,
+	// and project.Config; Config carries the features.* keys (the daemon
+	// defaults unset features for new projects).
+	CreateProject(ctx context.Context, project Project) error
 	// UpdateProject replaces the project's description and config,
 	// conditionally on version (ErrConflict when stale; empty version is
 	// unconditional).
@@ -867,11 +915,12 @@ type Backend interface {
 
 	// ListBuckets lists the pool's storage buckets, sorted by name.
 	ListBuckets(ctx context.Context, pool string) ([]StorageBucket, error)
-	// CreateBucket creates a bucket; a non-empty size (e.g. "100MiB") caps
-	// it. The daemon seeds an initial admin key, visible via
-	// ListBucketKeys. The name must be free (ErrConflict) and the pool must
-	// exist (ErrNotFound).
-	CreateBucket(ctx context.Context, pool, name, description, size string) error
+	// CreateBucket creates a bucket in pool from bucket.Name,
+	// bucket.Description, and bucket.Size (a non-empty size like "100MiB"
+	// caps it); S3URL is an output and ignored here. The daemon seeds an
+	// initial admin key, visible via ListBucketKeys. The name must be free
+	// (ErrConflict) and the pool must exist (ErrNotFound).
+	CreateBucket(ctx context.Context, pool string, bucket StorageBucket) error
 	// DeleteBucket removes the bucket and its keys.
 	DeleteBucket(ctx context.Context, pool, name string) error
 	// ListBucketKeys lists the bucket's access keys (credentials included),

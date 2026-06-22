@@ -219,7 +219,7 @@ func TestAcknowledgeWarningRoundTrip(t *testing.T) {
 		if target.Status == "acknowledged" {
 			return
 		}
-		if err := b.srv.UpdateWarning(target.UUID, api.WarningPut{Status: target.Status}, ""); err != nil {
+		if err := b.srv.UpdateWarning(target.UUID, api.WarningPut{Status: string(target.Status)}, ""); err != nil {
 			t.Errorf("restore warning %s to %q: %v", target.UUID, target.Status, err)
 		}
 	})
@@ -230,7 +230,7 @@ func TestAcknowledgeWarningRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	for _, w := range after {
 		if w.UUID == target.UUID {
-			require.Equal(t, "acknowledged", w.Status)
+			require.Equal(t, backend.WarningAcknowledged, w.Status)
 			return
 		}
 	}

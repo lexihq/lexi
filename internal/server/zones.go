@@ -47,7 +47,7 @@ func (h handlers) createNetworkZone(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, fmt.Errorf("zone name is required: %w", backend.ErrInvalid))
 		return
 	}
-	if err := h.backend.CreateNetworkZone(r.Context(), name, r.Form.Get("description")); err != nil {
+	if err := h.backend.CreateNetworkZone(r.Context(), backend.NetworkZone{Name: name, Description: r.Form.Get("description")}); err != nil {
 		h.fail(w, err)
 		return
 	}

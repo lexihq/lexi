@@ -84,7 +84,7 @@ func toImages(images []api.Image) []backend.Image {
 				Distribution: strings.ToLower(firstNonEmpty(img.Properties["os"], distroFromAlias(al.Name))),
 				Release:      img.Properties["release"],
 				Variant:      img.Properties["variant"],
-				Type:         img.Type,
+				Type:         backend.InstanceType(img.Type),
 			})
 		}
 	}
@@ -126,7 +126,7 @@ func (b *incusBackend) ListLocalImages(ctx context.Context) ([]backend.LocalImag
 			Description:     img.Properties["description"],
 			Arch:            img.Architecture,
 			SizeBytes:       img.Size,
-			Type:            img.Type,
+			Type:            backend.InstanceType(img.Type),
 			CreatedAt:       img.CreatedAt,
 			Public:          img.Public,
 			AutoUpdate:      img.AutoUpdate,

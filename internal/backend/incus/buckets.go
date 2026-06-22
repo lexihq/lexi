@@ -30,20 +30,20 @@ func (b *incusBackend) ListBuckets(ctx context.Context, pool string) ([]backend.
 
 // CreateBucket creates a bucket; the daemon also mints an initial admin key,
 // which callers read back via ListBucketKeys rather than from here.
-func (b *incusBackend) CreateBucket(ctx context.Context, pool, name, description, size string) error {
-	post := api.StorageBucketsPost{Name: name}
-	post.Description = description
-	if size != "" {
-		post.Config = api.ConfigMap{"size": size}
+func (b *incusBackend) CreateBucket(ctx context.Context, pool string, bucket backend.StorageBucket) error {
+	post := api.StorageBucketsPost{Name: bucket.Name}
+	post.Description = bucket.Description
+	if bucket.Size != "" {
+		post.Config = api.ConfigMap{"size": bucket.Size}
 	}
 	if _, err := b.project(ctx).CreateStoragePoolBucket(pool, post); err != nil {
 		// The daemon reports a duplicate as a plain 400, which mapErr's typed
 		// BadRequest branch would turn into ErrInvalid before the string
 		// fallback can see it.
 		if strings.Contains(err.Error(), "already exists") {
-			return fmt.Errorf("bucket %q already exists: %w", name, backend.ErrConflict)
+			return fmt.Errorf("bucket %q already exists: %w", bucket.Name, backend.ErrConflict)
 		}
-		return fmt.Errorf("create bucket %q in pool %q: %w", name, pool, mapErr(err))
+		return fmt.Errorf("create bucket %q in pool %q: %w", bucket.Name, pool, mapErr(err))
 	}
 	return nil
 }

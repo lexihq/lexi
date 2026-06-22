@@ -183,7 +183,7 @@ func (f *Fake) ExportImage(ctx context.Context, fingerprint string) (string, io.
 	if !ok {
 		return "", nil, notFoundf("image %q", fingerprint)
 	}
-	if img.Type != "virtual-machine" {
+	if img.Type != backend.TypeVirtualMachine {
 		return fingerprint + ".tar", io.NopCloser(strings.NewReader(fakeImageMagic + fingerprint)), nil
 	}
 
@@ -239,7 +239,7 @@ func (f *Fake) ImportImage(ctx context.Context, r io.Reader, alias string) error
 		Fingerprint: fingerprint,
 		Description: "Imported image",
 		Arch:        "aarch64",
-		Type:        imgType,
+		Type:        backend.InstanceType(imgType),
 		CreatedAt:   f.now(),
 	}
 	if alias != "" {

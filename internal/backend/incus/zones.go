@@ -31,18 +31,18 @@ func (b *incusBackend) GetNetworkZone(ctx context.Context, name string) (backend
 	return toNetworkZone(z, etag), nil
 }
 
-func (b *incusBackend) CreateNetworkZone(ctx context.Context, name, description string) error {
+func (b *incusBackend) CreateNetworkZone(ctx context.Context, zone backend.NetworkZone) error {
 	post := api.NetworkZonesPost{}
-	post.Name = name
-	post.Description = description
+	post.Name = zone.Name
+	post.Description = zone.Description
 	if err := b.project(ctx).CreateNetworkZone(post); err != nil {
 		// The daemon reports a duplicate as a plain 400, which mapErr's typed
 		// BadRequest branch would turn into ErrInvalid before the string
 		// fallback can see it.
 		if strings.Contains(err.Error(), "already exists") {
-			return fmt.Errorf("network zone %q already exists: %w", name, backend.ErrConflict)
+			return fmt.Errorf("network zone %q already exists: %w", zone.Name, backend.ErrConflict)
 		}
-		return fmt.Errorf("create network zone %q: %w", name, mapErr(err))
+		return fmt.Errorf("create network zone %q: %w", zone.Name, mapErr(err))
 	}
 	return nil
 }

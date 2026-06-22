@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lexihq/lexi/internal/backend/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -228,7 +229,7 @@ func TestAckWarningFlipsStatusAndReturnsTable(t *testing.T) {
 	require.NoError(t, err)
 	for _, w := range warnings {
 		if w.UUID == "fake-warning-1" {
-			assert.Equal(t, "acknowledged", w.Status)
+			assert.Equal(t, backend.WarningAcknowledged, w.Status)
 		}
 	}
 }

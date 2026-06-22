@@ -15,11 +15,11 @@ func TestNetworkACLCRUDRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, acls)
 
-	require.NoError(t, f.CreateNetworkACL(ctx(), "web", "web traffic"))
-	require.ErrorIs(t, f.CreateNetworkACL(ctx(), "web", ""), backend.ErrConflict)
-	require.ErrorIs(t, f.CreateNetworkACL(ctx(), "bad name", ""), backend.ErrInvalid)
-	require.ErrorIs(t, f.CreateNetworkACL(ctx(), "@reserved", ""), backend.ErrInvalid)
-	require.ErrorIs(t, f.CreateNetworkACL(ctx(), "under_score", ""), backend.ErrInvalid)
+	require.NoError(t, f.CreateNetworkACL(ctx(), backend.NetworkACL{Name: "web", Description: "web traffic"}))
+	require.ErrorIs(t, f.CreateNetworkACL(ctx(), backend.NetworkACL{Name: "web", Description: ""}), backend.ErrConflict)
+	require.ErrorIs(t, f.CreateNetworkACL(ctx(), backend.NetworkACL{Name: "bad name", Description: ""}), backend.ErrInvalid)
+	require.ErrorIs(t, f.CreateNetworkACL(ctx(), backend.NetworkACL{Name: "@reserved", Description: ""}), backend.ErrInvalid)
+	require.ErrorIs(t, f.CreateNetworkACL(ctx(), backend.NetworkACL{Name: "under_score", Description: ""}), backend.ErrInvalid)
 
 	acl, err := f.GetNetworkACL(ctx(), "web")
 	require.NoError(t, err)
@@ -38,7 +38,7 @@ func TestNetworkACLCRUDRoundTrip(t *testing.T) {
 	assert.Empty(t, got.Egress)
 
 	// Rename moves the ACL; collisions and bad names are rejected.
-	require.NoError(t, f.CreateNetworkACL(ctx(), "other", ""))
+	require.NoError(t, f.CreateNetworkACL(ctx(), backend.NetworkACL{Name: "other", Description: ""}))
 	require.ErrorIs(t, f.RenameNetworkACL(ctx(), "web", "other"), backend.ErrConflict)
 	require.ErrorIs(t, f.RenameNetworkACL(ctx(), "web", "bad name"), backend.ErrInvalid)
 	require.NoError(t, f.RenameNetworkACL(ctx(), "web", "frontend"))
@@ -56,7 +56,7 @@ func TestNetworkACLCRUDRoundTrip(t *testing.T) {
 
 func TestNetworkACLUsedByIncludesNICAttachments(t *testing.T) {
 	f := New()
-	require.NoError(t, f.CreateNetworkACL(ctx(), "web", ""))
+	require.NoError(t, f.CreateNetworkACL(ctx(), backend.NetworkACL{Name: "web", Description: ""}))
 
 	// Attach via an instance NIC device and a profile NIC device; both count
 	// as users, like the daemon's UsedBy. c1 carries the gpu profile so the
@@ -109,7 +109,7 @@ func countOf(list []string, want string) int {
 
 func TestNetworkACLDeleteRefusedWhenReferenced(t *testing.T) {
 	f := New()
-	require.NoError(t, f.CreateNetworkACL(ctx(), "web", ""))
+	require.NoError(t, f.CreateNetworkACL(ctx(), backend.NetworkACL{Name: "web", Description: ""}))
 
 	// Reference the ACL from the seeded managed network's security.acls.
 	n, err := f.GetNetwork(ctx(), "incusbr0")

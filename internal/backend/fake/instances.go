@@ -61,9 +61,9 @@ func (f *Fake) CreateInstance(ctx context.Context, opt backend.CreateOptions) er
 			return invalid("network %q is not managed", opt.Network)
 		}
 	}
-	status := "Stopped"
+	status := backend.StatusStopped
 	if opt.Start {
-		status = "Running"
+		status = backend.StatusRunning
 	}
 	profiles := opt.Profiles
 	if len(profiles) == 0 {
@@ -120,7 +120,7 @@ func (f *Fake) RebuildInstance(ctx context.Context, name, image, fingerprint str
 	if !ok {
 		return notFound(name)
 	}
-	if in.Status != "Stopped" {
+	if in.Status != backend.StatusStopped {
 		return invalid("instance %q must be stopped to rebuild", name)
 	}
 	in.Image = image
@@ -129,26 +129,26 @@ func (f *Fake) RebuildInstance(ctx context.Context, name, image, fingerprint str
 }
 
 func (f *Fake) StartInstance(ctx context.Context, name string) error {
-	return f.setStatus(ctx, name, "Running", "Starting")
+	return f.setStatus(ctx, name, backend.StatusRunning, "Starting")
 }
 
 func (f *Fake) StopInstance(ctx context.Context, name string) error {
-	return f.setStatus(ctx, name, "Stopped", "Stopping")
+	return f.setStatus(ctx, name, backend.StatusStopped, "Stopping")
 }
 
 func (f *Fake) RestartInstance(ctx context.Context, name string) error {
-	return f.setStatus(ctx, name, "Running", "Restarting")
+	return f.setStatus(ctx, name, backend.StatusRunning, "Restarting")
 }
 
 func (f *Fake) PauseInstance(ctx context.Context, name string) error {
-	return f.setStatus(ctx, name, "Frozen", "Pausing")
+	return f.setStatus(ctx, name, backend.StatusFrozen, "Pausing")
 }
 
 func (f *Fake) ResumeInstance(ctx context.Context, name string) error {
-	return f.setStatus(ctx, name, "Running", "Resuming")
+	return f.setStatus(ctx, name, backend.StatusRunning, "Resuming")
 }
 
-func (f *Fake) setStatus(ctx context.Context, name, status, verb string) error {
+func (f *Fake) setStatus(ctx context.Context, name string, status backend.InstanceStatus, verb string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.space(ctx)
@@ -161,12 +161,12 @@ func (f *Fake) setStatus(ctx context.Context, name, status, verb string) error {
 	// DHCP parity: a started instance gets an address (stable per start), a
 	// stopped one releases it. The network leases view derives from this.
 	switch status {
-	case "Running":
+	case backend.StatusRunning:
 		if len(in.IPv4) == 0 {
 			sp.ipSeq++
 			in.IPv4 = []string{fmt.Sprintf("10.0.3.%d", 20+sp.ipSeq%200)}
 		}
-	case "Stopped":
+	case backend.StatusStopped:
 		in.IPv4 = nil
 	}
 	// Incus parity: the instance etag covers the whole object, so lifecycle
@@ -204,7 +204,7 @@ func (f *Fake) CloneInstance(ctx context.Context, src, dst string) error {
 	sp.instances[dst] = &instance{
 		Instance: backend.Instance{
 			Name:      dst,
-			Status:    "Stopped",
+			Status:    backend.StatusStopped,
 			Image:     from.Image,
 			CreatedAt: f.now(),
 		},

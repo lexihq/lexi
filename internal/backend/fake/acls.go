@@ -37,18 +37,18 @@ func (f *Fake) GetNetworkACL(ctx context.Context, name string) (backend.NetworkA
 	return acl, nil
 }
 
-func (f *Fake) CreateNetworkACL(ctx context.Context, name, description string) error {
+func (f *Fake) CreateNetworkACL(ctx context.Context, acl backend.NetworkACL) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.networkSpace(ctx)
 
-	if !validACLName(name) {
-		return invalid("invalid network ACL name %q", name)
+	if !validACLName(acl.Name) {
+		return invalid("invalid network ACL name %q", acl.Name)
 	}
-	if _, ok := sp.acls[name]; ok {
-		return conflict("network ACL %q already exists", name)
+	if _, ok := sp.acls[acl.Name]; ok {
+		return conflict("network ACL %q already exists", acl.Name)
 	}
-	sp.acls[name] = backend.NetworkACL{Name: name, Description: description}
+	sp.acls[acl.Name] = backend.NetworkACL{Name: acl.Name, Description: acl.Description}
 	return nil
 }
 

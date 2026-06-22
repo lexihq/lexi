@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lexihq/lexi/internal/backend/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,7 +13,7 @@ import (
 
 func TestStoragePoolPageRendersBuckets(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateBucket(t.Context(), "default", "media", "app assets", "100MiB"))
+	require.NoError(t, b.CreateBucket(t.Context(), "default", backend.StorageBucket{Name: "media", Description: "app assets", Size: "100MiB"}))
 
 	res := request(t, New(b), "GET", "/storage/default", "", false)
 	assertStatus(t, res, http.StatusOK)
@@ -44,7 +45,7 @@ func TestCreateBucketAppliesAndRedirects(t *testing.T) {
 
 func TestBucketKeyAddValidatesRole(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateBucket(t.Context(), "default", "media", "", ""))
+	require.NoError(t, b.CreateBucket(t.Context(), "default", backend.StorageBucket{Name: "media", Description: ""}))
 	srv := New(b)
 
 	form := url.Values{"name": {"ci"}, "role": {"read-only"}, "description": {"ci reader"}}
@@ -65,7 +66,7 @@ func TestBucketKeyAddValidatesRole(t *testing.T) {
 
 func TestBucketAndKeyDelete(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateBucket(t.Context(), "default", "media", "", ""))
+	require.NoError(t, b.CreateBucket(t.Context(), "default", backend.StorageBucket{Name: "media", Description: ""}))
 	srv := New(b)
 
 	res := formRequest(t, srv, "/storage/default/buckets/media/keys/delete", url.Values{"key": {"admin"}}, false)

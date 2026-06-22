@@ -22,7 +22,7 @@ func (f *Fake) ListNetworkLeases(ctx context.Context, network string) ([]backend
 	sp := f.space(ctx)
 	var leases []backend.NetworkLease
 	for name, in := range sp.instances {
-		if in.Status != "Running" || len(in.IPv4) == 0 {
+		if in.Status != backend.StatusRunning || len(in.IPv4) == 0 {
 			continue
 		}
 		if !f.instanceOnNetwork(sp, in, network) {

@@ -17,10 +17,10 @@ func TestBucketCRUDRoundTrip(t *testing.T) {
 	_, err = f.ListBuckets(ctx(), "ghost")
 	require.ErrorIs(t, err, backend.ErrNotFound)
 
-	require.NoError(t, f.CreateBucket(ctx(), "default", "media", "app assets", "100MiB"))
-	require.ErrorIs(t, f.CreateBucket(ctx(), "default", "media", "", ""), backend.ErrConflict)
-	require.ErrorIs(t, f.CreateBucket(ctx(), "default", "bad name", "", ""), backend.ErrInvalid)
-	require.ErrorIs(t, f.CreateBucket(ctx(), "ghost", "media", "", ""), backend.ErrNotFound)
+	require.NoError(t, f.CreateBucket(ctx(), "default", backend.StorageBucket{Name: "media", Description: "app assets", Size: "100MiB"}))
+	require.ErrorIs(t, f.CreateBucket(ctx(), "default", backend.StorageBucket{Name: "media", Description: ""}), backend.ErrConflict)
+	require.ErrorIs(t, f.CreateBucket(ctx(), "default", backend.StorageBucket{Name: "bad name", Description: ""}), backend.ErrInvalid)
+	require.ErrorIs(t, f.CreateBucket(ctx(), "ghost", backend.StorageBucket{Name: "media", Description: ""}), backend.ErrNotFound)
 
 	buckets, err = f.ListBuckets(ctx(), "default")
 	require.NoError(t, err)
@@ -36,7 +36,7 @@ func TestBucketCRUDRoundTrip(t *testing.T) {
 
 func TestBucketKeysLifecycle(t *testing.T) {
 	f := New()
-	require.NoError(t, f.CreateBucket(ctx(), "default", "media", "", ""))
+	require.NoError(t, f.CreateBucket(ctx(), "default", backend.StorageBucket{Name: "media", Description: ""}))
 
 	// Daemon parity: bucket creation seeds an admin key.
 	keys, err := f.ListBucketKeys(ctx(), "default", "media")
@@ -73,7 +73,7 @@ func TestBucketKeysLifecycle(t *testing.T) {
 
 	// Keys vanish with their bucket.
 	require.NoError(t, f.DeleteBucket(ctx(), "default", "media"))
-	require.NoError(t, f.CreateBucket(ctx(), "default", "media", "", ""))
+	require.NoError(t, f.CreateBucket(ctx(), "default", backend.StorageBucket{Name: "media", Description: ""}))
 	keys, err = f.ListBucketKeys(ctx(), "default", "media")
 	require.NoError(t, err)
 	require.Len(t, keys, 1, "only the fresh admin key may exist")
@@ -81,18 +81,18 @@ func TestBucketKeysLifecycle(t *testing.T) {
 
 func TestBucketsAreProjectScopedByFeature(t *testing.T) {
 	f := New()
-	require.NoError(t, f.CreateBucket(ctx(), "default", "shared", "", ""))
+	require.NoError(t, f.CreateBucket(ctx(), "default", backend.StorageBucket{Name: "shared", Description: ""}))
 
 	// A project without its own bucket feature shares default's buckets.
-	require.NoError(t, f.CreateProject(ctx(), "plain", "", nil))
+	require.NoError(t, f.CreateProject(ctx(), backend.Project{Name: "plain", Description: ""}))
 	buckets, err := f.ListBuckets(backend.WithProject(ctx(), "plain"), "default")
 	require.NoError(t, err)
 	require.Len(t, buckets, 1)
 
 	// A project owning features.storage.buckets gets its own namespace.
-	require.NoError(t, f.CreateProject(ctx(), "bucketed", "", map[string]string{"features.storage.buckets": "true"}))
+	require.NoError(t, f.CreateProject(ctx(), backend.Project{Name: "bucketed", Description: "", Config: map[string]string{"features.storage.buckets": "true"}}))
 	buckets, err = f.ListBuckets(backend.WithProject(ctx(), "bucketed"), "default")
 	require.NoError(t, err)
 	require.Empty(t, buckets)
-	require.NoError(t, f.CreateBucket(backend.WithProject(ctx(), "bucketed"), "default", "shared", "same name, own namespace", ""))
+	require.NoError(t, f.CreateBucket(backend.WithProject(ctx(), "bucketed"), "default", backend.StorageBucket{Name: "shared", Description: "same name, own namespace"}))
 }

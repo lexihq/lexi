@@ -182,7 +182,7 @@ func TestListWarningsMapsAndSortsNewestFirst(t *testing.T) {
 	require.Len(t, got, 2)
 	assert.Equal(t, "w-new", got[0].UUID)
 	assert.Equal(t, "high", got[0].Severity)
-	assert.Equal(t, "acknowledged", got[0].Status)
+	assert.Equal(t, backend.WarningAcknowledged, got[0].Status)
 	assert.Equal(t, "m2", got[0].LastMessage)
 	assert.Equal(t, newer, got[0].LastSeenAt)
 	assert.Equal(t, "w-old", got[1].UUID)

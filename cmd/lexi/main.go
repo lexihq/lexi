@@ -18,14 +18,7 @@ func main() {
 	incusRemote := flag.String("incus-remote", "", "Incus CLI remote to use (defaults to current remote)")
 	flag.Parse()
 
-	if *incusRemote != "" {
-		if err := os.Setenv("LEXI_INCUS_REMOTE", *incusRemote); err != nil {
-			slog.Error("set incus remote", "err", err)
-			os.Exit(1)
-		}
-	}
-
-	b, err := incus.New()
+	b, err := incus.New(*incusRemote)
 	if err != nil {
 		slog.Error("initialize incus backend", "err", err)
 		os.Exit(1)

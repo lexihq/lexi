@@ -26,7 +26,7 @@ func TestGetProjectCarriesEtagAsVersion(t *testing.T) {
 func TestCreateProjectSendsPost(t *testing.T) {
 	s := &instanceServerStub{}
 	b := &incusBackend{srv: s}
-	require.NoError(t, b.CreateProject(t.Context(), "dev", "d", map[string]string{"features.images": "false"}))
+	require.NoError(t, b.CreateProject(t.Context(), backend.Project{Name: "dev", Description: "d", Config: map[string]string{"features.images": "false"}}))
 	require.NotNil(t, s.createdProject)
 	assert.Equal(t, "dev", s.createdProject.Name)
 	assert.Equal(t, "d", s.createdProject.Description)

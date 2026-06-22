@@ -44,7 +44,7 @@ func TestCancelOperationCancelsAndReturnsRows(t *testing.T) {
 
 	ops, err := b.ListOperations(t.Context())
 	require.NoError(t, err)
-	require.Equal(t, "Cancelled", ops[0].Status)
+	require.Equal(t, backend.OpCancelled, ops[0].Status)
 }
 
 func TestCancelOperationGhostIs404(t *testing.T) {

@@ -219,7 +219,7 @@ func (f *Fake) RenameVolume(ctx context.Context, pool, name, newName string) err
 		for instName, in := range spc.instances {
 			for _, dev := range in.devices {
 				if dev["pool"] == pool && dev["source"] == name {
-					if in.Status == "Running" {
+					if in.Status == backend.StatusRunning {
 						return invalid("volume %q is in use by running instance %q", name, instName)
 					}
 				}

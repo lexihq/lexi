@@ -35,9 +35,9 @@ func TestToImagesKeepsDistinctImageTypes(t *testing.T) {
 
 	require.Len(t, got, 2)
 	assert.Equal(t, "container-fingerprint", got[0].Fingerprint)
-	assert.Equal(t, "container", got[0].Type)
+	assert.Equal(t, backend.TypeContainer, got[0].Type)
 	assert.Equal(t, "vm-fingerprint", got[1].Fingerprint)
-	assert.Equal(t, "virtual-machine", got[1].Type)
+	assert.Equal(t, backend.TypeVirtualMachine, got[1].Type)
 }
 
 func TestListLocalImagesMapsFields(t *testing.T) {
@@ -72,7 +72,7 @@ func TestListLocalImagesMapsFields(t *testing.T) {
 	assert.Equal(t, "A image", got[0].Description)
 	assert.Equal(t, "aarch64", got[0].Arch)
 	assert.Equal(t, int64(123), got[0].SizeBytes)
-	assert.Equal(t, "virtual-machine", got[0].Type)
+	assert.Equal(t, backend.TypeVirtualMachine, got[0].Type)
 	assert.Equal(t, created, got[0].CreatedAt)
 	assert.Equal(t, "zfp", got[1].Fingerprint)
 }

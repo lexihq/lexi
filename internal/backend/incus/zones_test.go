@@ -27,7 +27,7 @@ func TestGetNetworkZoneCarriesEtagAsVersion(t *testing.T) {
 func TestCreateNetworkZoneSendsPost(t *testing.T) {
 	s := &instanceServerStub{}
 	b := &incusBackend{srv: s}
-	require.NoError(t, b.CreateNetworkZone(t.Context(), "incus.example.org", "d"))
+	require.NoError(t, b.CreateNetworkZone(t.Context(), backend.NetworkZone{Name: "incus.example.org", Description: "d"}))
 	require.NotNil(t, s.createdZone)
 	assert.Equal(t, "incus.example.org", s.createdZone.Name)
 	assert.Equal(t, "d", s.createdZone.Description)

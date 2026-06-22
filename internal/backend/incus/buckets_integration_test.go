@@ -27,14 +27,14 @@ func TestStorageBucketRoundTrip(t *testing.T) {
 	name := uniqueName("lxbucket")
 	t.Cleanup(func() { _ = b.DeleteBucket(ctx, "default", name) })
 
-	if err := b.CreateBucket(ctx, "default", name, "made by test", ""); err != nil {
+	if err := b.CreateBucket(ctx, "default", backend.StorageBucket{Name: name, Description: "made by test"}); err != nil {
 		reason := strings.ToLower(err.Error())
 		if strings.Contains(reason, "storage_buckets_address") || strings.Contains(reason, "minio") {
 			t.Skipf("host not set up for local buckets: %v", err)
 		}
 		t.Fatalf("create bucket: %v", err)
 	}
-	require.ErrorIs(t, b.CreateBucket(ctx, "default", name, "", ""), backend.ErrConflict)
+	require.ErrorIs(t, b.CreateBucket(ctx, "default", backend.StorageBucket{Name: name, Description: ""}), backend.ErrConflict)
 
 	buckets, err := b.ListBuckets(ctx, "default")
 	require.NoError(t, err)

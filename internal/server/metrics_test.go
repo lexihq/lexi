@@ -67,7 +67,7 @@ func TestMetricsSeriesUnknownInstanceIs404(t *testing.T) {
 func TestMetricsSeriesIsolatesScopes(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
-	require.NoError(t, b.CreateProject(t.Context(), "dev", "", nil))
+	require.NoError(t, b.CreateProject(t.Context(), backend.Project{Name: "dev", Description: ""}))
 	require.NoError(t, b.CreateInstance(backend.WithProject(t.Context(), "dev"), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
 	srv := New(b)
 

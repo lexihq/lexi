@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -134,15 +133,7 @@ func (h handlers) exportImage(w http.ResponseWriter, r *http.Request) {
 // importImage creates a local image from an uploaded unified tarball. The file
 // upload uses a plain multipart form, so success redirects to the Images page.
 func (h handlers) importImage(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
-	// The request body is bounded by MaxBytesReader immediately above.
-	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			h.renderError(w, http.StatusRequestEntityTooLarge, "image file is too large")
-			return
-		}
-		h.renderError(w, http.StatusBadRequest, err.Error())
+	if !h.parseMultipartUpload(w, r, maxImportBytes, "image file is too large") {
 		return
 	}
 	file, _, err := r.FormFile("image")

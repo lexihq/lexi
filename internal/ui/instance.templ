@@ -39,37 +39,37 @@ templ InstanceHeader(caps backend.Capabilities, inst backend.Instance) {
 			</div>
 		</div>
 		<div class="flex flex-wrap justify-end gap-2">
-			if inst.Status != "Running" && inst.Status != "Frozen" {
+			if inst.Status != backend.StatusRunning && inst.Status != backend.StatusFrozen {
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("start"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
 					@icon.Icon("circle-play")(icon.Props{Class: "size-4"})
 					Start
 				}
 			}
-			if inst.Status == "Running" || inst.Status == "Frozen" {
+			if inst.Status == backend.StatusRunning || inst.Status == backend.StatusFrozen {
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("stop"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
 					@icon.Icon("circle-stop")(icon.Props{Class: "size-4"})
 					Stop
 				}
 			}
-			if inst.Status == "Running" {
+			if inst.Status == backend.StatusRunning {
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("restart"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
 					@icon.Icon("rotate-cw")(icon.Props{Class: "size-4"})
 					Restart
 				}
 			}
-			if caps.Pause && inst.Status == "Running" {
+			if caps.Pause && inst.Status == backend.StatusRunning {
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("pause"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
 					@icon.Icon("pause")(icon.Props{Class: "size-4"})
 					Pause
 				}
 			}
-			if caps.Pause && inst.Status == "Frozen" {
+			if caps.Pause && inst.Status == backend.StatusFrozen {
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("resume"), "hx-target": "#instance-header", "hx-swap": "outerHTML"}}) {
 					@icon.Icon("play")(icon.Props{Class: "size-4"})
 					Resume
 				}
 			}
-			if caps.Pause && caps.Snapshots && inst.Status == "Running" {
+			if caps.Pause && caps.Snapshots && inst.Status == backend.StatusRunning {
 				// One-click recovery checkpoint: snapshot, then freeze for inspection.
 				@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": post("rescue"), "hx-target": "#instance-header", "hx-swap": "outerHTML", "hx-confirm": "Snapshot “" + inst.Name + "” and freeze it for inspection?"}}) {
 					@icon.Icon("life-buoy")(icon.Props{Class: "size-4"})

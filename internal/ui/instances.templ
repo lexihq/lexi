@@ -199,7 +199,7 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 				// is too narrow, so these collapse into the kebab (see instanceMenu).
 				<div class="hidden items-center gap-2 sm:flex">
 					@instancePrimaryAction(caps, inst)
-					if caps.Console && inst.Status == "Running" {
+					if caps.Console && inst.Status == backend.StatusRunning {
 						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
 							@icon.Icon("square-terminal")(icon.Props{Class: "size-4"})
 							Console
@@ -216,17 +216,17 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 // instancePrimaryAction renders the one lifecycle button that makes sense for
 // the instance's current state; everything else lives in the kebab menu.
 templ instancePrimaryAction(caps backend.Capabilities, inst backend.Instance) {
-	if inst.Status == "Running" {
+	if inst.Status == backend.StatusRunning {
 		@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: instanceActionAttrs(inst.Name, "stop")}) {
 			@icon.Icon("circle-stop")(icon.Props{Class: "size-4"})
 			Stop
 		}
-	} else if inst.Status == "Frozen" && caps.Pause {
+	} else if inst.Status == backend.StatusFrozen && caps.Pause {
 		@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: instanceActionAttrs(inst.Name, "resume")}) {
 			@icon.Icon("play")(icon.Props{Class: "size-4"})
 			Resume
 		}
-	} else if inst.Status == "Frozen" {
+	} else if inst.Status == backend.StatusFrozen {
 		@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: instanceActionAttrs(inst.Name, "stop")}) {
 			@icon.Icon("circle-stop")(icon.Props{Class: "size-4"})
 			Stop
@@ -243,15 +243,15 @@ templ instancePrimaryAction(caps backend.Capabilities, inst backend.Instance) {
 // as kebab items, shown only below sm (sm:hidden) where the inline buttons are
 // hidden. Same endpoints/attrs as the inline controls, so behaviour matches.
 templ instanceMobileActions(caps backend.Capabilities, inst backend.Instance) {
-	if inst.Status == "Running" {
+	if inst.Status == backend.StatusRunning {
 		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Attributes: instanceActionAttrs(inst.Name, "stop")}) {
 			Stop
 		}
-	} else if inst.Status == "Frozen" && caps.Pause {
+	} else if inst.Status == backend.StatusFrozen && caps.Pause {
 		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Attributes: instanceActionAttrs(inst.Name, "resume")}) {
 			Resume
 		}
-	} else if inst.Status == "Frozen" {
+	} else if inst.Status == backend.StatusFrozen {
 		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Attributes: instanceActionAttrs(inst.Name, "stop")}) {
 			Stop
 		}
@@ -260,7 +260,7 @@ templ instanceMobileActions(caps backend.Capabilities, inst backend.Instance) {
 			Start
 		}
 	}
-	if caps.Console && inst.Status == "Running" {
+	if caps.Console && inst.Status == backend.StatusRunning {
 		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
 			Console
 		}
@@ -278,7 +278,7 @@ templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 			// Mobile-only: the inline lifecycle + Console buttons are hidden below
 			// sm, so mirror them here (sm:hidden) to keep every action reachable.
 			@instanceMobileActions(caps, inst)
-			if inst.Status == "Running" {
+			if inst.Status == backend.StatusRunning {
 				@dropdown.Item(dropdown.ItemProps{Attributes: instanceActionAttrs(inst.Name, "restart")}) {
 					Restart
 				}
@@ -315,14 +315,14 @@ templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 					}
 				}
 			}
-			if caps.Migrate && inst.Status == "Stopped" && len(migrateTargets(ctx)) > 0 {
+			if caps.Migrate && inst.Status == backend.StatusStopped && len(migrateTargets(ctx)) > 0 {
 				@dialog.Trigger(dialog.TriggerProps{For: "migrate-" + inst.Name}) {
 					@dropdown.Item() {
 						Migrate… 
 					}
 				}
 			}
-			if caps.InstanceRebuild && inst.Status == "Stopped" {
+			if caps.InstanceRebuild && inst.Status == backend.StatusStopped {
 				@dropdown.Item(dropdown.ItemProps{Href: "/instances/" + url.PathEscape(inst.Name) + "/rebuild", Attributes: templ.Attributes{"hx-boost": "false"}}) {
 					Rebuild…
 				}
@@ -346,7 +346,7 @@ templ instanceDialogs(caps backend.Capabilities, inst backend.Instance) {
 		@instanceActionDialog("rename-"+inst.Name, "Rename "+inst.Name, "/instances/"+url.PathEscape(inst.Name)+"/rename", "new_name", "New name", "Rename", nil)
 		@instanceActionDialog("move-"+inst.Name, "Move "+inst.Name, "/instances/"+url.PathEscape(inst.Name)+"/move", "pool", "Target storage pool", "Move", templ.Attributes{"list": "pool-options"})
 	}
-	if caps.Migrate && inst.Status == "Stopped" && len(migrateTargets(ctx)) > 0 {
+	if caps.Migrate && inst.Status == backend.StatusStopped && len(migrateTargets(ctx)) > 0 {
 		@instanceMigrateDialog(inst)
 	}
 }
@@ -490,10 +490,10 @@ func deleteAttrs(name string) templ.Attributes {
 
 // statusBadge renders the instance status as an outline badge with a colored
 // dot, shared by the list rows and the detail header.
-templ statusBadge(status string) {
+templ statusBadge(status backend.InstanceStatus) {
 	@badge.Badge(badge.Props{Variant: badge.VariantOutline}) {
 		<span class={ "size-2 rounded-full " + statusDotClass(status) }></span>
-		{ status }
+		{ string(status) }
 	}
 }
 
@@ -507,13 +507,13 @@ templ emptyRow(colspan, message string) {
 	}
 }
 
-func statusDotClass(status string) string {
+func statusDotClass(status backend.InstanceStatus) string {
 	switch status {
-	case "Running":
+	case backend.StatusRunning:
 		return "bg-green-500"
-	case "Frozen":
+	case backend.StatusFrozen:
 		return "bg-blue-500"
-	case "Error":
+	case backend.StatusError:
 		return "bg-red-500"
 	default:
 		return "bg-gray-400"

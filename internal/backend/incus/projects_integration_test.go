@@ -24,8 +24,8 @@ func TestProjectCRUDRoundTrip(t *testing.T) {
 	renamed := uniqueName("lxproj")
 	t.Cleanup(func() { _ = b.DeleteProject(ctx, name); _ = b.DeleteProject(ctx, renamed) })
 
-	require.NoError(t, b.CreateProject(ctx, name, "made by test", map[string]string{"features.profiles": "true"}))
-	require.ErrorIs(t, b.CreateProject(ctx, name, "", nil), backend.ErrConflict)
+	require.NoError(t, b.CreateProject(ctx, backend.Project{Name: name, Description: "made by test", Config: map[string]string{"features.profiles": "true"}}))
+	require.ErrorIs(t, b.CreateProject(ctx, backend.Project{Name: name, Description: ""}), backend.ErrConflict)
 
 	p, err := b.GetProject(ctx, name)
 	require.NoError(t, err)
@@ -66,9 +66,9 @@ func TestProjectScopedInstanceIsolation(t *testing.T) {
 	}
 	ctx := context.Background()
 	project := uniqueName("lxscope")
-	require.NoError(t, b.CreateProject(ctx, project, "made by test", map[string]string{
+	require.NoError(t, b.CreateProject(ctx, backend.Project{Name: project, Description: "made by test", Config: map[string]string{
 		"features.profiles": "false", "features.images": "false",
-	}))
+	}}))
 	scoped := backend.WithProject(ctx, project)
 	name := uniqueName("scoped")
 	t.Cleanup(func() {
@@ -107,10 +107,10 @@ func TestGetProjectUsageRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	name := uniqueName("lxusage")
 	t.Cleanup(func() { _ = b.DeleteProject(ctx, name) })
-	require.NoError(t, b.CreateProject(ctx, name, "usage test", map[string]string{
+	require.NoError(t, b.CreateProject(ctx, backend.Project{Name: name, Description: "usage test", Config: map[string]string{
 		"limits.instances": "5",
 		"limits.memory":    "1GiB",
-	}))
+	}}))
 
 	usage, err := b.GetProjectUsage(ctx, name)
 	require.NoError(t, err)

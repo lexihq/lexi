@@ -29,7 +29,7 @@ func TestMigrateInstanceSameRemoteRename(t *testing.T) {
 	require.ErrorIs(t, err, backend.ErrNotFound, "source must be gone after migration")
 	inst, err := b.GetInstance(ctx, dst)
 	require.NoError(t, err)
-	require.Equal(t, "Stopped", inst.Status)
+	require.Equal(t, backend.StatusStopped, inst.Status)
 
 	// A running instance is refused before any transfer starts.
 	require.NoError(t, b.StartInstance(ctx, dst))

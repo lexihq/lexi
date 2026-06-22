@@ -109,7 +109,7 @@ func (b *incusBackend) DeleteInstance(ctx context.Context, name string) error {
 	if err != nil {
 		return fmt.Errorf("get state of %q: %w", name, mapErr(err))
 	}
-	if state.Status != "Stopped" {
+	if state.Status != string(backend.StatusStopped) {
 		if err := b.changeState(ctx, name, "stop", true); err != nil {
 			return err
 		}
@@ -190,7 +190,7 @@ func waitRemoteOperation(ctx context.Context, op incusclient.RemoteOperation) er
 func toInstance(in *api.Instance, state *api.InstanceState, snapshots int) backend.Instance {
 	return backend.Instance{
 		Name:         in.Name,
-		Status:       in.Status,
+		Status:       backend.InstanceStatus(in.Status),
 		Image:        in.ExpandedConfig["image.description"],
 		IPv4:         ipv4Addresses(state),
 		Snapshots:    snapshots,
@@ -225,8 +225,8 @@ func ipv4Addresses(state *api.InstanceState) []string {
 func createRequest(opt backend.CreateOptions) (api.InstancesPost, error) {
 	instanceType := api.InstanceTypeContainer
 	switch opt.Type {
-	case "", string(api.InstanceTypeContainer):
-	case string(api.InstanceTypeVM):
+	case "", backend.TypeContainer:
+	case backend.TypeVirtualMachine:
 		instanceType = api.InstanceTypeVM
 	default:
 		return api.InstancesPost{}, fmt.Errorf("image type %q: %w", opt.Type, backend.ErrUnsupported)

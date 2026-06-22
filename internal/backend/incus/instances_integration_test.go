@@ -63,7 +63,7 @@ func TestRebuildInstanceRoundTrip(t *testing.T) {
 
 	inst, err := b.GetInstance(ctx, name)
 	require.NoError(t, err)
-	require.Equal(t, "Stopped", inst.Status)
+	require.Equal(t, backend.StatusStopped, inst.Status)
 	cfg, err := b.GetInstanceConfig(ctx, name)
 	require.NoError(t, err)
 	require.Equal(t, "keep", cfg.Config["user.lexi"], "config must survive a rebuild")

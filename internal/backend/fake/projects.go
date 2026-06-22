@@ -115,20 +115,20 @@ func parseSizeBytes(s string) (int64, bool) {
 	return n * factor, true
 }
 
-func (f *Fake) CreateProject(ctx context.Context, name, description string, config map[string]string) error {
+func (f *Fake) CreateProject(ctx context.Context, project backend.Project) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if !validProjectName(name) {
-		return invalid("invalid project name %q", name)
+	if !validProjectName(project.Name) {
+		return invalid("invalid project name %q", project.Name)
 	}
-	if _, ok := f.remote(ctx).projects[name]; ok {
-		return conflict("project %q already exists", name)
+	if _, ok := f.remote(ctx).projects[project.Name]; ok {
+		return conflict("project %q already exists", project.Name)
 	}
 	// Daemon parity: omitted default-enabled features are injected as "true"
 	// at create (images/profiles/storage.volumes; buckets exist daemon-side
 	// but lexi doesn't model them). Networks stay absent = shared.
-	cfg := maps.Clone(config)
+	cfg := maps.Clone(project.Config)
 	if cfg == nil {
 		cfg = map[string]string{}
 	}
@@ -137,10 +137,10 @@ func (f *Fake) CreateProject(ctx context.Context, name, description string, conf
 			cfg[feature] = "true"
 		}
 	}
-	f.remote(ctx).projects[name] = backend.Project{Name: name, Description: description, Config: cfg}
+	f.remote(ctx).projects[project.Name] = backend.Project{Name: project.Name, Description: project.Description, Config: cfg}
 	// A project owning its profiles starts with an empty default profile,
 	// like the daemon (no root disk — instances need one configured).
-	sp := f.remote(ctx).spaceFor(name)
+	sp := f.remote(ctx).spaceFor(project.Name)
 	if cfg["features.profiles"] == "true" {
 		sp.profiles["default"] = backend.Profile{
 			Name: "default", Description: "Default Incus profile",

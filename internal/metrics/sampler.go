@@ -74,7 +74,7 @@ func (s *Sampler) sampleOnce(ctx context.Context) {
 	}
 	now := time.Now()
 	for _, inst := range instances {
-		if inst.Status != "Running" {
+		if inst.Status != backend.StatusRunning {
 			continue
 		}
 		m, err := s.backend.Metrics(ctx, inst.Name)

@@ -64,6 +64,26 @@ func (h handlers) renderError(w http.ResponseWriter, code int, message string) {
 	}
 }
 
+// parseMultipartUpload bounds the request body to limit and parses it as a
+// multipart form. An over-limit body renders tooLargeMsg at 413; any other
+// parse failure renders the error at 400. It returns false (after writing the
+// response) when the caller should stop. Shared by the file-upload handlers so
+// the body-cap policy lives in one place.
+func (h handlers) parseMultipartUpload(w http.ResponseWriter, r *http.Request, limit int64, tooLargeMsg string) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, limit)
+	// The request body is bounded by MaxBytesReader immediately above.
+	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			h.renderError(w, http.StatusRequestEntityTooLarge, tooLargeMsg)
+			return false
+		}
+		h.renderError(w, http.StatusBadRequest, err.Error())
+		return false
+	}
+	return true
+}
+
 func (h handlers) render(w http.ResponseWriter, r *http.Request, code int, component templ.Component) {
 	writeHTML(w, code)
 	if err := component.Render(r.Context(), w); err != nil {
@@ -95,7 +115,7 @@ func (h handlers) renderWithToast(w http.ResponseWriter, r *http.Request, code i
 func (h handlers) renderShell(w http.ResponseWriter, r *http.Request, code int, component templ.Component) {
 	instances, err := h.backend.ListInstances(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), statusFor(err))
 		return
 	}
 	h.renderWithSidebar(w, r, code, instances, component)

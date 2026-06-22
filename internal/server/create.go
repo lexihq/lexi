@@ -62,7 +62,7 @@ func (h handlers) createDialogData(ctx context.Context, caps backend.Capabilitie
 func (h handlers) imagePicker(w http.ResponseWriter, r *http.Request) {
 	all, err := h.backend.ListImages(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.fail(w, err)
 		return
 	}
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
@@ -77,7 +77,7 @@ func filterImages(images []backend.Image, q, arch, typ string) []backend.Image {
 		if arch != "" && img.Arch != arch {
 			continue
 		}
-		if typ != "" && img.Type != typ {
+		if typ != "" && string(img.Type) != typ {
 			continue
 		}
 		if q != "" && !imageMatchesQuery(img, q) {
@@ -117,7 +117,7 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 
 	images, err := h.backend.ListImages(r.Context())
 	if err != nil {
-		h.renderError(w, http.StatusInternalServerError, err.Error())
+		h.fail(w, err)
 		return
 	}
 	selected, ok := imageByFingerprint(images, image)
@@ -163,7 +163,7 @@ func (h handlers) rebuildForm(w http.ResponseWriter, r *http.Request) {
 	}
 	images, err := h.backend.ListImages(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.fail(w, err)
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.RebuildPage(h.backend.Capabilities(r.Context()), inst, images))
@@ -184,7 +184,7 @@ func (h handlers) rebuild(w http.ResponseWriter, r *http.Request) {
 	}
 	images, err := h.backend.ListImages(r.Context())
 	if err != nil {
-		h.renderError(w, http.StatusInternalServerError, err.Error())
+		h.fail(w, err)
 		return
 	}
 	selected, ok := imageByFingerprint(images, image)

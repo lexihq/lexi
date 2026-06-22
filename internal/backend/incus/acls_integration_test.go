@@ -26,8 +26,8 @@ func TestNetworkACLCRUDRoundTrip(t *testing.T) {
 	renamed := uniqueName("lxacl")
 	t.Cleanup(func() { _ = b.DeleteNetworkACL(ctx, name); _ = b.DeleteNetworkACL(ctx, renamed) })
 
-	require.NoError(t, b.CreateNetworkACL(ctx, name, "made by test"))
-	require.ErrorIs(t, b.CreateNetworkACL(ctx, name, ""), backend.ErrConflict)
+	require.NoError(t, b.CreateNetworkACL(ctx, backend.NetworkACL{Name: name, Description: "made by test"}))
+	require.ErrorIs(t, b.CreateNetworkACL(ctx, backend.NetworkACL{Name: name, Description: ""}), backend.ErrConflict)
 
 	acl, err := b.GetNetworkACL(ctx, name)
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestNetworkACLNICAttachmentGuardsDelete(t *testing.T) {
 		_ = b.DeleteNetworkACL(ctx, aclName)
 	})
 
-	require.NoError(t, b.CreateNetworkACL(ctx, aclName, "made by test"))
+	require.NoError(t, b.CreateNetworkACL(ctx, backend.NetworkACL{Name: aclName, Description: "made by test"}))
 	// ACLs attach only to managed bridges; create a throwaway one. Explicit
 	// subnet so the test doesn't depend on Incus auto-allocating one.
 	require.NoError(t, b.CreateNetwork(ctx, backend.Network{

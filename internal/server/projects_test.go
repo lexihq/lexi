@@ -30,7 +30,7 @@ func projectRequest(t *testing.T, srv *http.Server, method, path, body, project 
 
 func TestProjectCookieScopesRequests(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateProject(t.Context(), "dev", "", nil))
+	require.NoError(t, b.CreateProject(t.Context(), backend.Project{Name: "dev", Description: ""}))
 	require.NoError(t, b.CreateInstance(backend.WithProject(t.Context(), "dev"), backend.CreateOptions{Name: "dev-only", Image: "alpine/edge"}))
 	srv := New(b)
 
@@ -64,7 +64,7 @@ func TestStaleProjectCookieFallsBackToDefault(t *testing.T) {
 
 func TestSelectProjectSetsCookie(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateProject(t.Context(), "dev", "", nil))
+	require.NoError(t, b.CreateProject(t.Context(), backend.Project{Name: "dev", Description: ""}))
 	srv := New(b)
 
 	res := projectRequest(t, srv, "POST", "/project", url.Values{"project": {"dev"}}.Encode(), "")
@@ -145,7 +145,7 @@ func TestProjectDetailGuardsDefault(t *testing.T) {
 // cookie values (";" notably); selection must survive the escape round-trip.
 func TestProjectCookieSurvivesSpecialCharacters(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateProject(t.Context(), "a;b", "", nil))
+	require.NoError(t, b.CreateProject(t.Context(), backend.Project{Name: "a;b", Description: ""}))
 	require.NoError(t, b.CreateInstance(backend.WithProject(t.Context(), "a;b"), backend.CreateOptions{Name: "odd-inst", Image: "alpine/edge"}))
 	srv := New(b)
 
@@ -171,10 +171,10 @@ func TestProjectsPageShowsUsageInResourcesColumn(t *testing.T) {
 
 func TestProjectDetailShowsUsageAndLimitsForm(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateProject(t.Context(), "capped", "", map[string]string{
+	require.NoError(t, b.CreateProject(t.Context(), backend.Project{Name: "capped", Description: "", Config: map[string]string{
 		"limits.instances": "5",
 		"limits.memory":    "1GiB",
-	}))
+	}}))
 	res := request(t, New(b), "GET", "/projects/capped", "", false)
 	assertStatus(t, res, http.StatusOK)
 	body := res.Body.String()
@@ -188,7 +188,7 @@ func TestProjectDetailShowsUsageAndLimitsForm(t *testing.T) {
 
 func TestUpdateProjectLimitsAppliesAndClears(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateProject(t.Context(), "dev", "", map[string]string{"limits.cpu": "4"}))
+	require.NoError(t, b.CreateProject(t.Context(), backend.Project{Name: "dev", Description: "", Config: map[string]string{"limits.cpu": "4"}}))
 
 	res := formRequest(t, New(b), "/projects/dev/limits", url.Values{
 		"instances": {"5"}, "memory": {"2GiB"}, "cpu": {""},
@@ -205,7 +205,7 @@ func TestUpdateProjectLimitsAppliesAndClears(t *testing.T) {
 
 func TestUpdateProjectLimitsRejectsBadValues(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateProject(t.Context(), "dev", "", nil))
+	require.NoError(t, b.CreateProject(t.Context(), backend.Project{Name: "dev", Description: ""}))
 
 	res := formRequest(t, New(b), "/projects/dev/limits", url.Values{"instances": {"many"}}, false)
 	assertStatus(t, res, http.StatusBadRequest)

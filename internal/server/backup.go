@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -27,15 +26,7 @@ func (h handlers) importForm(w http.ResponseWriter, r *http.Request) {
 func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
 	// Cap the whole request body so a large or malicious upload cannot spool an
 	// unbounded tarball to the temp filesystem before import begins.
-	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
-	// The request body is bounded by MaxBytesReader immediately above.
-	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			h.renderError(w, http.StatusRequestEntityTooLarge, "backup file is too large")
-			return
-		}
-		h.renderError(w, http.StatusBadRequest, err.Error())
+	if !h.parseMultipartUpload(w, r, maxImportBytes, "backup file is too large") {
 		return
 	}
 	name := strings.TrimSpace(r.FormValue("name"))

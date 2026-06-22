@@ -27,7 +27,7 @@ func newBackend(t *testing.T) *incusBackend {
 		if attempt > 0 {
 			time.Sleep(2 * time.Second)
 		}
-		b, err := New()
+		b, err := New("")
 		if err == nil {
 			return b
 		}

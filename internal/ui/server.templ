@@ -385,11 +385,11 @@ templ WarningsTable(warnings []backend.Warning) {
 								{ w.LastSeenAt.Format("2006-01-02 15:04") }
 							}
 							@table.Cell() {
-								{ w.Status }
+								{ string(w.Status) }
 							}
 							@table.Cell() {
 								<div class="flex gap-2">
-									if w.Status != "acknowledged" {
+									if w.Status != backend.WarningAcknowledged {
 										@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/server/warnings/" + url.PathEscape(w.UUID) + "/ack", "hx-target": "#warnings", "hx-swap": "outerHTML"}}) {
 											@icon.Icon("check")(icon.Props{Class: "size-4"})
 											Acknowledge

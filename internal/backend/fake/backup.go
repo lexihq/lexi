@@ -48,7 +48,7 @@ func (f *Fake) ImportInstance(ctx context.Context, name string, r io.Reader) err
 	sp.instances[name] = &instance{
 		Instance: backend.Instance{
 			Name:      name,
-			Status:    "Stopped",
+			Status:    backend.StatusStopped,
 			Image:     image,
 			CreatedAt: f.now(),
 		},

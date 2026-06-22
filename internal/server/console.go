@@ -2,12 +2,12 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
 	"time"
 
-	"github.com/goccy/go-json"
 	"github.com/gorilla/websocket"
 	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lexihq/lexi/internal/ui"

@@ -209,7 +209,7 @@ func TestInstanceRowShowsConsoleButtonOnlyWhenRunning(t *testing.T) {
 	running := render(t, InstanceRow(caps, backend.Instance{Name: "demo", Status: "Running"}))
 	assertContains(t, running, `href="/instances/demo/console"`)
 
-	for _, status := range []string{"Stopped", "Frozen"} {
+	for _, status := range []backend.InstanceStatus{backend.StatusStopped, backend.StatusFrozen} {
 		html := render(t, InstanceRow(caps, backend.Instance{Name: "demo", Status: status}))
 		if strings.Contains(html, `href="/instances/demo/console"`) {
 			t.Fatalf("%s instance must not offer a Console button, got %q", status, html)
@@ -974,7 +974,7 @@ func TestInstanceRowOffersMigrateForStoppedWithTargets(t *testing.T) {
 	caps := testCaps()
 	caps.Migrate = true
 	remotes := []backend.Remote{{Name: "local", Current: true}, {Name: "secondary"}}
-	renderWith := func(status string) string {
+	renderWith := func(status backend.InstanceStatus) string {
 		ctx := WithRemoteSwitcher(context.Background(), remotes)
 		var buf bytes.Buffer
 		if err := InstancesPage(caps, []backend.Instance{{Name: "demo", Status: status}}, nil, nil, nil, nil).Render(ctx, &buf); err != nil {

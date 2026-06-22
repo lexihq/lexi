@@ -42,7 +42,7 @@ func TestInstanceBackupLifecycle(t *testing.T) {
 	require.NoError(t, f.RestoreInstanceBackup(ctx(), "bk", "weekly", "bk2"))
 	inst, err := f.GetInstance(ctx(), "bk2")
 	require.NoError(t, err)
-	assert.Equal(t, "Stopped", inst.Status)
+	assert.Equal(t, backend.StatusStopped, inst.Status)
 	// A taken name conflicts.
 	err = f.RestoreInstanceBackup(ctx(), "bk", "weekly", "bk")
 	require.ErrorIs(t, err, backend.ErrConflict)

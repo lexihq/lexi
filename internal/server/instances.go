@@ -36,7 +36,7 @@ func (h handlers) instanceTrends(ctx context.Context, instances []backend.Instan
 func (h handlers) list(w http.ResponseWriter, r *http.Request) {
 	instances, err := h.backend.ListInstances(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), statusFor(err))
 		return
 	}
 
@@ -72,7 +72,7 @@ func (h handlers) instancesPartial(w http.ResponseWriter, r *http.Request) {
 func (h handlers) sidebar(w http.ResponseWriter, r *http.Request) {
 	instances, err := h.backend.ListInstances(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		h.fail(w, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.SidebarInstances(instances, r.URL.Query().Get("active")))
@@ -144,15 +144,34 @@ func (h handlers) delete(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// bulkVerbs maps each supported bulk action to the backend call and the past-
-// tense verb used in the summary toast. It's the single source of truth for
-// which bulk actions exist (the UI bar renders a button per entry's intent).
-var bulkVerbs = map[string]string{
-	"start":    "Started",
-	"stop":     "Stopped",
-	"restart":  "Restarted",
-	"snapshot": "Snapshotted",
-	"delete":   "Deleted",
+// bulkAction is one supported bulk lifecycle action: the past-tense verb used
+// in the summary toast and the per-instance backend call. snap is the shared
+// snapshot name for the batch (used only by snapshot; ignored otherwise).
+type bulkAction struct {
+	verb string
+	do   func(h handlers, r *http.Request, name, snap string) error
+}
+
+// bulkActions is the single source of truth for which bulk actions exist: each
+// entry pairs the toast verb with its backend operation, so adding or removing
+// an action is one edit and the two can't drift. The UI bar renders a button
+// per entry's intent.
+var bulkActions = map[string]bulkAction{
+	"start": {"Started", func(h handlers, r *http.Request, name, _ string) error {
+		return h.backend.StartInstance(r.Context(), name)
+	}},
+	"stop": {"Stopped", func(h handlers, r *http.Request, name, _ string) error {
+		return h.backend.StopInstance(r.Context(), name)
+	}},
+	"restart": {"Restarted", func(h handlers, r *http.Request, name, _ string) error {
+		return h.backend.RestartInstance(r.Context(), name)
+	}},
+	"snapshot": {"Snapshotted", func(h handlers, r *http.Request, name, snap string) error {
+		return h.backend.CreateSnapshot(r.Context(), name, snap, backend.SnapshotOptions{})
+	}},
+	"delete": {"Deleted", func(h handlers, r *http.Request, name, _ string) error {
+		return h.backend.DeleteInstance(r.Context(), name)
+	}},
 }
 
 // bulk applies one lifecycle action to every selected instance by looping the
@@ -170,7 +189,7 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusBadRequest, "select at least one instance")
 		return
 	}
-	verb, ok := bulkVerbs[action]
+	act, ok := bulkActions[action]
 	if !ok {
 		h.renderError(w, http.StatusBadRequest, "unknown bulk action")
 		return
@@ -178,24 +197,10 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 	// One shared snapshot name for the batch (each instance gets its own snapshot
 	// under it); computed once so a whole bulk snapshot is easy to spot later.
 	snapName := "manual-" + time.Now().UTC().Format("20060102-150405")
-	op := func(name string) error {
-		switch action {
-		case "start":
-			return h.backend.StartInstance(r.Context(), name)
-		case "stop":
-			return h.backend.StopInstance(r.Context(), name)
-		case "restart":
-			return h.backend.RestartInstance(r.Context(), name)
-		case "snapshot":
-			return h.backend.CreateSnapshot(r.Context(), name, snapName, backend.SnapshotOptions{})
-		default: // delete
-			return h.backend.DeleteInstance(r.Context(), name)
-		}
-	}
 
 	var failed []string
 	for _, name := range names {
-		if err := op(name); err != nil {
+		if err := act.do(h, r, name, snapName); err != nil {
 			failed = append(failed, name)
 			slog.Warn("bulk action failed", "action", action, "instance", name, "err", err)
 		}
@@ -206,7 +211,7 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	msg := fmt.Sprintf("%s %d of %d", verb, len(names)-len(failed), len(names))
+	msg := fmt.Sprintf("%s %d of %d", act.verb, len(names)-len(failed), len(names))
 	if len(failed) > 0 {
 		msg += " — failed: " + strings.Join(failed, ", ")
 	}

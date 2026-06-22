@@ -21,7 +21,7 @@ func (f *Fake) MigrateInstance(ctx context.Context, name, targetRemote, newName 
 	if !ok {
 		return notFound(name)
 	}
-	if in.Status != "Stopped" {
+	if in.Status != backend.StatusStopped {
 		return invalid("instance %q must be stopped before migrating", name)
 	}
 	if _, ok := f.remotes[targetRemote]; !ok {

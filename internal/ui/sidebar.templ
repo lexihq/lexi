@@ -113,14 +113,14 @@ templ SidebarInstances(instances []backend.Instance, active string) {
 	for _, inst := range instances {
 		<a
 			href={ templ.URL("/instances/" + inst.Name) }
-			title={ inst.Name + " — " + inst.Status }
+			title={ inst.Name + " — " + string(inst.Status) }
 			class={ "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm",
 				templ.KV("bg-accent text-accent-foreground", inst.Name == active),
 				templ.KV("text-muted-foreground hover:text-foreground", inst.Name != active) }
 		>
 			<span class={ "size-2 shrink-0 rounded-full", statusDotClass(inst.Status) }></span>
 			<span class="truncate">{ inst.Name }</span>
-			<span class="sr-only">{ inst.Status }</span>
+			<span class="sr-only">{ string(inst.Status) }</span>
 		</a>
 	}
 }

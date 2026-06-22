@@ -19,9 +19,9 @@ func TestProjectCRUDRoundTrip(t *testing.T) {
 	require.Len(t, projects, 1)
 	assert.Equal(t, "default", projects[0].Name)
 
-	require.NoError(t, f.CreateProject(ctx(), "dev", "dev project", map[string]string{"features.profiles": "true"}))
-	require.ErrorIs(t, f.CreateProject(ctx(), "dev", "", nil), backend.ErrConflict)
-	require.ErrorIs(t, f.CreateProject(ctx(), "bad name", "", nil), backend.ErrInvalid)
+	require.NoError(t, f.CreateProject(ctx(), backend.Project{Name: "dev", Description: "dev project", Config: map[string]string{"features.profiles": "true"}}))
+	require.ErrorIs(t, f.CreateProject(ctx(), backend.Project{Name: "dev", Description: ""}), backend.ErrConflict)
+	require.ErrorIs(t, f.CreateProject(ctx(), backend.Project{Name: "bad name", Description: ""}), backend.ErrInvalid)
 
 	p, err := f.GetProject(ctx(), "dev")
 	require.NoError(t, err)
@@ -65,7 +65,7 @@ func TestProjectCRUDRoundTrip(t *testing.T) {
 func TestProjectScopingIsolatesResources(t *testing.T) {
 	f := New()
 	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "c-default", Image: "alpine/edge"}))
-	require.NoError(t, f.CreateProject(ctx(), "dev", "", nil))
+	require.NoError(t, f.CreateProject(ctx(), backend.Project{Name: "dev", Description: ""}))
 	dev := backend.WithProject(ctx(), "dev")
 
 	// Instances are isolated; the new project starts empty and owns its
@@ -109,7 +109,7 @@ func TestProjectScopingIsolatesResources(t *testing.T) {
 	assert.Empty(t, vols, "dev's volumes are invisible to the default project")
 
 	// A project owning its networks gets an isolated namespace.
-	require.NoError(t, f.CreateProject(ctx(), "netty", "", map[string]string{"features.networks": "true"}))
+	require.NoError(t, f.CreateProject(ctx(), backend.Project{Name: "netty", Description: "", Config: map[string]string{"features.networks": "true"}}))
 	netty := backend.WithProject(ctx(), "netty")
 	nets, err = f.ListNetworks(netty)
 	require.NoError(t, err)
@@ -127,7 +127,7 @@ func TestProjectScopingIsolatesResources(t *testing.T) {
 // and isolated namespaces don't cross-guard same-named resources.
 func TestProjectFeatureAndNamespaceGuards(t *testing.T) {
 	f := New()
-	require.NoError(t, f.CreateProject(ctx(), "dev", "", nil))
+	require.NoError(t, f.CreateProject(ctx(), backend.Project{Name: "dev", Description: ""}))
 	dev := backend.WithProject(ctx(), "dev")
 
 	// Feature flip on the (non-empty: has an instance) project is refused;
@@ -145,7 +145,7 @@ func TestProjectFeatureAndNamespaceGuards(t *testing.T) {
 	// dev shares default's profiles (features.profiles injected true — but
 	// c1 uses dev's own default profile). A second project owning its
 	// networks can reuse the shared network's name without blocking it.
-	require.NoError(t, f.CreateProject(ctx(), "netty", "", map[string]string{"features.networks": "true"}))
+	require.NoError(t, f.CreateProject(ctx(), backend.Project{Name: "netty", Description: "", Config: map[string]string{"features.networks": "true"}}))
 	netty := backend.WithProject(ctx(), "netty")
 	require.NoError(t, f.CreateNetwork(netty, backend.Network{Name: "incusbr0", Type: "bridge", Managed: true}))
 	// Deleting netty's incusbr0 must not be blocked by default-project
@@ -198,10 +198,10 @@ func TestGetProjectUsageReportsCountsAndLimits(t *testing.T) {
 	assert.Equal(t, int64(512<<20), byName["memory"].Usage)
 
 	// Project limits.* config keys surface as parsed limits.
-	require.NoError(t, f.CreateProject(ctx(), "capped", "", map[string]string{
+	require.NoError(t, f.CreateProject(ctx(), backend.Project{Name: "capped", Description: "", Config: map[string]string{
 		"limits.instances": "5",
 		"limits.memory":    "1GiB",
-	}))
+	}}))
 	usage, err = f.GetProjectUsage(ctx(), "capped")
 	require.NoError(t, err)
 	for _, u := range usage {

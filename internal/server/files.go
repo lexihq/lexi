@@ -114,15 +114,7 @@ func (h handlers) downloadFile(w http.ResponseWriter, r *http.Request) {
 // the path field, then re-renders the panel at that directory.
 func (h handlers) uploadFile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
-	r.Body = http.MaxBytesReader(w, r.Body, maxFileUploadBytes)
-	// The request body is bounded by MaxBytesReader immediately above.
-	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			h.renderError(w, http.StatusRequestEntityTooLarge, "file is too large")
-			return
-		}
-		h.renderError(w, http.StatusBadRequest, err.Error())
+	if !h.parseMultipartUpload(w, r, maxFileUploadBytes, "file is too large") {
 		return
 	}
 	dir, err := normalizeAbsPath(strings.TrimSpace(r.FormValue("path")))

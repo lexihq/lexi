@@ -36,14 +36,14 @@ func TestCreateBucketSendsSizeConfig(t *testing.T) {
 	s := &instanceServerStub{}
 	b := &incusBackend{srv: s}
 
-	require.NoError(t, b.CreateBucket(t.Context(), "default", "media", "d", "100MiB"))
+	require.NoError(t, b.CreateBucket(t.Context(), "default", backend.StorageBucket{Name: "media", Description: "d", Size: "100MiB"}))
 	require.NotNil(t, s.createdBucket)
 	assert.Equal(t, "media", s.createdBucket.Name)
 	assert.Equal(t, "d", s.createdBucket.Description)
 	assert.Equal(t, api.ConfigMap{"size": "100MiB"}, s.createdBucket.Config)
 
 	// No size → no config key (the daemon treats empty values as unset).
-	require.NoError(t, b.CreateBucket(t.Context(), "default", "media2", "", ""))
+	require.NoError(t, b.CreateBucket(t.Context(), "default", backend.StorageBucket{Name: "media2", Description: ""}))
 	assert.Empty(t, s.createdBucket.Config)
 }
 

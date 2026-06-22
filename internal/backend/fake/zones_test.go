@@ -15,10 +15,10 @@ func TestNetworkZoneCRUDRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, zones)
 
-	require.NoError(t, f.CreateNetworkZone(ctx(), "incus.example.org", "forward zone"))
-	require.ErrorIs(t, f.CreateNetworkZone(ctx(), "incus.example.org", ""), backend.ErrConflict)
-	require.ErrorIs(t, f.CreateNetworkZone(ctx(), "bad zone", ""), backend.ErrInvalid)
-	require.ErrorIs(t, f.CreateNetworkZone(ctx(), "", ""), backend.ErrInvalid)
+	require.NoError(t, f.CreateNetworkZone(ctx(), backend.NetworkZone{Name: "incus.example.org", Description: "forward zone"}))
+	require.ErrorIs(t, f.CreateNetworkZone(ctx(), backend.NetworkZone{Name: "incus.example.org", Description: ""}), backend.ErrConflict)
+	require.ErrorIs(t, f.CreateNetworkZone(ctx(), backend.NetworkZone{Name: "bad zone", Description: ""}), backend.ErrInvalid)
+	require.ErrorIs(t, f.CreateNetworkZone(ctx(), backend.NetworkZone{Name: "", Description: ""}), backend.ErrInvalid)
 
 	z, err := f.GetNetworkZone(ctx(), "incus.example.org")
 	require.NoError(t, err)
@@ -41,7 +41,7 @@ func TestNetworkZoneCRUDRoundTrip(t *testing.T) {
 
 func TestNetworkZoneUsedByNetworksBlocksDelete(t *testing.T) {
 	f := New()
-	require.NoError(t, f.CreateNetworkZone(ctx(), "fwd.example.org", ""))
+	require.NoError(t, f.CreateNetworkZone(ctx(), backend.NetworkZone{Name: "fwd.example.org", Description: ""}))
 
 	// Point the seeded bridge's forward zone at it: the zone is now in use.
 	n, err := f.GetNetwork(ctx(), "incusbr0")
@@ -63,7 +63,7 @@ func TestNetworkZoneUsedByNetworksBlocksDelete(t *testing.T) {
 
 func TestZoneRecordLifecycle(t *testing.T) {
 	f := New()
-	require.NoError(t, f.CreateNetworkZone(ctx(), "incus.example.org", ""))
+	require.NoError(t, f.CreateNetworkZone(ctx(), backend.NetworkZone{Name: "incus.example.org", Description: ""}))
 
 	records, err := f.ListZoneRecords(ctx(), "incus.example.org")
 	require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestZoneRecordLifecycle(t *testing.T) {
 	// Records vanish with their zone.
 	require.NoError(t, f.CreateZoneRecord(ctx(), "incus.example.org", rec))
 	require.NoError(t, f.DeleteNetworkZone(ctx(), "incus.example.org"))
-	require.NoError(t, f.CreateNetworkZone(ctx(), "incus.example.org", ""))
+	require.NoError(t, f.CreateNetworkZone(ctx(), backend.NetworkZone{Name: "incus.example.org", Description: ""}))
 	records, err = f.ListZoneRecords(ctx(), "incus.example.org")
 	require.NoError(t, err)
 	require.Empty(t, records)
@@ -99,18 +99,18 @@ func TestZoneRecordLifecycle(t *testing.T) {
 
 func TestNetworkZonesAreProjectScopedByFeature(t *testing.T) {
 	f := New()
-	require.NoError(t, f.CreateNetworkZone(ctx(), "shared.example.org", ""))
+	require.NoError(t, f.CreateNetworkZone(ctx(), backend.NetworkZone{Name: "shared.example.org", Description: ""}))
 
 	// A project without its own zone feature shares default's zones.
-	require.NoError(t, f.CreateProject(ctx(), "plain", "", nil))
+	require.NoError(t, f.CreateProject(ctx(), backend.Project{Name: "plain", Description: ""}))
 	zones, err := f.ListNetworkZones(backend.WithProject(ctx(), "plain"))
 	require.NoError(t, err)
 	require.Len(t, zones, 1)
 
 	// A project owning features.networks.zones gets its own namespace.
-	require.NoError(t, f.CreateProject(ctx(), "zoned", "", map[string]string{"features.networks.zones": "true"}))
+	require.NoError(t, f.CreateProject(ctx(), backend.Project{Name: "zoned", Description: "", Config: map[string]string{"features.networks.zones": "true"}}))
 	zones, err = f.ListNetworkZones(backend.WithProject(ctx(), "zoned"))
 	require.NoError(t, err)
 	require.Empty(t, zones)
-	require.NoError(t, f.CreateNetworkZone(backend.WithProject(ctx(), "zoned"), "shared.example.org", "same name, own namespace"))
+	require.NoError(t, f.CreateNetworkZone(backend.WithProject(ctx(), "zoned"), backend.NetworkZone{Name: "shared.example.org", Description: "same name, own namespace"}))
 }

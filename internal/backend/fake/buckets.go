@@ -48,7 +48,7 @@ func (f *Fake) ListBuckets(ctx context.Context, pool string) ([]backend.StorageB
 	return out, nil
 }
 
-func (f *Fake) CreateBucket(ctx context.Context, pool, name, description, size string) error {
+func (f *Fake) CreateBucket(ctx context.Context, pool string, bucket backend.StorageBucket) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -56,25 +56,25 @@ func (f *Fake) CreateBucket(ctx context.Context, pool, name, description, size s
 	if !ok {
 		return notFoundf("storage pool %q", pool)
 	}
-	if !validAPIName(name) {
-		return invalid("invalid bucket name %q", name)
+	if !validAPIName(bucket.Name) {
+		return invalid("invalid bucket name %q", bucket.Name)
 	}
 	buckets := f.bucketNamespace(ctx, p)
-	if _, exists := buckets[name]; exists {
-		return conflict("bucket %q already exists", name)
+	if _, exists := buckets[bucket.Name]; exists {
+		return conflict("bucket %q already exists", bucket.Name)
 	}
 	b := &fakeBucket{
 		StorageBucket: backend.StorageBucket{
-			Name:        name,
-			Description: description,
-			S3URL:       "https://fake-s3:8555/" + name,
-			Size:        size,
+			Name:        bucket.Name,
+			Description: bucket.Description,
+			S3URL:       "https://fake-s3:8555/" + bucket.Name,
+			Size:        bucket.Size,
 		},
 		keys: map[string]backend.BucketKey{},
 	}
 	// Daemon parity: bucket creation seeds an admin credential.
 	b.keys["admin"] = f.newBucketKey("admin", "", "admin")
-	buckets[name] = b
+	buckets[bucket.Name] = b
 	return nil
 }
 

@@ -5,7 +5,6 @@ go 1.26.4
 require (
 	github.com/Oudwins/tailwind-merge-go v0.2.1
 	github.com/a-h/templ v0.3.1020
-	github.com/goccy/go-json v0.10.6
 	github.com/gorilla/websocket v1.5.3
 	github.com/lxc/incus/v6 v6.23.0
 	github.com/stretchr/testify v1.11.1

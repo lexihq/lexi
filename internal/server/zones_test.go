@@ -13,7 +13,7 @@ import (
 
 func TestNetworkZonesPageListsZones(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateNetworkZone(t.Context(), "incus.example.org", "forward zone"))
+	require.NoError(t, b.CreateNetworkZone(t.Context(), backend.NetworkZone{Name: "incus.example.org", Description: "forward zone"}))
 
 	res := request(t, New(b), "GET", "/network-zones", "", false)
 	assertStatus(t, res, http.StatusOK)
@@ -35,7 +35,7 @@ func TestCreateNetworkZoneRedirectsToDetail(t *testing.T) {
 
 func TestNetworkZoneDetailRendersEditorAndRecords(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateNetworkZone(t.Context(), "incus.example.org", ""))
+	require.NoError(t, b.CreateNetworkZone(t.Context(), backend.NetworkZone{Name: "incus.example.org", Description: ""}))
 	require.NoError(t, b.CreateZoneRecord(t.Context(), "incus.example.org", backend.ZoneRecord{
 		Name:    "www",
 		Entries: []backend.ZoneEntry{{Type: "A", TTL: 300, Value: "10.0.3.10"}},
@@ -53,7 +53,7 @@ func TestNetworkZoneDetailRendersEditorAndRecords(t *testing.T) {
 
 func TestUpdateNetworkZoneConfigVersioned(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateNetworkZone(t.Context(), "incus.example.org", ""))
+	require.NoError(t, b.CreateNetworkZone(t.Context(), backend.NetworkZone{Name: "incus.example.org", Description: ""}))
 	z, err := b.GetNetworkZone(t.Context(), "incus.example.org")
 	require.NoError(t, err)
 
@@ -78,7 +78,7 @@ func TestUpdateNetworkZoneConfigVersioned(t *testing.T) {
 
 func TestZoneRecordAddAndDelete(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateNetworkZone(t.Context(), "incus.example.org", ""))
+	require.NoError(t, b.CreateNetworkZone(t.Context(), backend.NetworkZone{Name: "incus.example.org", Description: ""}))
 	srv := New(b)
 
 	form := url.Values{"record": {"www"}, "type": {"A"}, "value": {"10.0.3.10"}, "ttl": {"300"}, "description": {"web"}}
@@ -113,7 +113,7 @@ func TestZoneRecordAddAndDelete(t *testing.T) {
 
 func TestZoneRecordValidation(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateNetworkZone(t.Context(), "incus.example.org", ""))
+	require.NoError(t, b.CreateNetworkZone(t.Context(), backend.NetworkZone{Name: "incus.example.org", Description: ""}))
 	srv := New(b)
 
 	// Missing fields and a malformed TTL are 400s.
@@ -134,7 +134,7 @@ func TestZoneRecordValidation(t *testing.T) {
 
 func TestDeleteNetworkZoneRedirectsAndGuards(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateNetworkZone(t.Context(), "incus.example.org", ""))
+	require.NoError(t, b.CreateNetworkZone(t.Context(), backend.NetworkZone{Name: "incus.example.org", Description: ""}))
 
 	res := formRequest(t, New(b), "/network-zones/incus.example.org/delete", url.Values{}, false)
 	assertStatus(t, res, http.StatusSeeOther)

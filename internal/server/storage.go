@@ -1,7 +1,6 @@
 package server
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -348,15 +347,7 @@ func (h handlers) exportVolume(w http.ResponseWriter, r *http.Request) {
 // file upload uses a plain multipart form, so success redirects to the pool.
 func (h handlers) importVolume(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
-	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
-	// The request body is bounded by MaxBytesReader immediately above.
-	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			h.renderError(w, http.StatusRequestEntityTooLarge, "backup file is too large")
-			return
-		}
-		h.renderError(w, http.StatusBadRequest, err.Error())
+	if !h.parseMultipartUpload(w, r, maxImportBytes, "backup file is too large") {
 		return
 	}
 	volume := strings.TrimSpace(r.FormValue("name"))
@@ -383,15 +374,7 @@ func (h handlers) importVolume(w http.ResponseWriter, r *http.Request) {
 // form, so success redirects to the pool.
 func (h handlers) uploadISOVolume(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
-	r.Body = http.MaxBytesReader(w, r.Body, maxImportBytes)
-	// The request body is bounded by MaxBytesReader immediately above.
-	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) {
-			h.renderError(w, http.StatusRequestEntityTooLarge, "ISO file is too large")
-			return
-		}
-		h.renderError(w, http.StatusBadRequest, err.Error())
+	if !h.parseMultipartUpload(w, r, maxImportBytes, "ISO file is too large") {
 		return
 	}
 	volume := strings.TrimSpace(r.FormValue("name"))

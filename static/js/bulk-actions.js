@@ -51,6 +51,10 @@
     const table = document.getElementById("instances-table");
     if (!table || !window.htmx) return;
     if (document.querySelector("[data-bulk-cb]:checked")) return;
+    // Don't swap the table out from under an open row dialog or kebab menu: the
+    // rename/move/clone/migrate dialogs live inside the table, so a refresh would
+    // close the overlay and discard any half-typed input mid-edit.
+    if (table.querySelector("dialog[open], :popover-open")) return;
     window.htmx.ajax("GET", "/partials/instances", { target: "#instances-table", swap: "outerHTML" });
   }, 15000);
 })();

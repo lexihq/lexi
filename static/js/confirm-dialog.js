@@ -17,6 +17,11 @@
       if (window.confirm(question)) onAccept();
       return;
     }
+    // Already prompting (e.g. a double-click fired htmx:confirm twice): drop the
+    // duplicate rather than stacking a second accept listener and calling
+    // showModal() on an open dialog (which throws), which would make one Accept
+    // fire both requests.
+    if (dlg.open) return;
     msg.textContent = question;
 
     function cleanup() {

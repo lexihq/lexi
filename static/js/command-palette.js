@@ -39,7 +39,7 @@
   let active = 0;
 
   function render(filter) {
-    const { list, empty } = els();
+    const { list, empty, input } = els();
     const q = filter.trim().toLowerCase();
     shown = q ? all.filter((it) => it.label.toLowerCase().includes(q)) : all;
     active = 0;
@@ -60,6 +60,10 @@
       list.appendChild(li);
     });
     empty.classList.toggle("hidden", shown.length > 0);
+    // Keep the combobox's active-descendant pointing at the highlighted option
+    // (or clear it when there are none) so screen readers don't track a removed id.
+    if (shown.length) input.setAttribute("aria-activedescendant", "cmdk-opt-" + active);
+    else input.removeAttribute("aria-activedescendant");
   }
 
   function setActive(i) {

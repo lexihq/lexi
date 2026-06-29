@@ -116,6 +116,8 @@
   document.addEventListener("keydown", (e) => {
     const { dialog } = els();
     if (!dialog || !dialog.open) return;
+    // Mid-IME-composition Enter/arrows belong to the input method, not the list.
+    if (e.isComposing) return;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setActive(active + 1);

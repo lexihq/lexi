@@ -50,6 +50,8 @@
   setInterval(function () {
     const table = document.getElementById("instances-table");
     if (!table || !window.htmx) return;
+    // A backgrounded tab has nobody watching: don't keep hitting the daemon.
+    if (document.hidden) return;
     if (document.querySelector("[data-bulk-cb]:checked")) return;
     // Don't swap the table out from under an open row dialog or kebab menu: the
     // rename/move/clone/migrate dialogs live inside the table, so a refresh would

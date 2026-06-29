@@ -139,7 +139,14 @@
     function destroy() {
       window.removeEventListener("resize", resize);
       window.removeEventListener("lexi:themechange", retheme);
-      charts.forEach((c) => c.chart && c.chart.destroy());
+      // Null the refs too: an in-flight poll that resolves after destroy() must
+      // not call setData()/redraw() on a freed uPlot instance.
+      charts.forEach((c) => {
+        if (c.chart) {
+          c.chart.destroy();
+          c.chart = null;
+        }
+      });
     }
 
     function tick() {

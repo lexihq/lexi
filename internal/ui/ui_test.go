@@ -152,6 +152,25 @@ func TestCreateInstanceDialogRendersOptionalSelectors(t *testing.T) {
 	assertContains(t, html, "Advanced: initial config")
 }
 
+func TestBulkBarGatesSnapshotOnCapability(t *testing.T) {
+	insts := []backend.Instance{{Name: "demo", Status: "Stopped"}}
+
+	// testCaps has Snapshots: true — every registered bulk action renders a button.
+	on := render(t, InstancesTable(testCaps(), insts))
+	if n := strings.Count(on, `hx-post="/instances/bulk"`); n != len(BulkActions) {
+		t.Fatalf("want %d bulk buttons with snapshots on, got %d", len(BulkActions), n)
+	}
+
+	// Drop the capability: the Snapshot button (its only gated action) disappears,
+	// the rest stay.
+	caps := testCaps()
+	caps.Snapshots = false
+	off := render(t, InstancesTable(caps, insts))
+	if n := strings.Count(off, `hx-post="/instances/bulk"`); n != len(BulkActions)-1 {
+		t.Fatalf("want %d bulk buttons with snapshots off, got %d", len(BulkActions)-1, n)
+	}
+}
+
 func TestInstanceRowCanHideUnsupportedActions(t *testing.T) {
 	caps := testCaps()
 	caps.Snapshots = false

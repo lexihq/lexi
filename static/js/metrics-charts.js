@@ -18,16 +18,21 @@
     return (i === 0 ? n : n.toFixed(1)) + " " + units[i];
   }
 
-  // token reads a themed CSS custom property off <html>. The whole UI is authored
-  // in oklch tokens, so the browser already parses oklch for canvas fillStyle —
-  // we can hand uPlot the token string directly. Read live (not cached) so a
-  // theme toggle + redraw picks up the new value. uPlot accepts a function for
-  // axis/grid/tick stroke and calls it on every draw, so these re-theme for free.
-  function token(name) {
-    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  // The axis/grid colors are themed CSS custom properties off <html>. The whole
+  // UI is authored in oklch tokens, so the browser already parses oklch for
+  // canvas fillStyle — we can hand uPlot the token string directly. uPlot calls
+  // the axis/grid/tick stroke functions on every draw, so we cache the resolved
+  // tokens (getComputedStyle forces a style flush) and only refresh them when the
+  // theme actually changes (refreshColors() in retheme), not on every redraw.
+  let axisColorVal = "";
+  let gridColorVal = "";
+  function refreshColors() {
+    const cs = getComputedStyle(document.documentElement);
+    axisColorVal = cs.getPropertyValue("--muted-foreground").trim(); // tick labels + axis line
+    gridColorVal = cs.getPropertyValue("--border").trim(); //           grid lines + tick marks
   }
-  const axisColor = () => token("--muted-foreground"); // tick labels + axis line
-  const gridColor = () => token("--border"); //            grid lines + tick marks
+  const axisColor = () => axisColorVal;
+  const gridColor = () => gridColorVal;
 
   // ySize reserves just enough left gutter for the widest formatted y label.
   // The old fixed 56px clipped byte labels ("400.0 MiB" ≈ 58px) to garbage like
@@ -78,6 +83,7 @@
       return;
     }
     root.dataset.inited = "1";
+    refreshColors(); // populate the color cache before the first chart draws
 
     const stroke = {
       blue: "#3b82f6",
@@ -128,10 +134,10 @@
     }
     window.addEventListener("resize", resize);
 
-    // The axis/grid stroke are functions reading live CSS tokens, so a theme
-    // toggle just needs a redraw to recolor the canvas (the .dark class is
-    // already on <html> by the time this fires).
+    // On a theme toggle the .dark class is already on <html>, so re-read the
+    // cached tokens and redraw to recolor the canvas.
     function retheme() {
+      refreshColors();
       charts.forEach((c) => c.chart && c.chart.redraw());
     }
     window.addEventListener("lexi:themechange", retheme);

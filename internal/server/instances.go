@@ -148,34 +148,28 @@ func (h handlers) delete(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// bulkAction is one supported bulk lifecycle action: the past-tense verb used
-// in the summary toast and the per-instance backend call. snap is the shared
-// snapshot name for the batch (used only by snapshot; ignored otherwise).
-type bulkAction struct {
-	verb string
-	do   func(h handlers, r *http.Request, name, snap string) error
-}
-
-// bulkActions is the single source of truth for which bulk actions exist: each
-// entry pairs the toast verb with its backend operation, so adding or removing
-// an action is one edit and the two can't drift. The UI bar renders a button
-// per entry's intent.
-var bulkActions = map[string]bulkAction{
-	"start": {"Started", func(h handlers, r *http.Request, name, _ string) error {
+// bulkOps maps each bulk action key to its per-instance backend call. The set of
+// actions, their toast verbs, capability gating, and button rendering live in
+// ui.BulkActions (the single source of truth); this map only supplies behavior,
+// keyed by the same Key. TestBulkOpsMatchRegistry asserts the two stay in
+// lockstep so the bar and the handler can't drift. snap is the shared snapshot
+// name for the batch (used only by snapshot; ignored otherwise).
+var bulkOps = map[string]func(h handlers, r *http.Request, name, snap string) error{
+	"start": func(h handlers, r *http.Request, name, _ string) error {
 		return h.backend.StartInstance(r.Context(), name)
-	}},
-	"stop": {"Stopped", func(h handlers, r *http.Request, name, _ string) error {
+	},
+	"stop": func(h handlers, r *http.Request, name, _ string) error {
 		return h.backend.StopInstance(r.Context(), name)
-	}},
-	"restart": {"Restarted", func(h handlers, r *http.Request, name, _ string) error {
+	},
+	"restart": func(h handlers, r *http.Request, name, _ string) error {
 		return h.backend.RestartInstance(r.Context(), name)
-	}},
-	"snapshot": {"Snapshotted", func(h handlers, r *http.Request, name, snap string) error {
+	},
+	"snapshot": func(h handlers, r *http.Request, name, snap string) error {
 		return h.backend.CreateSnapshot(r.Context(), name, snap, backend.SnapshotOptions{})
-	}},
-	"delete": {"Deleted", func(h handlers, r *http.Request, name, _ string) error {
+	},
+	"delete": func(h handlers, r *http.Request, name, _ string) error {
 		return h.backend.DeleteInstance(r.Context(), name)
-	}},
+	},
 }
 
 // bulk applies one lifecycle action to every selected instance by looping the
@@ -193,9 +187,17 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, http.StatusBadRequest, "select at least one instance")
 		return
 	}
-	act, ok := bulkActions[action]
-	if !ok {
+	meta, ok := ui.BulkActionByKey(action)
+	op := bulkOps[action]
+	if !ok || op == nil {
 		h.renderError(w, http.StatusBadRequest, "unknown bulk action")
+		return
+	}
+	// Defensive at the boundary: the UI hides actions the tier doesn't support,
+	// but a crafted request could still post one — reject it once here instead of
+	// failing per instance.
+	if meta.Needs != nil && !meta.Needs(h.backend.Capabilities(r.Context())) {
+		h.renderError(w, http.StatusUnprocessableEntity, meta.Label+" is not supported here")
 		return
 	}
 	// One shared snapshot name for the batch (each instance gets its own snapshot
@@ -204,7 +206,7 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 
 	var failed []string
 	for _, name := range names {
-		if err := act.do(h, r, name, snapName); err != nil {
+		if err := op(h, r, name, snapName); err != nil {
 			failed = append(failed, name)
 			slog.Warn("bulk action failed", "action", action, "instance", name, "err", err)
 		}
@@ -222,7 +224,7 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, err)
 		return
 	}
-	msg := fmt.Sprintf("%s %d of %d", act.verb, len(names)-len(failed), len(names))
+	msg := fmt.Sprintf("%s %d of %d", meta.Verb, len(names)-len(failed), len(names))
 	if len(failed) > 0 {
 		msg += " — failed: " + strings.Join(failed, ", ")
 	}

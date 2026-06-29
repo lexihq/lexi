@@ -68,11 +68,11 @@ templ InstancesTable(caps backend.Capabilities, instances []backend.Instance) {
 		<div data-bulk-bar class="mb-3 hidden flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-2">
 			<span data-bulk-count class="text-sm font-medium">0 selected</span>
 			<span class="text-muted-foreground" aria-hidden="true">·</span>
-			@bulkActionButton("start", "Start", "circle-play", false)
-			@bulkActionButton("stop", "Stop", "circle-stop", false)
-			@bulkActionButton("restart", "Restart", "rotate-cw", false)
-			@bulkActionButton("snapshot", "Snapshot", "camera", false)
-			@bulkActionButton("delete", "Delete", "trash-2", true)
+			for _, a := range BulkActions {
+				if a.Needs == nil || a.Needs(caps) {
+					@bulkActionButton(a)
+				}
+			}
 		</div>
 		@table.Table() {
 			@table.Header() {
@@ -124,24 +124,24 @@ templ InstancesTable(caps backend.Capabilities, instances []backend.Instance) {
 // bulkActionButton is one button in the bulk bar. It posts the action plus the
 // checked rows ([data-bulk-cb]; unchecked checkboxes serialize nothing) and
 // swaps the table fragment. Destructive actions carry hx-confirm.
-templ bulkActionButton(action, label, iconName string, destructive bool) {
+templ bulkActionButton(a BulkAction) {
 	{{
 	attrs := templ.Attributes{
 		"hx-post":    "/instances/bulk",
 		"hx-include": "[data-bulk-cb]",
-		"hx-vals":    `{"action":"` + action + `"}`,
+		"hx-vals":    `{"action":"` + a.Key + `"}`,
 		"hx-target":  "#instances-table",
 		"hx-swap":    "outerHTML",
 	}
 	cls := ""
-	if destructive {
-		attrs["hx-confirm"] = "Run “" + label + "” on the selected instances?"
+	if a.Destructive {
+		attrs["hx-confirm"] = "Run “" + a.Label + "” on the selected instances?"
 		cls = "text-destructive"
 	}
 	}}
 	@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: cls, Attributes: attrs}) {
-		@icon.Icon(iconName)(icon.Props{Class: "size-4"})
-		{ label }
+		@icon.Icon(a.Icon)(icon.Props{Class: "size-4"})
+		{ a.Label }
 	}
 }
 

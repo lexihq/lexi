@@ -8,7 +8,23 @@ import (
 
 	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lexihq/lexi/internal/backend/fake"
+	"github.com/lexihq/lexi/internal/ui"
 )
+
+// TestBulkOpsMatchRegistry guards the bulk-action registry (ui.BulkActions, the
+// source of truth for the bar) and the server's behavior map against drift: an
+// action with a button but no backend op would 400 at runtime, and an op with no
+// button would be dead code.
+func TestBulkOpsMatchRegistry(t *testing.T) {
+	if len(bulkOps) != len(ui.BulkActions) {
+		t.Fatalf("bulkOps has %d entries, ui.BulkActions has %d", len(bulkOps), len(ui.BulkActions))
+	}
+	for _, a := range ui.BulkActions {
+		if bulkOps[a.Key] == nil {
+			t.Errorf("ui.BulkActions has %q but bulkOps has no behavior for it", a.Key)
+		}
+	}
+}
 
 // seedInstances creates the named stopped instances in a fresh fake backend.
 func seedInstances(t *testing.T, names ...string) backend.Backend {

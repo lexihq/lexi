@@ -102,6 +102,9 @@
   // the combo (the combo always wins, like every editor's palette).
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+      // Don't steal Ctrl-K from the console terminal — there it's readline's
+      // kill-to-end-of-line. The header button still opens the palette there.
+      if (e.target && e.target.closest && e.target.closest("#terminal")) return;
       e.preventDefault();
       const { dialog } = els();
       if (dialog && dialog.open) close();

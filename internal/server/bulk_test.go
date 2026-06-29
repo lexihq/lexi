@@ -76,6 +76,18 @@ func TestBulkDeleteRemovesSelected(t *testing.T) {
 	}
 }
 
+func TestBulkNonHTMXRedirects(t *testing.T) {
+	b := seedInstances(t, "a")
+	form := url.Values{"action": {"start"}, "name": {"a"}}
+
+	res := formRequest(t, New(b), "/instances/bulk", form, false)
+
+	assertStatus(t, res, http.StatusSeeOther)
+	if loc := res.Header().Get("Location"); loc != "/" {
+		t.Fatalf("expected redirect to /, got %q", loc)
+	}
+}
+
 func TestInstancesPartialReturnsTableFragment(t *testing.T) {
 	b := seedInstances(t, "web-1")
 

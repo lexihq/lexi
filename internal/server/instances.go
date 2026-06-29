@@ -210,6 +210,13 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// The summary toast is an HTMX out-of-band swap; a non-HTMX client gets the
+	// redirect-after-POST every other mutation handler uses (see delete/rescue).
+	if !isHTMX(r) {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
 	instances, err := h.backend.ListInstances(r.Context())
 	if err != nil {
 		h.fail(w, err)

@@ -64,6 +64,10 @@ func (h handlers) instancesPartial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	r = r.WithContext(ui.WithInstanceTrends(r.Context(), h.instanceTrends(r.Context(), instances)))
+	// The migrate menu reads the remote switcher context; inject it here too so
+	// the idle poll doesn't strip "Migrate…" from stopped rows (renderWithSidebar
+	// only adds it on the full page).
+	r = r.WithContext(h.withRemoteSwitcher(r.Context()))
 	h.render(w, r, http.StatusOK, ui.InstancesTable(h.backend.Capabilities(r.Context()), instances))
 }
 
@@ -216,6 +220,7 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 		msg += " — failed: " + strings.Join(failed, ", ")
 	}
 	r = r.WithContext(ui.WithInstanceTrends(r.Context(), h.instanceTrends(r.Context(), instances)))
+	r = r.WithContext(h.withRemoteSwitcher(r.Context()))
 	h.renderWithToast(w, r, http.StatusOK, ui.InstancesTable(h.backend.Capabilities(r.Context()), instances), msg)
 }
 

@@ -84,6 +84,23 @@ func (h handlers) parseMultipartUpload(w http.ResponseWriter, r *http.Request, l
 	return true
 }
 
+// withRemoteSwitcher injects the remote list that the layout's remote switcher
+// and InstanceRow's "Migrate…" gating read. A listing failure degrades to a
+// hidden switcher (and no migrate targets) rather than failing the render.
+// Shared by the full-page path and the table-fragment paths (the idle poll and
+// bulk action), so the migrate affordance survives a partial re-render.
+func (h handlers) withRemoteSwitcher(ctx context.Context) context.Context {
+	if !h.backend.Capabilities(ctx).Remotes {
+		return ctx
+	}
+	remotes, err := h.backend.ListRemotes(ctx)
+	if err != nil {
+		slog.Warn("list remotes for switcher", "err", err)
+		return ctx
+	}
+	return ui.WithRemoteSwitcher(ctx, remotes)
+}
+
 func (h handlers) render(w http.ResponseWriter, r *http.Request, code int, component templ.Component) {
 	writeHTML(w, code)
 	if err := component.Render(r.Context(), w); err != nil {
@@ -137,13 +154,7 @@ func (h handlers) renderWithSidebar(w http.ResponseWriter, r *http.Request, code
 		}
 	}
 	// The remote switcher degrades the same way: hidden on a listing failure.
-	if h.backend.Capabilities(r.Context()).Remotes {
-		if remotes, err := h.backend.ListRemotes(r.Context()); err == nil {
-			ctx = ui.WithRemoteSwitcher(ctx, remotes)
-		} else {
-			slog.Warn("list remotes for switcher", "err", err)
-		}
-	}
+	ctx = h.withRemoteSwitcher(ctx)
 	if err := component.Render(ctx, w); err != nil {
 		// Headers are already written, so no status can be set; typical cause
 		// is the client aborting mid-render (e.g. navigating away).

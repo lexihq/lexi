@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lexihq/lexi/internal/backend"
@@ -204,11 +205,32 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 	// under it); computed once so a whole bulk snapshot is easy to spot later.
 	snapName := "manual-" + time.Now().UTC().Format("20060102-150405")
 
+	// Apply to each instance concurrently (bounded) — the per-instance backend
+	// calls are independent daemon round-trips, so a serial loop made the request
+	// block for ~N × per-op latency. Record failures per index so the summary
+	// order stays deterministic regardless of completion order.
+	const maxConcurrent = 8
+	sem := make(chan struct{}, maxConcurrent)
+	failedAt := make([]bool, len(names))
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if err := op(h, r, name, snapName); err != nil {
+				failedAt[i] = true
+				slog.Warn("bulk action failed", "action", action, "instance", name, "err", err)
+			}
+		}()
+	}
+	wg.Wait()
+
 	var failed []string
-	for _, name := range names {
-		if err := op(h, r, name, snapName); err != nil {
+	for i, name := range names {
+		if failedAt[i] {
 			failed = append(failed, name)
-			slog.Warn("bulk action failed", "action", action, "instance", name, "err", err)
 		}
 	}
 

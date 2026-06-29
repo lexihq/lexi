@@ -9,7 +9,17 @@
     return;
   }
 
-  const term = new Terminal({ cursorBlink: true, fontFamily: "monospace", fontSize: 13 });
+  // xterm renders to a canvas and can't use CSS tokens, so theme.js's
+  // lexi:themechange event is the signal to recolor it (see theme.js). Track
+  // light/dark with a small explicit palette and refresh on toggle.
+  function termTheme() {
+    const dark = document.documentElement.classList.contains("dark");
+    return dark
+      ? { background: "#0a0a0a", foreground: "#e5e5e5", cursor: "#e5e5e5", selectionBackground: "#3f3f46" }
+      : { background: "#ffffff", foreground: "#0a0a0a", cursor: "#0a0a0a", selectionBackground: "#d4d4d8" };
+  }
+
+  const term = new Terminal({ cursorBlink: true, fontFamily: "monospace", fontSize: 13, theme: termTheme() });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
   term.open(el);
@@ -53,5 +63,8 @@
   term.onResize(sendResize);
   window.addEventListener("resize", function () {
     fit.fit();
+  });
+  window.addEventListener("lexi:themechange", function () {
+    term.options.theme = termTheme();
   });
 })();

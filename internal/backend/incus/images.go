@@ -138,8 +138,10 @@ func (b *incusBackend) ListLocalImages(ctx context.Context) ([]backend.LocalImag
 	return out, nil
 }
 
-// PublishImage creates a local image from the (stopped; Incus enforces it)
-// instance, then tags it with alias when one is given.
+// PublishImage creates a local image from the instance, then tags it with
+// alias when one is given. The daemon's image handler does not reject a running
+// instance (only the incus CLI does, via --force), so "publish while stopped"
+// is the caller's responsibility, not an enforced precondition.
 func (b *incusBackend) PublishImage(ctx context.Context, instance, alias string) error {
 	op, err := b.project(ctx).CreateImage(api.ImagesPost{
 		Source: &api.ImagesPostSource{Type: "instance", Name: instance},

@@ -200,7 +200,8 @@ type Profile struct {
 
 // Network is an Incus network. Managed networks (bridges, OVN, ...) are
 // configurable and deletable; unmanaged ones are host interfaces Incus only
-// reports. Config/UsedBy/Managed are read-only outputs (ignored on create).
+// reports. UsedBy and Managed are read-only outputs (ignored on create); Config
+// is an input applied on create and replaced on update.
 type Network struct {
 	Name        string
 	Type        string // bridge | ovn | macvlan | physical | ...
@@ -243,9 +244,10 @@ type NetworkACL struct {
 	Version string
 }
 
-// StoragePool is an Incus storage pool. Pools are driver-specific infra
-// (dir/zfs/btrfs/lvm/ceph) created at host setup; lexi lists them read-only.
-// Config/UsedBy are read-only outputs.
+// StoragePool is an Incus storage pool: driver-specific infra
+// (dir/zfs/btrfs/lvm/ceph). lexi supports full CRUD (Create/Update/Delete);
+// Config is an input applied on create and replaced on update, while UsedBy is
+// a read-only output.
 type StoragePool struct {
 	Name        string
 	Driver      string // dir | zfs | btrfs | lvm | ceph ...
@@ -263,7 +265,7 @@ type StoragePool struct {
 type StorageVolume struct {
 	Name        string
 	Type        string // always "custom" in this slice
-	ContentType string // filesystem | block
+	ContentType string // filesystem | block | iso (custom ISO volumes)
 	Pool        string
 	Description string
 	Config      map[string]string
@@ -665,7 +667,7 @@ type LocalImage struct {
 }
 
 // ImageEdit is the whole-object image edit: every field is applied (the
-// daemon's ImagePut semantics). Deliberately unversioned — last write wins.
+// daemon's ImagePut semantics).
 type ImageEdit struct {
 	Description string
 	Public      bool
@@ -794,8 +796,9 @@ type Backend interface {
 	ListNetworkACLs(ctx context.Context) ([]NetworkACL, error)
 	GetNetworkACL(ctx context.Context, name string) (NetworkACL, error)
 	// CreateNetworkACL makes an empty ACL from acl.Name and acl.Description;
-	// rules are added later via UpdateNetworkACL (the Incus API has no
-	// create-with-rules form), so Ingress/Egress on acl are ignored.
+	// rules are added later via UpdateNetworkACL, so Ingress/Egress on acl are
+	// ignored here (create is intentionally kept to name + description, even
+	// though the daemon API would accept rules in the same call).
 	CreateNetworkACL(ctx context.Context, acl NetworkACL) error
 	// UpdateNetworkACL replaces the ACL's description and both rule lists. A
 	// non-empty version (from GetNetworkACL) makes the update conditional:
@@ -995,8 +998,10 @@ type Backend interface {
 	ListImages(ctx context.Context) ([]Image, error) // for the create dropdown
 
 	ListLocalImages(ctx context.Context) ([]LocalImage, error)
-	// PublishImage creates a local image from the (stopped) instance, tagged
-	// with alias when non-empty.
+	// PublishImage creates a local image from the instance, tagged with alias
+	// when non-empty. Best done while the instance is stopped — publishing a
+	// running one captures a live, possibly-inconsistent rootfs — but neither
+	// lexi nor the daemon's image handler enforces that.
 	PublishImage(ctx context.Context, instance, alias string) error
 	// CopyImage pulls the image behind alias from the images remote into the
 	// local store, copying its aliases.
@@ -1020,8 +1025,9 @@ type Backend interface {
 	ImportImage(ctx context.Context, r io.Reader, alias string) error
 	// UpdateImage applies every ImageEdit field — description, public,
 	// auto-update, and expiry — preserving the image's other properties and
-	// flags (GET-preserve-PUT; the small
-	// two-field edit is deliberately unversioned — last write wins).
+	// flags (GET-preserve-PUT). The read-then-write is conditional on the
+	// image's ETag, so a concurrent edit in the GET→PUT window fails with
+	// ErrConflict rather than silently clobbering it.
 	UpdateImage(ctx context.Context, fingerprint string, edit ImageEdit) error
 	// RefreshImage re-pulls an image from its update source (Incus extension
 	// "image_force_refresh"). An image without one — e.g. published locally —
@@ -1046,9 +1052,9 @@ type Backend interface {
 	// ErrInvalid.
 	PullFile(ctx context.Context, instance, path string, w io.Writer) error
 	// PushFile creates (or overwrites) the instance file at path from r. The
-	// ownership and mode options apply only when the file is created (zero
-	// value: root:root 0644); overwriting keeps the existing file's metadata,
-	// matching the Incus file API.
+	// ownership and mode options are always applied — on create and on
+	// overwrite — so the zero value (root:root, 0644) resets an overwritten
+	// file's owner and mode to those defaults rather than preserving them.
 	PushFile(ctx context.Context, instance, path string, r io.Reader, opts FileWriteOptions) error
 	// PullFileInfo streams the file at path to w like PullFile but also
 	// returns its metadata. A limit > 0 caps the read: larger files fail with

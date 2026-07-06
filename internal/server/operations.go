@@ -94,8 +94,9 @@ func writeSSE(w io.Writer, event, data string) error {
 }
 
 // cancelOperation cancels a running operation, then re-renders the Tasks panel
-// body so the status flips in place; a non-HTMX post redirects to the
-// operations page like every other mutation handler.
+// body so the status flips in place; a non-HTMX post redirects to the home page
+// (the Tasks panel is an embedded partial — there is no standalone operations
+// page to land on).
 func (h handlers) cancelOperation(w http.ResponseWriter, r *http.Request) {
 	if err := h.backend.CancelOperation(r.Context(), r.PathValue("id")); err != nil {
 		h.fail(w, r, err)

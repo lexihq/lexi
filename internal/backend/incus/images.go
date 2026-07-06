@@ -35,8 +35,9 @@ func (w contextReadWriteSeeker) Write(p []byte) (int, error) {
 	return w.ReadWriteSeeker.Write(p)
 }
 
-// ListImages returns the full simplestreams catalog (one entry per alias), served
-// from a lazy, mutex-guarded cache so the search UI can filter without refetching.
+// ListImages returns the full simplestreams catalog (one entry per (alias,
+// architecture, type)), served from a lazy, mutex-guarded cache so the search UI
+// can filter without refetching.
 func (b *incusBackend) ListImages(ctx context.Context) ([]backend.Image, error) {
 	b.imgMu.Lock()
 	defer b.imgMu.Unlock()

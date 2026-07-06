@@ -41,9 +41,10 @@ func (f *Fake) GetInstanceConfig(ctx context.Context, name string) (backend.Inst
 }
 
 // managedConfigKey mirrors the incus driver's rule: volatile.* (internal),
-// limits.cpu/limits.memory (owned by the Limits form), and snapshots.* (owned
-// by the snapshot-schedule form) are hidden from the config editor and
-// preserved on update — so both drivers expose the same editable subset.
+// limits.cpu/limits.memory (owned by the Limits form), and
+// snapshots.schedule/expiry/pattern (owned by the snapshot-schedule form) are
+// hidden from the config editor and preserved on update — so both drivers expose
+// the same editable subset.
 func managedConfigKey(k string) bool {
 	return strings.HasPrefix(k, "volatile.") ||
 		k == "limits.cpu" || k == "limits.memory" ||

@@ -111,7 +111,8 @@ func (h handlers) deletePool(w http.ResponseWriter, r *http.Request) {
 }
 
 // createVolume builds a custom volume from the form (name/content-type + optional
-// key/value config rows) and redirects to the pool. Incus validates the config.
+// key/value config rows), then re-renders the volumes table on HTMX (redirects to
+// the pool otherwise). Incus validates the config.
 func (h handlers) createVolume(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)

@@ -125,9 +125,9 @@ func (f *Fake) CreateProject(ctx context.Context, project backend.Project) error
 	if _, ok := f.remote(ctx).projects[project.Name]; ok {
 		return conflict("project %q already exists", project.Name)
 	}
-	// Daemon parity: omitted default-enabled features are injected as "true"
-	// at create (images/profiles/storage.volumes; buckets exist daemon-side
-	// but lexi doesn't model them). Networks stay absent = shared.
+	// Daemon parity: omitted default-enabled features are injected as "true" at
+	// create (images/profiles/storage.volumes). Networks and buckets are left
+	// absent, so they share the default project's namespace.
 	cfg := maps.Clone(project.Config)
 	if cfg == nil {
 		cfg = map[string]string{}

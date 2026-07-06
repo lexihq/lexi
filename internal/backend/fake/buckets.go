@@ -123,7 +123,7 @@ func (f *Fake) CreateBucketKey(ctx context.Context, pool, bucket, name, descript
 	}
 	switch role {
 	case "":
-		role = "read-only" // the daemon's default
+		role = "read-only" // contract default; the driver now applies the same
 	case "admin", "read-only":
 	default:
 		return backend.BucketKey{}, invalid("bucket key role %q must be admin or read-only", role)

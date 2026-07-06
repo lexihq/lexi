@@ -821,7 +821,7 @@ type Backend interface {
 	CreateNetworkForward(ctx context.Context, network string, f NetworkForward) error
 	// UpdateNetworkForward replaces a forward's description, default target,
 	// and port set. Deliberately unversioned — the daemon enforces no etag
-	// on forwards, so last write wins (like UpdateImage).
+	// on forwards, so last write wins.
 	UpdateNetworkForward(ctx context.Context, network string, f NetworkForward) error
 	// DeleteNetworkForward removes the forward at the listen address.
 	DeleteNetworkForward(ctx context.Context, network, listenAddress string) error

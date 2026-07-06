@@ -80,11 +80,24 @@ func (s *Sampler) sampleOnce(ctx context.Context) {
 		if inst.Status != backend.StatusRunning {
 			continue
 		}
-		m, err := s.backend.Metrics(ctx, inst.Name)
-		if err != nil {
-			slog.Warn("metrics sampler: fetch metrics", "instance", inst.Name, "err", err)
-			continue
-		}
-		s.store.Append(Key(ctx, inst.Name), backend.MetricSample{Time: now, Metrics: m})
+		s.sampleInstance(ctx, inst.Name, now)
 	}
+}
+
+// sampleInstance records one sample for a single instance, recovering from a
+// panic so one instance's fault (e.g. a bad backend response) skips only that
+// instance rather than aborting the tick and starving every instance sampled
+// after it.
+func (s *Sampler) sampleInstance(ctx context.Context, name string, now time.Time) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("metrics sampler: panic sampling instance, skipping", "instance", name, "panic", r)
+		}
+	}()
+	m, err := s.backend.Metrics(ctx, name)
+	if err != nil {
+		slog.Warn("metrics sampler: fetch metrics", "instance", name, "err", err)
+		return
+	}
+	s.store.Append(Key(ctx, name), backend.MetricSample{Time: now, Metrics: m})
 }

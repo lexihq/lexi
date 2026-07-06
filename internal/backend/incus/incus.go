@@ -56,9 +56,10 @@ type incusBackend struct {
 	imgCache  []backend.Image
 	imgExpiry time.Time
 
-	cpuMu      sync.Mutex
-	cpuSamples map[string]cpuSample
-	cpuEpoch   uint64
+	cpuMu        sync.Mutex
+	cpuSamples   map[string]cpuSample
+	cpuEpoch     uint64
+	cpuLastSweep time.Time
 }
 
 // probeCaps interrogates one daemon for its feature set. Every flag reflects

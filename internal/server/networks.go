@@ -175,12 +175,15 @@ func (h handlers) deleteNetwork(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	nets, err := h.backend.ListNetworks(r.Context())
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
+	// List only for the HTMX table re-render; a non-HTMX delete redirects, so
+	// listing there would waste a round-trip and could fail an already-succeeded
+	// delete (matches renderVolumesOrRedirect / imageAction).
 	if isHTMX(r) {
+		nets, err := h.backend.ListNetworks(r.Context())
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
 		h.render(w, r, http.StatusOK, ui.NetworksTable(nets))
 		return
 	}

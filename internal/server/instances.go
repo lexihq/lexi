@@ -219,6 +219,15 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
+			// Contain a panic in one instance's op: mark it failed and log,
+			// rather than letting the panic unwind the goroutine and crash the
+			// whole process (taking every other in-flight request with it).
+			defer func() {
+				if rec := recover(); rec != nil {
+					failedAt[i] = true
+					slog.Error("bulk action panicked", "action", action, "instance", name, "panic", rec)
+				}
+			}()
 			if err := op(h, r, name, snapName); err != nil {
 				failedAt[i] = true
 				slog.Warn("bulk action failed", "action", action, "instance", name, "err", err)

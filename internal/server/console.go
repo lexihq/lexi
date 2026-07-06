@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -89,7 +90,15 @@ func (h handlers) consoleWS(w http.ResponseWriter, r *http.Request) {
 	})
 	closeMsg := websocket.FormatCloseMessage(websocket.CloseNormalClosure, "")
 	if err != nil {
-		closeMsg = websocket.FormatCloseMessage(websocket.CloseInternalServerErr, err.Error())
+		// A control frame is capped at 125 bytes; the 2-byte close code leaves
+		// 123 for the reason. An over-long reason makes WriteControl fail, so the
+		// client would see an abnormal 1006 closure with no reason instead of the
+		// error — truncate to fit (on a valid-UTF-8 boundary).
+		reason := err.Error()
+		if len(reason) > 123 {
+			reason = strings.ToValidUTF8(reason[:123], "")
+		}
+		closeMsg = websocket.FormatCloseMessage(websocket.CloseInternalServerErr, reason)
 	}
 	if err := conn.WriteControl(websocket.CloseMessage, closeMsg, time.Now().Add(time.Second)); err != nil {
 		slog.Warn("write console WebSocket close message", "err", err)

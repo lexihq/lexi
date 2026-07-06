@@ -18,7 +18,7 @@ type handlers struct {
 	samples *metrics.Store
 }
 
-func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, action func(string) error) {
+func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, verb string, action func(string) error) {
 	name := r.PathValue("name")
 	if err := action(name); err != nil {
 		h.fail(w, r, err)
@@ -29,14 +29,17 @@ func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, action 
 		h.fail(w, r, err)
 		return
 	}
+	// Affirm the action like every other mutation (config/devices/bulk): the
+	// swapped fragment alone is easy to miss on slow lifecycle ops.
+	msg := verb + " " + name
 	if isHTMX(r) {
 		// Detail-header buttons post with ?from=header and swap the header
 		// fragment in place; list-row buttons swap their row.
 		if r.URL.Query().Get("from") == "header" {
-			h.render(w, r, http.StatusOK, ui.InstanceHeader(h.backend.Capabilities(r.Context()), inst))
+			h.renderWithToast(w, r, http.StatusOK, ui.InstanceHeader(h.backend.Capabilities(r.Context()), inst), msg)
 			return
 		}
-		h.renderInstanceRow(w, r, inst)
+		h.renderInstanceRow(w, r, inst, msg)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -45,11 +48,17 @@ func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, action 
 // renderInstanceRow renders a single swapped list row with the remote-switcher
 // and CPU-trend context injected, so the row's Migrate… gating and sparkline
 // survive the swap the same way they do on full table renders (the bug 208ccb2
-// fixed for the table-fragment paths).
-func (h handlers) renderInstanceRow(w http.ResponseWriter, r *http.Request, inst backend.Instance) {
+// fixed for the table-fragment paths). A non-empty msg appends an out-of-band
+// success toast.
+func (h handlers) renderInstanceRow(w http.ResponseWriter, r *http.Request, inst backend.Instance, msg string) {
 	ctx := ui.WithInstanceTrends(r.Context(), h.instanceTrends(r.Context(), []backend.Instance{inst}))
 	r = r.WithContext(h.withRemoteSwitcher(ctx))
-	h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(r.Context()), inst))
+	row := ui.InstanceRow(h.backend.Capabilities(r.Context()), inst)
+	if msg == "" {
+		h.render(w, r, http.StatusOK, row)
+		return
+	}
+	h.renderWithToast(w, r, http.StatusOK, row, msg)
 }
 
 func instanceURL(name string) string {
@@ -79,15 +88,27 @@ func (h handlers) fail(w http.ResponseWriter, r *http.Request, err error) {
 func (h handlers) renderError(w http.ResponseWriter, r *http.Request, code int, message string) {
 	// Native (non-HTMX) form posts — the hx-boost="false" dialogs — navigate to
 	// the response, so a bare toast fragment would replace the whole page with
-	// an unstyled div. Give them a plain error page instead.
+	// an unstyled div. Give them a full error page in the app shell instead.
 	if !isHTMX(r) {
-		http.Error(w, message, code)
+		h.renderErrorPage(w, r, code, message)
 		return
 	}
 	writeHTML(w, code)
 	if err := ui.ErrorToast(message).Render(context.Background(), w); err != nil {
 		slog.Warn("write error response", "err", err)
 	}
+}
+
+// renderErrorPage renders the styled full-page error. The sidebar instance
+// list is best-effort — the error page must still render when the backend is
+// the thing that's failing.
+func (h handlers) renderErrorPage(w http.ResponseWriter, r *http.Request, code int, message string) {
+	page := ui.ErrorPage(h.backend.Capabilities(r.Context()), code, message)
+	if instances, err := h.backend.ListInstances(r.Context()); err == nil {
+		h.renderWithSidebar(w, r, code, instances, page)
+		return
+	}
+	h.render(w, r, code, page)
 }
 
 // parseMultipartUpload bounds the request body to limit and parses it as a
@@ -158,7 +179,7 @@ func (h handlers) renderWithToast(w http.ResponseWriter, r *http.Request, code i
 func (h handlers) renderShell(w http.ResponseWriter, r *http.Request, code int, component templ.Component) {
 	instances, err := h.backend.ListInstances(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), statusFor(err))
+		h.render(w, r, statusFor(err), ui.ErrorPage(h.backend.Capabilities(r.Context()), statusFor(err), err.Error()))
 		return
 	}
 	h.renderWithSidebar(w, r, code, instances, component)

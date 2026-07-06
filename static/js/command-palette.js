@@ -15,21 +15,33 @@
   }
 
   // buildItems reads the sidebar's nav links and instance links. Deduped by href
-  // so the active page (rendered twice) doesn't double up.
+  // so the active page (rendered twice) doesn't double up. Each instance also
+  // contributes state-appropriate action entries (the sidebar link's title
+  // carries "name — Status"), so the keyboard can run "stop web-01" without a
+  // page visit.
   function buildItems() {
     const items = [];
     const seen = new Set();
-    const add = (label, href, kind) => {
+    const add = (label, href, kind, post) => {
       if (!label || !href || seen.has(kind + href)) return;
       seen.add(kind + href);
-      items.push({ label: label, href: href, kind: kind });
+      items.push({ label: label, href: href, kind: kind, post: !!post });
     };
     document.querySelectorAll("aside nav a[href]").forEach((a) => {
       add(a.textContent.trim(), a.getAttribute("href"), "Page");
     });
     document.querySelectorAll('aside a[href^="/instances/"]').forEach((a) => {
       const name = (a.querySelector(".truncate") || a).textContent.trim();
-      add(name, a.getAttribute("href"), "Instance");
+      const href = a.getAttribute("href");
+      add(name, href, "Instance");
+      const title = a.getAttribute("title") || "";
+      if (/ — Running$/.test(title)) {
+        add("Stop " + name, href + "/stop", "Action", true);
+        add("Restart " + name, href + "/restart", "Action", true);
+        add("Console " + name, href + "/console", "Action");
+      } else if (/ — Stopped$/.test(title)) {
+        add("Start " + name, href + "/start", "Action", true);
+      }
     });
     return items;
   }
@@ -82,6 +94,13 @@
     const it = shown[i];
     if (!it) return;
     close();
+    if (it.post) {
+      // Lifecycle actions POST like their buttons do (same-origin keeps the
+      // CSRF guard satisfied), then refresh so every view reflects the new
+      // state.
+      fetch(it.href, { method: "POST" }).finally(() => window.location.reload());
+      return;
+    }
     window.location.assign(it.href);
   }
 

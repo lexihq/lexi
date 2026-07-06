@@ -125,6 +125,17 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	config := zipConfigPairs(r.Form["key"], r.Form["value"])
+	// The Tags/CPU/Memory fields are sugar over their config keys; an explicit
+	// advanced-config entry for the same key wins over the sugar field.
+	for field, key := range map[string]string{"tags": "user.tags", "cpu": "limits.cpu", "memory": "limits.memory"} {
+		if v := strings.TrimSpace(r.Form.Get(field)); v != "" && config[key] == "" {
+			if config == nil {
+				config = map[string]string{}
+			}
+			config[key] = v
+		}
+	}
 	if err := h.backend.CreateInstance(r.Context(), backend.CreateOptions{
 		Name:        name,
 		Image:       selected.Alias,
@@ -135,7 +146,7 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 		Profiles: r.Form["profile"],
 		Pool:     strings.TrimSpace(r.Form.Get("pool")),
 		Network:  strings.TrimSpace(r.Form.Get("network")),
-		Config:   nilIfEmpty(zipConfigPairs(r.Form["key"], r.Form["value"])),
+		Config:   nilIfEmpty(config),
 	}); err != nil {
 		h.fail(w, r, err)
 		return
@@ -181,6 +192,13 @@ func (h handlers) rebuild(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusBadRequest, "image is required")
 		return
 	}
+	name := r.PathValue("name")
+	// Rebuild wipes the instance's disk; the form's typed-name gate is enforced
+	// here too so the destructive path can't be fired by a bare POST.
+	if strings.TrimSpace(r.Form.Get("confirm")) != name {
+		h.renderError(w, r, http.StatusBadRequest, "type the instance name to confirm the rebuild")
+		return
+	}
 	images, err := h.backend.ListImages(r.Context())
 	if err != nil {
 		h.fail(w, r, err)
@@ -191,7 +209,6 @@ func (h handlers) rebuild(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, http.StatusBadRequest, "selected image is unavailable")
 		return
 	}
-	name := r.PathValue("name")
 	if err := h.backend.RebuildInstance(r.Context(), name, selected.Alias, selected.Fingerprint); err != nil {
 		h.fail(w, r, err)
 		return

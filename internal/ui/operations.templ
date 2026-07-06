@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"net/url"
 
 	"github.com/lexihq/lexi/internal/backend"
@@ -8,10 +9,51 @@ import (
 	"github.com/lexihq/lexi/internal/components/icon"
 )
 
+// OpsBadge is the live annotation on the collapsed Tasks toggle: a running
+// count plus a red dot when a recent task failed, so in-flight and failed work
+// is visible without opening the panel. The shell renders the empty
+// placeholder (same id, no oob attribute); every OperationRows render carries
+// the out-of-band replacement so the badge tracks the panel's data whether it
+// arrives by SSE frame, poll, or cancel swap.
+templ OpsBadge(ops []backend.Operation, oob bool) {
+	{{ running, failed := opCounts(ops) }}
+	<span
+		id="ops-badge"
+		if oob {
+			hx-swap-oob="outerHTML"
+		}
+		class="flex items-center gap-1.5"
+	>
+		if running > 0 {
+			<span class="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs">
+				@icon.Icon("loader-circle")(icon.Props{Class: "size-3 animate-spin"})
+				{ fmt.Sprint(running) }
+			</span>
+		}
+		if failed > 0 {
+			<span class="size-2 rounded-full bg-red-500" role="img" aria-label="A recent task failed" title="A recent task failed"></span>
+		}
+	</span>
+}
+
+// opCounts tallies running and failed operations for the toggle badge.
+func opCounts(ops []backend.Operation) (running, failed int) {
+	for _, op := range ops {
+		switch op.Status {
+		case backend.OpRunning:
+			running++
+		case backend.OpFailure:
+			failed++
+		}
+	}
+	return running, failed
+}
+
 // OperationRows is the polled body of the bottom Tasks panel: the daemon's
 // running and recently finished operations, newest first. It is wrapped in an
 // #operations element so cancelling a task can swap it in place.
 templ OperationRows(ops []backend.Operation) {
+	@OpsBadge(ops, true)
 	<div id="operations">
 		if len(ops) == 0 {
 			<p class="py-2 text-sm text-muted-foreground">No recent tasks.</p>

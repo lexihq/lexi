@@ -2,8 +2,10 @@ package ui
 
 import (
 	"net/url"
+	"strings"
 
 	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/components/icon"
 )
 
 // ConsolePage hosts the interactive xterm.js terminal. The vendored xterm
@@ -17,13 +19,31 @@ templ ConsolePage(caps backend.Capabilities, inst backend.Instance) {
 		// place; htmx is loaded here too, so the actions work on this page).
 		@InstanceHeader(caps, inst)
 		@instanceTabs(caps, inst.Name, "console", false)
-		<div
-			id="terminal"
-			data-ws={ "/instances/" + url.PathEscape(inst.Name) + "/console/ws" }
-			class="h-[70vh] overflow-hidden rounded-lg border bg-black p-2"
-		></div>
-		<script src="/static/js/xterm.js" defer></script>
-		<script src="/static/js/xterm-addon-fit.js" defer></script>
-		<script src="/static/js/console.js" defer></script>
+		if inst.Status != backend.StatusRunning {
+			// A dead black box with a buried close message is not a state a user
+			// should have to interpret: say why there's no terminal and what to do.
+			<div class="flex h-[40vh] flex-col items-center justify-center gap-3 rounded-lg border bg-card p-8 text-center">
+				<p class="text-sm text-muted-foreground">The instance is { strings.ToLower(string(inst.Status)) } — the console needs it running.</p>
+				<p class="text-sm text-muted-foreground">Start it with the button above, then reload this page.</p>
+			</div>
+		} else {
+			// bg matches the xterm theme (white in light mode, near-black in
+			// dark), so the wrapper never frames the terminal in the wrong color.
+			<div
+				id="terminal"
+				data-ws={ "/instances/" + url.PathEscape(inst.Name) + "/console/ws" }
+				class="h-[70vh] overflow-hidden rounded-lg border bg-background p-2 dark:bg-black"
+			></div>
+			// Hidden until console.js reveals it when the WebSocket closes.
+			<div id="console-reconnect" class="mt-3 hidden">
+				<button type="button" onclick="location.reload()" class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border px-4 text-sm font-medium transition-colors hover:bg-accent">
+					@icon.Icon("rotate-cw")(icon.Props{Class: "size-4"})
+					Reconnect
+				</button>
+			</div>
+			<script src="/static/js/xterm.js" defer></script>
+			<script src="/static/js/xterm-addon-fit.js" defer></script>
+			<script src="/static/js/console.js" defer></script>
+		}
 	}
 }

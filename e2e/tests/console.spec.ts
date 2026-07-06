@@ -9,6 +9,11 @@ test("console terminal round-trips typed input over the websocket", async ({ pag
   const errors: string[] = [];
   page.on("pageerror", (err) => errors.push(err.message));
 
+  // The console only mounts a terminal for a running instance (a stopped one
+  // gets an explanation card instead); start the seeded demo for the session
+  // and stop it again so later specs still see the seeded stopped state.
+  await page.request.post("/instances/demo/start");
+
   await page.goto("/instances/demo/console");
   await expect(page).toHaveTitle(/demo · console/);
 
@@ -28,6 +33,8 @@ test("console terminal round-trips typed input over the websocket", async ({ pag
   await expect(terminal).toContainText(marker, { timeout: 5_000 });
 
   expect(errors, "no uncaught page errors").toEqual([]);
+
+  await page.request.post("/instances/demo/stop");
 });
 
 test("console page keeps the instance tab bar for navigation", async ({ page }) => {
@@ -35,7 +42,9 @@ test("console page keeps the instance tab bar for navigation", async ({ page }) 
 
   // The instance name and status are shown above the tabs, as on the detail page.
   await expect(page.getByRole("heading", { name: "demo" })).toBeVisible();
-  await expect(page.getByRole("main").getByText("Stopped")).toBeVisible();
+  await expect(page.locator("#instance-header").getByText("Stopped")).toBeVisible();
+  // A stopped instance gets an explanation instead of a dead terminal.
+  await expect(page.getByText("the console needs it running")).toBeVisible();
 
   // The full set of instance tabs is present, with Console highlighted.
   const console = page.getByRole("link", { name: "Console" });

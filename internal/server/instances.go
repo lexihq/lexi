@@ -14,22 +14,29 @@ import (
 	"github.com/lexihq/lexi/internal/ui"
 )
 
-// instanceTrends reads recent CPU% history per instance from the metrics store
-// for the list sparklines. It's a cheap in-memory read (no backend driver call);
-// instances without enough retained samples are simply absent from the map, so
-// their row omits the sparkline.
-func (h handlers) instanceTrends(ctx context.Context, instances []backend.Instance) map[string][]float64 {
-	out := make(map[string][]float64, len(instances))
+// instanceTrends reads recent usage history per instance from the metrics
+// store for the list sparklines and the summary readout. It's a cheap
+// in-memory read (no backend driver call); instances without enough retained
+// samples are simply absent from the map, so their row omits the sparkline.
+func (h handlers) instanceTrends(ctx context.Context, instances []backend.Instance) map[string]ui.InstanceTrend {
+	out := make(map[string]ui.InstanceTrend, len(instances))
 	for _, inst := range instances {
 		samples := h.samples.Series(metrics.Key(ctx, inst.Name))
 		if len(samples) < 2 {
 			continue
 		}
-		cpu := make([]float64, len(samples))
+		trend := ui.InstanceTrend{CPU: make([]float64, len(samples))}
 		for i, s := range samples {
-			cpu[i] = s.CPUPercent
+			trend.CPU[i] = s.CPUPercent
+			if s.MemoryTotal > 0 {
+				trend.MemPercent = append(trend.MemPercent, float64(s.MemoryUsage)/float64(s.MemoryTotal)*100)
+			}
 		}
-		out[inst.Name] = cpu
+		last := samples[len(samples)-1]
+		trend.CPUNow = last.CPUPercent
+		trend.MemUsed = last.MemoryUsage
+		trend.MemTotal = last.MemoryTotal
+		out[inst.Name] = trend
 	}
 	return out
 }
@@ -37,7 +44,7 @@ func (h handlers) instanceTrends(ctx context.Context, instances []backend.Instan
 func (h handlers) list(w http.ResponseWriter, r *http.Request) {
 	instances, err := h.backend.ListInstances(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), statusFor(err))
+		h.fail(w, r, err)
 		return
 	}
 
@@ -51,7 +58,47 @@ func (h handlers) list(w http.ResponseWriter, r *http.Request) {
 	// page/table/row signatures stay unchanged (like the sidebar list).
 	r = r.WithContext(ui.WithInstanceTrends(r.Context(), h.instanceTrends(r.Context(), instances)))
 	// The list already has the instances the sidebar needs; reuse them.
-	h.renderWithSidebar(w, r, http.StatusOK, instances, ui.InstancesPage(caps, instances, images, profiles, pools, networks))
+	h.renderWithSidebar(w, r, http.StatusOK, instances, ui.InstancesPage(caps, instances, images, profiles, pools, networks, h.overview(r.Context(), caps)))
+}
+
+// overview gathers the cluster-band data for the instance list, all
+// best-effort: a failed fetch hides that tile (Has* false) rather than
+// failing the page the operator is trying to reach.
+func (h handlers) overview(ctx context.Context, caps backend.Capabilities) ui.Overview {
+	var ov ui.Overview
+	if caps.ServerAdmin {
+		if so, err := h.backend.GetServerOverview(ctx); err == nil {
+			ov.CPUThreads = so.CPUThreads
+			ov.MemoryUsed = so.MemoryUsed
+			ov.MemoryTotal = so.MemoryTotal
+			ov.HasHost = true
+		} else {
+			slog.Warn("overview: server overview", "err", err)
+		}
+		if warnings, err := h.backend.ListWarnings(ctx); err == nil {
+			for _, warning := range warnings {
+				if warning.Status == backend.WarningNew {
+					ov.NewWarnings++
+				}
+			}
+			ov.HasWarnings = true
+		} else {
+			slog.Warn("overview: list warnings", "err", err)
+		}
+	}
+	if caps.Operations {
+		if ops, err := h.backend.ListOperations(ctx); err == nil {
+			for _, op := range ops {
+				if op.Status == backend.OpRunning {
+					ov.RunningTasks++
+				}
+			}
+			ov.HasTasks = true
+		} else {
+			slog.Warn("overview: list operations", "err", err)
+		}
+	}
+	return ov
 }
 
 // instancesPartial renders just the instances table fragment for the list's
@@ -87,53 +134,48 @@ func (h handlers) detail(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	inst, err := h.backend.GetInstance(r.Context(), name)
 	if err != nil {
-		http.Error(w, err.Error(), statusFor(err))
+		h.fail(w, r, err)
 		return
 	}
 	snapshots, err := h.backend.ListSnapshots(r.Context(), name)
 	if err != nil {
-		http.Error(w, err.Error(), statusFor(err))
+		h.fail(w, r, err)
 		return
 	}
-	var profiles []backend.Profile
-	if h.backend.Capabilities(r.Context()).Profiles {
-		profiles, err = h.backend.ListProfiles(r.Context())
-		if err != nil {
-			http.Error(w, err.Error(), statusFor(err))
-			return
-		}
-	}
 
+	// The Summary tab's "Usage now" readout reads from the metrics store, same
+	// as the list sparklines.
+	r = r.WithContext(ui.WithInstanceTrends(r.Context(), h.instanceTrends(r.Context(), []backend.Instance{inst})))
 	tab := r.URL.Query().Get("tab")
 	// A tab click is an explicit (non-boosted) HTMX request and gets just the
 	// swappable body. A boosted navigation (clicking the instance in the sidebar
 	// or list) carries HX-Boosted and must get the full page so the shell's
 	// #content swap finds the whole content region.
 	if isHTMX(r) && !isBoosted(r) {
-		h.render(w, r, http.StatusOK, ui.InstanceBody(h.backend.Capabilities(r.Context()), inst, snapshots, profiles, tab))
+		h.render(w, r, http.StatusOK, ui.InstanceBody(h.backend.Capabilities(r.Context()), inst, snapshots, tab))
 		return
 	}
-	h.renderShell(w, r, http.StatusOK, ui.InstancePage(h.backend.Capabilities(r.Context()), inst, snapshots, profiles, tab))
+	h.renderShell(w, r, http.StatusOK, ui.InstancePage(h.backend.Capabilities(r.Context()), inst, snapshots, tab))
 }
 
 func (h handlers) start(w http.ResponseWriter, r *http.Request) {
-	h.instanceAction(w, r, func(name string) error { return h.backend.StartInstance(r.Context(), name) })
+	h.instanceAction(w, r, "Started", func(name string) error { return h.backend.StartInstance(r.Context(), name) })
 }
 
 func (h handlers) stop(w http.ResponseWriter, r *http.Request) {
-	h.instanceAction(w, r, func(name string) error { return h.backend.StopInstance(r.Context(), name) })
+	h.instanceAction(w, r, "Stopped", func(name string) error { return h.backend.StopInstance(r.Context(), name) })
 }
 
 func (h handlers) restart(w http.ResponseWriter, r *http.Request) {
-	h.instanceAction(w, r, func(name string) error { return h.backend.RestartInstance(r.Context(), name) })
+	h.instanceAction(w, r, "Restarted", func(name string) error { return h.backend.RestartInstance(r.Context(), name) })
 }
 
 func (h handlers) pause(w http.ResponseWriter, r *http.Request) {
-	h.instanceAction(w, r, func(name string) error { return h.backend.PauseInstance(r.Context(), name) })
+	h.instanceAction(w, r, "Paused", func(name string) error { return h.backend.PauseInstance(r.Context(), name) })
 }
 
 func (h handlers) resume(w http.ResponseWriter, r *http.Request) {
-	h.instanceAction(w, r, func(name string) error { return h.backend.ResumeInstance(r.Context(), name) })
+	h.instanceAction(w, r, "Resumed", func(name string) error { return h.backend.ResumeInstance(r.Context(), name) })
 }
 
 func (h handlers) delete(w http.ResponseWriter, r *http.Request) {

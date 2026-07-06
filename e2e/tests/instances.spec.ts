@@ -204,6 +204,8 @@ test("rebuild a stopped instance from a new image", async ({ page }) => {
   const rebuildImage = page.locator("#image-results input[type=radio][name=image]").first();
   await expect(rebuildImage).toHaveValue("fake-alpine-edge-aarch64");
   await rebuildImage.check();
+  // Rebuild wipes the disk, so the form requires typing the instance name.
+  await page.locator("#rebuild-confirm").fill(name);
   await page.getByRole("button", { name: "Rebuild instance" }).click();
 
   // Lands on the instance detail page showing the new image. Exact match:
@@ -233,11 +235,14 @@ test("create with profile, pool, network, and initial config", async ({ page }) 
   await page.locator('form[action="/instances"] textarea[name="value"]').first().fill("wizard");
   await submitCreate(page);
 
-  // The profile shows on the detail summary; the config key in the editor.
+  // The profile shows read-only on the summary; the editors (profiles
+  // checkboxes, raw config) live on the Configuration tab.
   await expect(page.locator(`#instance-${name}`)).toBeVisible();
   await page.goto(`/instances/${name}`);
-  await expect(page.locator("#profiles").getByRole("checkbox", { name: "gpu" })).toBeChecked();
+  await expect(page.getByRole("main").getByText("gpu", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "Configuration" }).click();
+  await expect(page.locator("#profiles").getByRole("checkbox", { name: "gpu" })).toBeChecked();
+  await page.getByText("Advanced: raw configuration").click();
   await expect(page.locator('input[name="key"][value="user.e2e"]')).toBeVisible();
 
   // Devices tab shows the injected root/eth0 local devices.

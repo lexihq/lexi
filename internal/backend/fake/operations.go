@@ -114,7 +114,16 @@ func (f *Fake) logOp(sp *space, description string) {
 		CreatedAt:   f.now(),
 	}}, sp.ops...)
 	if len(sp.ops) > maxOps {
-		sp.ops = sp.ops[:maxOps]
+		// Trim finished entries only: a still-running op must stay visible (and
+		// cancelable) no matter how much newer history piles on top — mirroring
+		// Incus, where running ops are always listed.
+		trimmed := sp.ops[:0:0]
+		for i, op := range sp.ops {
+			if i < maxOps || op.Status == backend.OpRunning {
+				trimmed = append(trimmed, op)
+			}
+		}
+		sp.ops = trimmed
 	}
 	f.notifyOpWatchers()
 }

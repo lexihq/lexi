@@ -31,7 +31,7 @@ func TestRebuildAppliesAndRedirects(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
 
-	form := url.Values{"image": {"fake-alpine-edge-aarch64"}}
+	form := url.Values{"image": {"fake-alpine-edge-aarch64"}, "confirm": {"demo"}}
 	res := formRequest(t, New(b), "/instances/demo/rebuild", form, false)
 	assertStatus(t, res, http.StatusSeeOther)
 	assert.Equal(t, "/instances/demo", res.Header().Get("Location"))
@@ -41,11 +41,30 @@ func TestRebuildAppliesAndRedirects(t *testing.T) {
 	assert.Equal(t, "alpine/edge", inst.Image)
 }
 
+// Rebuild wipes the disk, so the handler refuses to run without the typed-name
+// confirmation — a bare POST (or a mistyped name) must not rebuild anything.
+func TestRebuildWithoutTypedConfirmIs400(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+
+	for _, confirm := range []url.Values{
+		{"image": {"fake-alpine-edge-aarch64"}},
+		{"image": {"fake-alpine-edge-aarch64"}, "confirm": {"deno"}},
+	} {
+		res := formRequest(t, New(b), "/instances/demo/rebuild", confirm, false)
+		assertStatus(t, res, http.StatusBadRequest)
+	}
+
+	inst, err := b.GetInstance(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "debian/12", inst.Image)
+}
+
 func TestRebuildRunningInstanceIs400(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12", Start: true}))
 
-	form := url.Values{"image": {"fake-alpine-edge-aarch64"}}
+	form := url.Values{"image": {"fake-alpine-edge-aarch64"}, "confirm": {"demo"}}
 	res := formRequest(t, New(b), "/instances/demo/rebuild", form, false)
 	assertStatus(t, res, http.StatusBadRequest)
 }
@@ -54,7 +73,7 @@ func TestRebuildUnknownImageIs400(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
 
-	res := formRequest(t, New(b), "/instances/demo/rebuild", url.Values{"image": {"no-such"}}, false)
+	res := formRequest(t, New(b), "/instances/demo/rebuild", url.Values{"image": {"no-such"}, "confirm": {"demo"}}, false)
 	assertStatus(t, res, http.StatusBadRequest)
 }
 
@@ -68,6 +87,6 @@ func TestRebuildMissingImageIs400(t *testing.T) {
 
 func TestRebuildGhostInstanceIs404(t *testing.T) {
 	res := formRequest(t, New(fake.New()), "/instances/ghost/rebuild",
-		url.Values{"image": {"fake-alpine-edge-aarch64"}}, false)
+		url.Values{"image": {"fake-alpine-edge-aarch64"}, "confirm": {"ghost"}}, false)
 	assertStatus(t, res, http.StatusNotFound)
 }

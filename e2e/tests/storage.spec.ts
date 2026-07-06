@@ -70,7 +70,7 @@ test("snapshot a custom volume: create, restore, and delete", async ({ page }) =
   // Set an expiry; the Expires cell shows it in UTC.
   await expect(async () => {
     await page.locator("#volume-snapshots").locator('input[name="expires_at"]').fill("2031-05-06T07:08");
-    await page.locator("#volume-snapshots").getByRole("button", { name: "Set expiry (UTC)" }).click();
+    await page.locator("#volume-snapshots").getByRole("button", { name: "Set expiry" }).click();
     await expect(page.locator("#volume-snapshots")).toContainText("2031-05-06 07:08 UTC", { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 

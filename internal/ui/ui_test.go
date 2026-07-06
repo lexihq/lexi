@@ -14,7 +14,7 @@ import (
 )
 
 func TestInstancesPageRendersListAndActions(t *testing.T) {
-	html := render(t, InstancesPage(testCaps(), []backend.Instance{{Name: "demo", Status: "Stopped", IPv4: []string{"10.0.3.12"}, Snapshots: 2}}, nil, nil, nil, nil))
+	html := render(t, InstancesPage(testCaps(), []backend.Instance{{Name: "demo", Status: "Stopped", IPv4: []string{"10.0.3.12"}, Snapshots: 2}}, nil, nil, nil, nil, Overview{}))
 
 	assertContains(t, html, "fake backend")
 	assertContains(t, html, "demo")
@@ -27,8 +27,50 @@ func TestInstancesPageRendersListAndActions(t *testing.T) {
 	}
 }
 
+func TestInstancesPageRendersToolbarAndSortableHeaders(t *testing.T) {
+	html := render(t, InstancesPage(testCaps(), []backend.Instance{{Name: "demo", Status: "Stopped"}}, nil, nil, nil, nil, Overview{}))
+
+	assertContains(t, html, "data-list-filter")
+	assertContains(t, html, "data-status-filter")
+	assertContains(t, html, `data-sort="text"`)
+	assertContains(t, html, `data-sort="num"`)
+}
+
+func TestInstancesOverviewCountsAndTiles(t *testing.T) {
+	instances := []backend.Instance{
+		{Name: "a", Status: backend.StatusRunning},
+		{Name: "b", Status: backend.StatusStopped},
+		{Name: "c", Status: backend.StatusFrozen},
+	}
+	html := render(t, InstancesOverview(instances, Overview{
+		HasHost: true, CPUThreads: 8, MemoryUsed: 4 << 30, MemoryTotal: 16 << 30,
+		HasWarnings: true, NewWarnings: 2,
+		HasTasks: true, RunningTasks: 1,
+	}))
+
+	assertContains(t, html, "1 running")
+	assertContains(t, html, "1 stopped")
+	assertContains(t, html, "1 frozen")
+	assertContains(t, html, "4.0 GiB / 16.0 GiB")
+	assertContains(t, html, "8 CPU threads")
+	assertContains(t, html, "2 new")
+	assertContains(t, html, "1 running")
+
+	// Tiles whose data wasn't fetched stay hidden — a zero must be a real zero.
+	bare := render(t, InstancesOverview(instances, Overview{}))
+	if strings.Contains(bare, "Host memory") || strings.Contains(bare, "Warnings") || strings.Contains(bare, "Tasks") {
+		t.Fatalf("overview must hide unfetched tiles, got %q", bare)
+	}
+}
+
+func TestInstanceRowRendersTags(t *testing.T) {
+	html := render(t, InstanceRow(testCaps(), backend.Instance{Name: "demo", Status: "Stopped", Tags: []string{"web", "prod"}}))
+	assertContains(t, html, ">web</span>")
+	assertContains(t, html, ">prod</span>")
+}
+
 func TestInstancePageSummaryTabRendersDetails(t *testing.T) {
-	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running", Image: "debian/12"}, []backend.Snapshot{{Name: "snap0"}}, nil, "summary"))
+	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running", Image: "debian/12"}, []backend.Snapshot{{Name: "snap0"}}, "summary"))
 
 	assertContains(t, html, "demo")
 	assertContains(t, html, "Running")
@@ -41,7 +83,7 @@ func TestInstancePageSummaryTabRendersDetails(t *testing.T) {
 }
 
 func TestInstancePageSnapshotsTabRendersControls(t *testing.T) {
-	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, []backend.Snapshot{{Name: "snap0"}}, nil, "snapshots"))
+	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, []backend.Snapshot{{Name: "snap0"}}, "snapshots"))
 
 	assertContains(t, html, "snap0")
 	assertContains(t, html, `hx-post="/instances/demo/snapshots"`)
@@ -52,7 +94,7 @@ func TestLazyTabRendersLoadingPlaceholder(t *testing.T) {
 	// A lazy-loaded tab (e.g. metrics) mounts an empty hx-get div; it must carry
 	// a loading placeholder so the tab body doesn't flash blank before the panel
 	// swaps in. The placeholder lives inside the div HTMX replaces on load.
-	html := render(t, InstancePage(backend.Capabilities{Metrics: true}, backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "metrics"))
+	html := render(t, InstancePage(backend.Capabilities{Metrics: true}, backend.Instance{Name: "demo", Status: "Running"}, nil, "metrics"))
 
 	assertContains(t, html, `hx-get="/instances/demo/metrics"`)
 	assertContains(t, html, `role="status"`)
@@ -77,7 +119,7 @@ func TestInstancePageGatesDisabledTabsToSummary(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			html := render(t, InstancePage(tc.caps, backend.Instance{Name: "demo", Status: "Running", Image: "debian/12"}, []backend.Snapshot{{Name: "snap0"}}, nil, tc.tab))
+			html := render(t, InstancePage(tc.caps, backend.Instance{Name: "demo", Status: "Running", Image: "debian/12"}, []backend.Snapshot{{Name: "snap0"}}, tc.tab))
 
 			assertContains(t, html, "Details") // summary fallback
 			if strings.Contains(html, tc.mustNotHave) {
@@ -90,7 +132,7 @@ func TestInstancePageGatesDisabledTabsToSummary(t *testing.T) {
 func TestInstancePageDefaultTabHighlightsSummary(t *testing.T) {
 	// The bare detail URL passes an empty tab; it must resolve to Summary and
 	// mark the Summary tab (not another) active.
-	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, nil, ""))
+	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, ""))
 
 	assertActiveTab(t, html, "Summary")
 }
@@ -121,7 +163,7 @@ func TestConsolePageOptsOutOfBoost(t *testing.T) {
 		t.Fatalf("console page must opt out of hx-boost, got %q", console)
 	}
 
-	list := render(t, InstancesPage(testCaps(), nil, nil, nil, nil, nil))
+	list := render(t, InstancesPage(testCaps(), nil, nil, nil, nil, nil, Overview{}))
 	assertContains(t, list, `hx-boost="true"`)
 }
 
@@ -297,6 +339,8 @@ func TestLimitsSummaryFillsUnsetHalvesWithDash(t *testing.T) {
 func TestInstanceRowDeleteRequiresConfirmation(t *testing.T) {
 	html := render(t, InstanceRow(testCaps(), backend.Instance{Name: "demo", Status: "Stopped"}))
 	assertContains(t, html, "hx-confirm")
+	// Delete is typed-name gated: confirm-dialog.js requires typing the name.
+	assertContains(t, html, `data-confirm-name="demo"`)
 }
 
 func TestInstanceRowRendersActionDialogs(t *testing.T) {
@@ -460,11 +504,11 @@ func TestFilesPanelHidesDeleteAndMkdirWithoutCaps(t *testing.T) {
 func TestInstanceBodyGatesFilesTab(t *testing.T) {
 	caps := testCaps()
 	caps.Files = true
-	with := render(t, InstanceBody(caps, backend.Instance{Name: "demo"}, nil, nil, "files"))
+	with := render(t, InstanceBody(caps, backend.Instance{Name: "demo"}, nil, "files"))
 	assertContains(t, with, `hx-get="/instances/demo/files"`)
 
 	// Without the capability the tab downgrades to summary and never mounts.
-	without := render(t, InstanceBody(testCaps(), backend.Instance{Name: "demo"}, nil, nil, "files"))
+	without := render(t, InstanceBody(testCaps(), backend.Instance{Name: "demo"}, nil, "files"))
 	if strings.Contains(without, "/instances/demo/files") {
 		t.Fatalf("files tab must be hidden without the capability, got %q", without)
 	}
@@ -473,11 +517,11 @@ func TestInstanceBodyGatesFilesTab(t *testing.T) {
 func TestLayoutGatesOperationsPanel(t *testing.T) {
 	caps := testCaps()
 	caps.Operations = true
-	with := render(t, InstancesPage(caps, nil, nil, nil, nil, nil))
+	with := render(t, InstancesPage(caps, nil, nil, nil, nil, nil, Overview{}))
 	assertContains(t, with, `hx-get="/partials/operations"`)
 	assertContains(t, with, "Tasks")
 
-	without := render(t, InstancesPage(testCaps(), nil, nil, nil, nil, nil))
+	without := render(t, InstancesPage(testCaps(), nil, nil, nil, nil, nil, Overview{}))
 	if strings.Contains(without, "/partials/operations") {
 		t.Fatalf("operations panel must be hidden without the capability, got %q", without)
 	}
@@ -567,8 +611,19 @@ func TestStorageVolumeSnapshotsTableHasCreateAndActions(t *testing.T) {
 func TestSnapshotTableShowsStatefulCheckboxAndExpiry(t *testing.T) {
 	html := render(t, SnapshotTable("demo", nil))
 	assertContains(t, html, `name="stateful"`)
-	assertContains(t, html, `type="datetime-local"`)
+	// Expiry is a free-form field accepting durations ("2w") or a UTC time.
 	assertContains(t, html, `name="expires_at"`)
+	assertContains(t, html, "2w")
+}
+
+// The snapshots table shows creation age — the fact operators pick restore
+// points by.
+func TestSnapshotTableShowsCreatedAge(t *testing.T) {
+	html := render(t, SnapshotTable("demo", []backend.Snapshot{
+		{Name: "snap0", CreatedAt: time.Now().Add(-48 * time.Hour)},
+	}))
+	assertContains(t, html, "Created")
+	assertContains(t, html, "2d ago")
 }
 
 func TestSnapshotTableShowsStatefulBadgeAndRowActions(t *testing.T) {
@@ -681,7 +736,7 @@ func TestDevicesSectionGatesEditingOnCapability(t *testing.T) {
 }
 
 func TestConfigPanelRendersRows(t *testing.T) {
-	html := render(t, ConfigPanel("demo", backend.InstanceConfig{
+	html := render(t, ConfigPanel(testCaps(), backend.Instance{Name: "demo"}, nil, backend.InstanceConfig{
 		Config: map[string]string{"security.nesting": "true"},
 	}))
 	assertContains(t, html, `hx-post="/instances/demo/config"`)
@@ -690,15 +745,45 @@ func TestConfigPanelRendersRows(t *testing.T) {
 	assertContains(t, html, `name="key"`)
 }
 
+// The Options toggles reflect the current config: a set key checks its box,
+// and the form posts to the merge endpoint (not the whole-map replace).
+func TestConfigPanelRendersOptionToggles(t *testing.T) {
+	html := render(t, ConfigPanel(testCaps(), backend.Instance{Name: "demo"}, nil, backend.InstanceConfig{
+		Config: map[string]string{"boot.autostart": "true"},
+	}))
+	assertContains(t, html, `hx-post="/instances/demo/options"`)
+	assertContains(t, html, "Start on boot")
+	assertContains(t, html, `name="boot.autostart" checked`)
+	assertContains(t, html, `name="security.nesting"`)
+	assertContains(t, html, `name="security.privileged"`)
+}
+
+// Limits and profiles editors live on the Configuration tab now; the Summary
+// stays read-only.
+func TestConfigPanelHostsLimitsAndProfilesEditors(t *testing.T) {
+	caps := testCaps()
+	caps.Limits = true
+	caps.Profiles = true
+	html := render(t, ConfigPanel(caps, backend.Instance{Name: "demo"},
+		[]backend.Profile{{Name: "default"}}, backend.InstanceConfig{}))
+	assertContains(t, html, `hx-post="/instances/demo/limits"`)
+	assertContains(t, html, `hx-post="/instances/demo/profiles"`)
+
+	summary := render(t, InstanceBody(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, "summary"))
+	if strings.Contains(summary, `hx-post="/instances/demo/limits"`) {
+		t.Fatalf("summary must not host the limits editor anymore, got %q", summary)
+	}
+}
+
 func TestInstanceBodyGatesConfigAndDevicesTabs(t *testing.T) {
 	on := render(t, InstanceBody(backend.Capabilities{Config: true},
-		backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "devices"))
+		backend.Instance{Name: "demo", Status: "Running"}, nil, "devices"))
 	assertContains(t, on, `hx-get="/instances/demo?tab=config"`)  // Configuration tab link
 	assertContains(t, on, `hx-get="/instances/demo?tab=devices"`) // Devices tab link
 	assertContains(t, on, `hx-get="/instances/demo/devices"`)     // active Devices panel mount
 
 	off := render(t, InstanceBody(backend.Capabilities{},
-		backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "devices"))
+		backend.Instance{Name: "demo", Status: "Running"}, nil, "devices"))
 	if strings.Contains(off, `tab=devices`) || strings.Contains(off, `tab=config`) {
 		t.Fatalf("config/devices tabs must be hidden without the capability, got %q", off)
 	}
@@ -779,7 +864,7 @@ func TestListPagesRenderEmptyStates(t *testing.T) {
 		page templ.Component
 		want string
 	}{
-		{"instances", InstancesPage(testCaps(), nil, nil, nil, nil, nil), "No instances yet"},
+		{"instances", InstancesPage(testCaps(), nil, nil, nil, nil, nil, Overview{}), "No instances yet"},
 		{"projects", ProjectsPage(testCaps(), nil, "default", nil), "No projects yet"},
 		{"networks", NetworksPage(testCaps(), nil), "No networks yet"},
 		{"storage", StoragePoolsPage(testCaps(), nil), "No storage pools yet"},
@@ -896,14 +981,14 @@ func TestProjectDetailUsageAndLimitsGatedByCapability(t *testing.T) {
 }
 
 func TestInstanceHeaderRestartIsStatusAware(t *testing.T) {
-	stopped := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Stopped"}, nil, nil, "summary"))
+	stopped := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Stopped"}, nil, "summary"))
 	assertNotContains(t, stopped, `hx-post="/instances/demo/restart?from=header"`)
-	running := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "summary"))
+	running := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, "summary"))
 	assertContains(t, running, `hx-post="/instances/demo/restart?from=header"`)
 }
 
 func TestInstanceHeaderShowsStatusBadge(t *testing.T) {
-	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, nil, "summary"))
+	html := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Running"}, nil, "summary"))
 	assertContains(t, html, "bg-green-500")
 }
 
@@ -922,7 +1007,7 @@ func TestServerConfigRendersSingleBlankRow(t *testing.T) {
 }
 
 func TestInstanceHeaderHidesRestartWhenFrozen(t *testing.T) {
-	frozen := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Frozen"}, nil, nil, "summary"))
+	frozen := render(t, InstancePage(testCaps(), backend.Instance{Name: "demo", Status: "Frozen"}, nil, "summary"))
 	assertNotContains(t, frozen, `hx-post="/instances/demo/restart?from=header"`)
 }
 
@@ -952,18 +1037,62 @@ func TestSnapshotAndVolumeDeletesAskForConfirmation(t *testing.T) {
 	assertContains(t, vol, `hx-confirm="Delete snapshot vsnap0?"`)
 }
 
+// The Tasks toggle badge mirrors panel state out-of-band: a running count and
+// a failure dot, so collapsed work is still visible.
+func TestOperationRowsCarryOOBBadge(t *testing.T) {
+	html := render(t, OperationRows([]backend.Operation{
+		{ID: "1", Description: "Migrating", Status: backend.OpRunning},
+		{ID: "2", Description: "Backup", Status: backend.OpFailure},
+	}))
+	assertContains(t, html, `id="ops-badge"`)
+	assertContains(t, html, `hx-swap-oob="outerHTML"`)
+	assertContains(t, html, "A recent task failed")
+}
+
+// The pools list shows capacity (used/total + fill bar); unknown capacity
+// renders a dash rather than a lying 0%.
+func TestStoragePoolsPageShowsCapacity(t *testing.T) {
+	html := render(t, StoragePoolsPage(testCaps(), []backend.StoragePool{
+		{Name: "default", Driver: "dir", SpaceUsed: 96 << 30, SpaceTotal: 256 << 30},
+		{Name: "mystery", Driver: "ceph"},
+	}))
+	assertContains(t, html, "96.0 GiB / 256.0 GiB")
+	assertContains(t, html, "38%")
+	assertContains(t, html, "—")
+}
+
+// The networks list shows subnet and daemon state so addressing is visible
+// without opening each network.
+func TestNetworksTableShowsSubnetAndState(t *testing.T) {
+	html := render(t, NetworksTable([]backend.Network{
+		{Name: "incusbr0", Type: "bridge", Managed: true, Status: "Created", Config: map[string]string{"ipv4.address": "10.0.3.1/24"}},
+		{Name: "eth0", Type: "physical"},
+	}))
+	assertContains(t, html, "10.0.3.1/24")
+	assertContains(t, html, "Created")
+}
+
+// Restores replace current state — as destructive in practice as a delete, so
+// both the instance and volume snapshot restore buttons must confirm.
+func TestSnapshotRestoresAskForConfirmation(t *testing.T) {
+	snaps := render(t, SnapshotTable("demo", []backend.Snapshot{{Name: "snap0"}}))
+	assertContains(t, snaps, `hx-confirm="Restore snapshot snap0?`)
+	vol := render(t, StorageVolumePage(testCaps(), backend.StorageVolume{Pool: "default", Name: "vol0"}, []backend.StorageVolumeSnapshot{{Name: "vsnap0"}}, nil, nil))
+	assertContains(t, vol, `hx-confirm="Restore snapshot vsnap0?`)
+}
+
 func TestTasksPanelUsesSSEWhenEventsCapable(t *testing.T) {
 	caps := testCaps()
 	caps.Operations = true
 	caps.Events = true
-	html := render(t, InstancesPage(caps, nil, nil, nil, nil, nil))
+	html := render(t, InstancesPage(caps, nil, nil, nil, nil, nil, Overview{}))
 	assertContains(t, html, `sse-connect="/events/operations"`)
 	assertContains(t, html, `sse-swap="operations"`)
 	assertContains(t, html, "htmx-ext-sse.min.js")
 	assertNotContains(t, html, "every 5s")
 
 	caps.Events = false
-	html = render(t, InstancesPage(caps, nil, nil, nil, nil, nil))
+	html = render(t, InstancesPage(caps, nil, nil, nil, nil, nil, Overview{}))
 	assertContains(t, html, `hx-trigger="load, every 5s"`)
 	assertNotContains(t, html, "sse-connect")
 }
@@ -976,7 +1105,7 @@ func TestSidebarRendersRemoteSwitcher(t *testing.T) {
 		{Name: "secondary"},
 	})
 	var buf bytes.Buffer
-	if err := InstancesPage(caps, nil, nil, nil, nil, nil).Render(ctx, &buf); err != nil {
+	if err := InstancesPage(caps, nil, nil, nil, nil, nil, Overview{}).Render(ctx, &buf); err != nil {
 		t.Fatal(err)
 	}
 	html := buf.String()
@@ -985,7 +1114,7 @@ func TestSidebarRendersRemoteSwitcher(t *testing.T) {
 	assertContains(t, html, `<option value="secondary">`)
 
 	caps.Remotes = false
-	html = render(t, InstancesPage(caps, nil, nil, nil, nil, nil))
+	html = render(t, InstancesPage(caps, nil, nil, nil, nil, nil, Overview{}))
 	assertNotContains(t, html, `action="/remote"`)
 }
 
@@ -996,7 +1125,7 @@ func TestInstanceRowOffersMigrateForStoppedWithTargets(t *testing.T) {
 	renderWith := func(status backend.InstanceStatus) string {
 		ctx := WithRemoteSwitcher(context.Background(), remotes)
 		var buf bytes.Buffer
-		if err := InstancesPage(caps, []backend.Instance{{Name: "demo", Status: status}}, nil, nil, nil, nil).Render(ctx, &buf); err != nil {
+		if err := InstancesPage(caps, []backend.Instance{{Name: "demo", Status: status}}, nil, nil, nil, nil, Overview{}).Render(ctx, &buf); err != nil {
 			t.Fatal(err)
 		}
 		return buf.String()
@@ -1012,7 +1141,7 @@ func TestInstanceRowOffersMigrateForStoppedWithTargets(t *testing.T) {
 	assertNotContains(t, running, "Migrate…")
 
 	caps.Migrate = false
-	html := render(t, InstancesPage(caps, []backend.Instance{{Name: "demo", Status: "Stopped"}}, nil, nil, nil, nil))
+	html := render(t, InstancesPage(caps, []backend.Instance{{Name: "demo", Status: "Stopped"}}, nil, nil, nil, nil, Overview{}))
 	assertNotContains(t, html, "Migrate…")
 }
 
@@ -1039,12 +1168,12 @@ func TestNetworkDetailRendersLeasesAndForwards(t *testing.T) {
 func TestBackupsTabGatedOnStoredBackups(t *testing.T) {
 	caps := testCaps()
 	caps.StoredBackups = true
-	html := render(t, InstancePage(caps, backend.Instance{Name: "demo", Status: "Stopped"}, nil, nil, "backups"))
+	html := render(t, InstancePage(caps, backend.Instance{Name: "demo", Status: "Stopped"}, nil, "backups"))
 	assertContains(t, html, `hx-get="/instances/demo/backups"`)
 
 	caps.StoredBackups = false
 	// A direct ?tab=backups URL without the capability falls back to Summary.
-	html = render(t, InstancePage(caps, backend.Instance{Name: "demo", Status: "Stopped"}, nil, nil, "backups"))
+	html = render(t, InstancePage(caps, backend.Instance{Name: "demo", Status: "Stopped"}, nil, "backups"))
 	assertNotContains(t, html, `hx-get="/instances/demo/backups"`)
 	assertNotContains(t, html, ">Backups<")
 }

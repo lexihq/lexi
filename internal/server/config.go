@@ -11,16 +11,81 @@ import (
 	"github.com/lexihq/lexi/internal/ui"
 )
 
-// config renders the lazy-loaded Configuration tab: the key/value editor over
-// the instance's editable config. Devices live on their own tab (devicesPanel).
+// config renders the lazy-loaded Configuration tab: Options toggles, the
+// limits/profiles editors, and the raw key/value editor. Devices live on their
+// own tab (devicesPanel).
 func (h handlers) config(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
+	h.renderConfig(w, r, r.PathValue("name"), "")
+}
+
+// renderConfig gathers the Configuration tab's data and renders it, with an
+// optional out-of-band success toast for the mutating callers.
+func (h handlers) renderConfig(w http.ResponseWriter, r *http.Request, name, msg string) {
+	inst, err := h.backend.GetInstance(r.Context(), name)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	h.render(w, r, http.StatusOK, ui.ConfigPanel(name, cfg))
+	caps := h.backend.Capabilities(r.Context())
+	var profiles []backend.Profile
+	if caps.Profiles {
+		if profiles, err = h.backend.ListProfiles(r.Context()); err != nil {
+			h.fail(w, r, err)
+			return
+		}
+	}
+	panel := ui.ConfigPanel(caps, inst, profiles, cfg)
+	if msg == "" {
+		h.render(w, r, http.StatusOK, panel)
+		return
+	}
+	h.renderWithToast(w, r, http.StatusOK, panel, msg)
+}
+
+// updateOptions applies the friendly Options toggles: it merges just the
+// ui.InstanceOptions keys into the current editable config (checked = "true",
+// unchecked = key removed) so the raw editor's other keys are untouched. The
+// version token makes the read-merge-write conditional, same as updateConfig.
+func (h handlers) updateOptions(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := r.PathValue("name")
+	if r.Form.Get("version") == "" {
+		h.fail(w, r, fmt.Errorf("missing config version token: %w", backend.ErrInvalid))
+		return
+	}
+	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	next := maps.Clone(cfg.Config)
+	if next == nil {
+		next = map[string]string{}
+	}
+	for _, opt := range ui.InstanceOptions {
+		if r.Form.Get(opt.Key) != "" {
+			next[opt.Key] = "true"
+		} else {
+			delete(next, opt.Key)
+		}
+	}
+	if err := h.backend.UpdateInstanceConfig(r.Context(), name, next, r.Form.Get("version")); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if !isHTMX(r) {
+		redirectToInstanceTab(w, name, "config")
+		return
+	}
+	h.renderConfig(w, r, name, "Options saved")
 }
 
 // devicesPanel renders the lazy-loaded Devices tab: local devices (editable),
@@ -50,16 +115,11 @@ func (h handlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
-	if err != nil {
-		h.fail(w, r, err)
+	if !isHTMX(r) {
+		redirectToInstanceTab(w, name, "config")
 		return
 	}
-	if isHTMX(r) {
-		h.renderWithToast(w, r, http.StatusOK, ui.ConfigPanel(name, cfg), "Configuration saved")
-		return
-	}
-	redirectToInstance(w, name)
+	h.renderConfig(w, r, name, "Configuration saved")
 }
 
 // addDevice attaches a local device built from the typed form (type + device

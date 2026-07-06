@@ -14,14 +14,16 @@ test("command palette: shortcut opens it, filters, and jumps to an instance", as
   await expect(dialog).toBeVisible();
   await expect(page.locator("#cmdk-input")).toBeFocused();
 
-  // It lists pages and the seeded instance.
+  // It lists pages, the seeded instance, and its state-appropriate actions
+  // (demo is stopped, so a Start action).
   const results = page.locator("#cmdk-results [role=option]");
-  await expect(results.filter({ hasText: "Instances" })).toBeVisible();
-  await expect(results.filter({ hasText: "demo" })).toBeVisible();
+  await expect(results.filter({ hasText: "Instances" }).first()).toBeVisible();
+  await expect(results.filter({ hasText: /^demoInstance$/ })).toBeVisible();
+  await expect(results.filter({ hasText: "Start demo" })).toBeVisible();
 
-  // Filtering narrows to the instance; Enter jumps to the top match.
+  // Filtering narrows to the instance and its actions; the top match is the
+  // instance itself, and Enter jumps to it.
   await page.locator("#cmdk-input").fill("demo");
-  await expect(results).toHaveCount(1);
   await expect(results.first()).toContainText("demo");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/instances\/demo$/);

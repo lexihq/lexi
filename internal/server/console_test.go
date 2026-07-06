@@ -32,7 +32,7 @@ func TestLogsUnknownInstanceIs404(t *testing.T) {
 
 func TestConsolePageRenders(t *testing.T) {
 	b := fake.New()
-	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12", Start: true}))
 
 	res := request(t, New(b), "GET", "/instances/demo/console", "", false)
 
@@ -41,6 +41,21 @@ func TestConsolePageRenders(t *testing.T) {
 	assert.Contains(t, body, "/static/js/xterm.js")
 	assert.Contains(t, body, "/static/js/console.js")
 	assert.Contains(t, body, "/instances/demo/console/ws")
+	assert.Contains(t, body, `id="console-reconnect"`)
+}
+
+// A stopped instance gets a plain explanation instead of a dead terminal that
+// silently fails to connect.
+func TestConsolePageExplainsStoppedInstance(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+
+	res := request(t, New(b), "GET", "/instances/demo/console", "", false)
+
+	assert.Equal(t, http.StatusOK, res.Code)
+	body := res.Body.String()
+	assert.Contains(t, body, "the console needs it running")
+	assert.NotContains(t, body, "/static/js/xterm.js")
 }
 
 func TestConsolePageKeepsInstanceTabs(t *testing.T) {

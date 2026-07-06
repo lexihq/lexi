@@ -198,6 +198,7 @@ func toInstance(in *api.Instance, state *api.InstanceState, snapshots int) backe
 		LimitsCPU:    in.ExpandedConfig["limits.cpu"],
 		LimitsMemory: in.ExpandedConfig["limits.memory"],
 		Profiles:     append([]string(nil), in.Profiles...),
+		Tags:         backend.ParseTags(in.ExpandedConfig["user.tags"]),
 	}
 }
 

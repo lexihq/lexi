@@ -3,6 +3,8 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -10,8 +12,14 @@ import (
 	"github.com/lexihq/lexi/internal/ui"
 )
 
-// snapshotExpiryLayout is the format an <input type="datetime-local"> submits.
+// snapshotExpiryLayout is the absolute-time expiry format (the shape an
+// <input type="datetime-local"> submits), still accepted alongside durations.
 const snapshotExpiryLayout = "2006-01-02T15:04"
+
+// expiryDurationRe matches the duration shorthand operators think in ("2w",
+// "7d", "12h", "30m") — the same convention the snapshot schedule's expiry
+// field uses.
+var expiryDurationRe = regexp.MustCompile(`^(\d+)([mhdw])$`)
 
 func (h handlers) createSnapshot(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -129,9 +137,19 @@ func parseSnapshotExpiry(v string) (time.Time, error) {
 	if v == "" {
 		return time.Time{}, nil
 	}
+	// Operators think in relative terms ("keep for 2 weeks"), so durations are
+	// the primary form; an absolute UTC time still works for exact deadlines.
+	if m := expiryDurationRe.FindStringSubmatch(v); m != nil {
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			return time.Time{}, fmt.Errorf("invalid expiry %q: %w", v, backend.ErrInvalid)
+		}
+		unit := map[string]time.Duration{"m": time.Minute, "h": time.Hour, "d": 24 * time.Hour, "w": 7 * 24 * time.Hour}[m[2]]
+		return time.Now().UTC().Add(time.Duration(n) * unit), nil
+	}
 	t, err := time.Parse(snapshotExpiryLayout, v) // no zone in layout → parsed as UTC
 	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid expiry %q: %w", v, backend.ErrInvalid)
+		return time.Time{}, fmt.Errorf("invalid expiry %q (use 2w/7d/12h or YYYY-MM-DDTHH:MM): %w", v, backend.ErrInvalid)
 	}
 	return t, nil
 }

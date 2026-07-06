@@ -176,7 +176,10 @@ templ ImagesTable(caps backend.Capabilities, images []backend.LocalImage) {
 						Type 
 					}
 					@table.Head() {
-						Size 
+						Size
+					}
+					@table.Head() {
+						Created
 					}
 					@table.Head()
 				}
@@ -257,6 +260,13 @@ templ ImagesTable(caps backend.Capabilities, images []backend.LocalImage) {
 						}
 						@table.Cell() {
 							{ sizeLabel(img.SizeBytes) }
+						}
+						@table.Cell() {
+							if img.CreatedAt.IsZero() {
+								<span class="text-muted-foreground">—</span>
+							} else {
+								<span title={ img.CreatedAt.UTC().Format("2006-01-02 15:04") + " UTC" }>{ img.CreatedAt.UTC().Format("2006-01-02") }</span>
+							}
 						}
 						@table.Cell() {
 							<div class="flex gap-2">

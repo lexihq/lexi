@@ -28,19 +28,22 @@ templ StoragePoolsPage(caps backend.Capabilities, pools []backend.StoragePool) {
 			@table.Header() {
 				@table.Row() {
 					@table.Head() {
-						Name 
+						Name
 					}
 					@table.Head() {
-						Driver 
+						Driver
 					}
 					@table.Head() {
-						Used by 
+						Capacity
+					}
+					@table.Head() {
+						Used by
 					}
 				}
 			}
 			@table.Body() {
 				if len(pools) == 0 {
-					@emptyRow("3", "No storage pools yet — create one to get started.")
+					@emptyRow("4", "No storage pools yet — create one to get started.")
 				}
 				for _, p := range pools {
 					@table.Row() {
@@ -51,12 +54,32 @@ templ StoragePoolsPage(caps backend.Capabilities, pools []backend.StoragePool) {
 							{ p.Driver }
 						}
 						@table.Cell() {
+							@poolCapacity(p)
+						}
+						@table.Cell() {
 							{ fmt.Sprint(len(p.UsedBy)) }
 						}
 					}
 				}
 			}
 		}
+	}
+}
+
+// poolCapacity renders a pool's used/total space with a fill bar — the
+// at-a-glance number Proxmox users check first. Unknown capacity (resources
+// endpoint unavailable) renders an em dash.
+templ poolCapacity(p backend.StoragePool) {
+	if p.SpaceTotal <= 0 {
+		<span class="text-muted-foreground">—</span>
+	} else {
+		{{ pct := max(0, min(100, float64(p.SpaceUsed)/float64(p.SpaceTotal)*100)) }}
+		<div class="min-w-40">
+			<span class="text-xs">{ sizeLabel(p.SpaceUsed) } / { sizeLabel(p.SpaceTotal) } ({ fmt.Sprintf("%.0f%%", pct) })</span>
+			<div class="mt-1 h-1.5 max-w-48 overflow-hidden rounded-full bg-muted" role="img" aria-label={ fmt.Sprintf("Pool %.0f%% full", pct) }>
+				<div class={ "h-full rounded-full", templ.KV("bg-primary", pct < 85), templ.KV("bg-destructive", pct >= 85) } style={ fmt.Sprintf("width: %.0f%%", pct) }></div>
+			</div>
+		</div>
 	}
 }
 
@@ -69,6 +92,9 @@ templ StoragePoolPage(caps backend.Capabilities, pool backend.StoragePool, volum
 				<a href="/storage" class="text-sm text-muted-foreground underline-offset-4 hover:underline">← Storage</a>
 				<h1 class="mt-2 text-2xl font-semibold">{ pool.Name }</h1>
 				<p class="text-muted-foreground">{ pool.Driver }</p>
+				<div class="mt-2">
+					@poolCapacity(pool)
+				</div>
 			</div>
 			if len(pool.UsedBy) > 0 {
 				@button.Button(button.Props{Variant: button.VariantOutline, Class: "text-destructive", Disabled: true, Attributes: templ.Attributes{"title": fmt.Sprintf("in use by %d reference(s)", len(pool.UsedBy))}}) {
@@ -620,7 +646,7 @@ templ StorageVolumeSnapshotsTable(pool, volume string, snapshots []backend.Stora
 						}
 						@table.Cell() {
 							<div class="flex flex-wrap items-center gap-2">
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/storage/" + ep + "/volumes/" + ev + "/snapshots/" + es + "/restore", "hx-target": "#volume-snapshots", "hx-swap": "outerHTML"}}) {
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/storage/" + ep + "/volumes/" + ev + "/snapshots/" + es + "/restore", "hx-target": "#volume-snapshots", "hx-swap": "outerHTML", "hx-confirm": "Restore snapshot " + snap.Name + "? The volume's current state will be replaced."}}) {
 									@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
 									Restore
 								}
@@ -631,9 +657,9 @@ templ StorageVolumeSnapshotsTable(pool, volume string, snapshots []backend.Stora
 									}
 								</form>
 								<form method="post" action={ templ.URL("/storage/" + ep + "/volumes/" + ev + "/snapshots/" + es + "/expiry") } hx-post={ "/storage/" + ep + "/volumes/" + ev + "/snapshots/" + es + "/expiry" } hx-target="#volume-snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
-									<input type="datetime-local" name="expires_at" class="h-8 rounded-md border bg-background px-1 text-sm" title="Expiry in UTC (empty clears)"/>
+									<input name="expires_at" placeholder="2w, 7d…" class="h-8 w-24 rounded-md border bg-background px-2 text-sm" title="Duration like 2w/7d/12h or UTC time (YYYY-MM-DDTHH:MM); empty clears"/>
 									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
-										Set expiry (UTC)
+										Set expiry
 									}
 								</form>
 								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Attributes: templ.Attributes{"hx-post": "/storage/" + ep + "/volumes/" + ev + "/snapshots/" + es + "/delete", "hx-target": "#volume-snapshots", "hx-swap": "outerHTML", "hx-confirm": "Delete snapshot " + snap.Name + "?"}}) {

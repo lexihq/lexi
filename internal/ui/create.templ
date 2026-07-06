@@ -2,6 +2,7 @@ package ui
 
 import (
 	"net/url"
+	"regexp"
 
 	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lexihq/lexi/internal/components/button"
@@ -80,6 +81,21 @@ templ CreateInstanceDialog(images []backend.Image, profiles []backend.Profile, p
 								</select>
 							</div>
 						}
+						<div class="space-y-1.5">
+							<label class="block text-sm font-medium" for="create-tags">Tags</label>
+							<input id="create-tags" name="tags" placeholder="web, prod" autocomplete="off" class="h-10 w-full rounded-md border bg-background px-3 text-sm"/>
+							<p class="text-xs text-muted-foreground">Comma-separated labels, shown and filterable in the list (stored as user.tags).</p>
+						</div>
+						<div class="grid gap-3 sm:grid-cols-2">
+							<div class="space-y-1.5">
+								<label class="block text-sm font-medium" for="create-cpu">CPU limit</label>
+								<input id="create-cpu" name="cpu" placeholder="e.g. 2" autocomplete="off" class="h-10 w-full rounded-md border bg-background px-3 text-sm"/>
+							</div>
+							<div class="space-y-1.5">
+								<label class="block text-sm font-medium" for="create-memory">Memory limit</label>
+								<input id="create-memory" name="memory" placeholder="e.g. 2GiB" autocomplete="off" class="h-10 w-full rounded-md border bg-background px-3 text-sm"/>
+							</div>
+						</div>
 						<details class="rounded-md border p-3">
 							<summary class="cursor-pointer text-sm font-medium">Advanced: initial config</summary>
 							<p class="mb-2 mt-2 text-xs text-muted-foreground">Config keys applied at create, e.g. limits.cpu or user.user-data (cloud-init).</p>
@@ -216,6 +232,14 @@ templ RebuildPage(caps backend.Capabilities, inst backend.Instance, images []bac
 					@requiredMark()
 				</label>
 				@imagePickerField(images)
+			</div>
+			<div class="space-y-1.5">
+				<label class="text-sm font-medium" for="rebuild-confirm">
+					Type <span class="font-mono">{ inst.Name }</span> to confirm
+					@requiredMark()
+				</label>
+				<p class="text-xs text-muted-foreground">Rebuilding wipes the instance's disk; the typed name is required before it runs.</p>
+				<input id="rebuild-confirm" name="confirm" required autocomplete="off" spellcheck="false" pattern={ regexp.QuoteMeta(inst.Name) } class="h-10 w-full rounded-md border bg-background px-3 font-mono text-sm"/>
 			</div>
 			@button.Button(button.Props{Type: button.TypeSubmit}) {
 				@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})

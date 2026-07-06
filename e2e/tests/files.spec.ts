@@ -12,7 +12,7 @@ test("files tab: browse, download, and upload", async ({ page }) => {
   // Descend from the root into /etc. The panel content is freshly hx-loaded,
   // so retry a lost click (swap-then-click race).
   await expect(async () => {
-    await files.getByRole("button", { name: "etc" }).click();
+    await files.getByRole("button", { name: "etc", exact: true }).click();
     await expect(files.getByText("hostname")).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10000 });
 
@@ -46,12 +46,12 @@ test("files tab: create folder, delete file and folder", async ({ page }) => {
   await expect(async () => {
     await files.locator('input[name="name"]').fill("e2e-dir");
     await files.getByRole("button", { name: "New folder" }).click();
-    await expect(files.getByRole("button", { name: "e2e-dir" })).toBeVisible({ timeout: 1000 });
+    await expect(files.getByRole("button", { name: "e2e-dir", exact: true })).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10000 });
 
   // Enter it (empty) and upload a file into it.
   await expect(async () => {
-    await files.getByRole("button", { name: "e2e-dir" }).click();
+    await files.getByRole("button", { name: "e2e-dir", exact: true }).click();
     await expect(files.getByText("Empty directory.")).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10000 });
   await files.locator('input[type="file"]').setInputFiles({
@@ -83,7 +83,7 @@ test("files tab: create folder, delete file and folder", async ({ page }) => {
       .getByRole("row", { name: /e2e-dir/ })
       .getByRole("button", { name: "Delete" })
       .click();
-    await expect(files.getByRole("button", { name: "e2e-dir" })).toHaveCount(0, { timeout: 1000 });
+    await expect(files.getByRole("button", { name: "e2e-dir", exact: true })).toHaveCount(0, { timeout: 1000 });
   }).toPass({ timeout: 10000 });
 });
 
@@ -92,7 +92,7 @@ test("files tab: edit a text file in the browser", async ({ page }) => {
   const files = page.locator("#files");
   await expect(files).toBeVisible();
   await expect(async () => {
-    await files.getByRole("button", { name: "etc" }).click();
+    await files.getByRole("button", { name: "etc", exact: true }).click();
     await expect(files.getByText("hostname")).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10000 });
 
@@ -131,7 +131,7 @@ test("files tab: view a log the editor refuses", async ({ page }) => {
   const files = page.locator("#files");
   await expect(files).toBeVisible();
   await expect(async () => {
-    await files.getByRole("button", { name: "root" }).click();
+    await files.getByRole("button", { name: "root", exact: true }).click();
     await expect(files.getByText("app.log")).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 10000 });
 

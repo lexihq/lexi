@@ -106,3 +106,21 @@ func TestSnapshotsTabIncludesScheduleLazyLoad(t *testing.T) {
 	assertStatus(t, res, http.StatusOK)
 	assert.Contains(t, res.Body.String(), `/instances/demo/snapshots/schedule`)
 }
+
+// Expiry accepts operator-style durations ("2w", "7d", "12h") as well as the
+// absolute datetime-local form.
+func TestParseSnapshotExpiryDurations(t *testing.T) {
+	for raw, want := range map[string]time.Duration{
+		"30m": 30 * time.Minute,
+		"12h": 12 * time.Hour,
+		"7d":  7 * 24 * time.Hour,
+		"2w":  14 * 24 * time.Hour,
+	} {
+		got, err := parseSnapshotExpiry(raw)
+		require.NoError(t, err, raw)
+		assert.WithinDuration(t, time.Now().UTC().Add(want), got, time.Minute, raw)
+	}
+
+	_, err := parseSnapshotExpiry("2x")
+	require.ErrorIs(t, err, backend.ErrInvalid)
+}

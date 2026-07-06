@@ -75,6 +75,7 @@ func toNetwork(n *api.Network) backend.Network {
 		Name:        n.Name,
 		Type:        n.Type,
 		Managed:     n.Managed,
+		Status:      n.Status,
 		Description: n.Description,
 		Config:      n.Config,
 		UsedBy:      n.UsedBy,

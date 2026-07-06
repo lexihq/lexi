@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lexihq/lexi/internal/components/icon"
 	"github.com/lexihq/lexi/internal/components/popover"
@@ -102,6 +104,7 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 			<script src="/static/js/command-palette.js" defer></script>
 			<script src="/static/js/confirm-dialog.js" defer></script>
 			<script src="/static/js/bulk-actions.js" defer></script>
+			<script src="/static/js/list-filter.js" defer></script>
 		</head>
 		<body
 			class="h-full bg-background text-foreground"
@@ -123,6 +126,12 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 					</div>
 					<div class="flex items-center gap-3 text-sm text-muted-foreground">
 						@CommandPaletteTrigger()
+						// Restate a non-default scope where every page shows it:
+						// acting in the wrong project/remote is the classic
+						// multi-tenant mistake.
+						if scope := strings.TrimPrefix(scopeSuffix(ctx), " "); scope != "" {
+							<span class="hidden rounded border px-2 py-0.5 text-xs md:inline">{ scope }</span>
+						}
 						<span class="hidden sm:inline">{ caps.ServerInfo }</span>
 						@popover.Root() {
 							@popover.Trigger() {
@@ -175,6 +184,9 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 						<label for="ops-toggle" class="flex cursor-pointer items-center gap-2 px-4 py-1.5 text-sm text-muted-foreground hover:text-foreground">
 							@icon.Icon("list-todo")(icon.Props{Class: "size-4"})
 							Tasks
+							// Placeholder the panel's out-of-band OpsBadge replaces on every
+							// frame/poll, so running/failed work shows while collapsed.
+							<span id="ops-badge" class="flex items-center gap-1.5"></span>
 						</label>
 						if caps.Events {
 							// Push mode: the SSE extension swaps each named

@@ -20,9 +20,7 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 			<h2 class="text-lg font-medium">Snapshots</h2>
 			<form method="post" action={ templ.URL("/instances/" + en + "/snapshots") } hx-post={ "/instances/" + en + "/snapshots" } hx-target="#snapshots" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="snapshot" placeholder="snapshot name"/>
-				<label class="flex items-center gap-1 text-sm text-muted-foreground">
-					<input type="datetime-local" name="expires_at" class="h-9 rounded-md border bg-background px-2 text-sm" title="Expiry in UTC (optional)"/> UTC
-				</label>
+				<input name="expires_at" placeholder="expiry: 2w, 7d…" class="h-9 w-36 rounded-md border bg-background px-3 text-sm" title="Optional expiry: a duration like 2w, 7d, 12h — or a UTC time (YYYY-MM-DDTHH:MM)"/>
 				<label class="flex items-center gap-1 text-sm text-muted-foreground">
 					<input type="checkbox" name="stateful"/> stateful
 				</label>
@@ -36,28 +34,38 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 			@table.Header() {
 				@table.Row() {
 					@table.Head() {
-						Name 
+						Name
 					}
 					@table.Head() {
-						Stateful 
+						Created
 					}
 					@table.Head() {
-						Expires 
+						Stateful
 					}
 					@table.Head() {
-						Actions 
+						Expires
+					}
+					@table.Head() {
+						Actions
 					}
 				}
 			}
 			@table.Body() {
 				if len(snapshots) == 0 {
-					@emptyRow("4", "No snapshots yet.")
+					@emptyRow("5", "No snapshots yet.")
 				}
 				for _, snap := range snapshots {
 					{{ es := url.PathEscape(snap.Name) }}
 					@table.Row() {
 						@table.Cell() {
 							{ snap.Name }
+						}
+						@table.Cell() {
+							if snap.CreatedAt.IsZero() {
+								<span class="text-muted-foreground">—</span>
+							} else {
+								<span title={ snap.CreatedAt.UTC().Format("2006-01-02 15:04") + " UTC" }>{ ageLabel(snap.CreatedAt) }</span>
+							}
 						}
 						@table.Cell() {
 							if snap.Stateful {
@@ -72,7 +80,7 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 						@table.Cell() {
 							<div class="space-y-2">
 								<div class="flex flex-wrap items-center gap-2">
-									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/restore", "hx-target": "#snapshots", "hx-swap": "outerHTML"}}) {
+									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": "/instances/" + en + "/snapshots/" + es + "/restore", "hx-target": "#snapshots", "hx-swap": "outerHTML", "hx-confirm": "Restore snapshot " + snap.Name + "? The instance's current state will be replaced."}}) {
 										@icon.Icon("rotate-ccw")(icon.Props{Class: "size-4"})
 										Restore
 									}
@@ -93,9 +101,9 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 											}
 										</form>
 										<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/" + es + "/expiry") } hx-post={ "/instances/" + en + "/snapshots/" + es + "/expiry" } hx-target="#snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
-											<input type="datetime-local" name="expires_at" class="h-8 rounded-md border bg-background px-1 text-sm" title="Expiry in UTC (empty clears)"/>
+											<input name="expires_at" placeholder="2w, 7d…" class="h-8 w-24 rounded-md border bg-background px-2 text-sm" title="Duration like 2w/7d/12h or UTC time (YYYY-MM-DDTHH:MM); empty clears"/>
 											@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
-												Set expiry (UTC)
+												Set expiry
 											}
 										</form>
 									</div>
@@ -171,21 +179,67 @@ templ LimitsForm(inst backend.Instance) {
 	</section>
 }
 
-// ConfigPanel is the lazy-loaded Configuration tab body: a whole-map key/value
-// editor over the instance's editable config, plus a read-only device list.
-// Submitting replaces the editable config (blank-key rows are dropped, so
-// clearing a key removes it); the trailing blank row adds one.
-templ ConfigPanel(name string, cfg backend.InstanceConfig) {
-	<section id="config" class="space-y-8">
+// InstanceOptions are the everyday boolean config keys surfaced as friendly
+// toggles on the Configuration tab, so common operations don't require
+// memorizing raw daemon keys. The options handler reads the same list (single
+// source of truth, like DeviceTypes).
+var InstanceOptions = []struct {
+	Key, Label, Help string
+}{
+	{"boot.autostart", "Start on boot", "Start this instance when the host boots."},
+	{"security.nesting", "Allow nesting", "Run containers inside this instance."},
+	{"security.privileged", "Privileged", "Run without user namespace isolation — much weaker isolation; avoid unless required."},
+}
+
+// ConfigPanel is the lazy-loaded Configuration tab body: friendly Options
+// toggles and the limits/profiles editors up front, with the whole-map raw
+// key/value editor demoted to an "Advanced" disclosure. Submitting the raw
+// editor replaces the editable config (blank-key rows are dropped, so clearing
+// a key removes it); the trailing blank row adds one.
+templ ConfigPanel(caps backend.Capabilities, inst backend.Instance, profiles []backend.Profile, cfg backend.InstanceConfig) {
+	{{ name := inst.Name }}
+	<section id="config" class="space-y-6">
 		<div class="rounded-lg border bg-card p-4">
-			<h2 class="mb-3 text-lg font-medium">Configuration</h2>
+			<h2 class="mb-3 text-lg font-medium">Options</h2>
+			<form
+				method="post"
+				action={ templ.URL("/instances/" + url.PathEscape(name) + "/options") }
+				hx-post={ "/instances/" + url.PathEscape(name) + "/options" }
+				hx-target="#config"
+				hx-swap="outerHTML"
+				class="space-y-3"
+			>
+				<input type="hidden" name="version" value={ cfg.Version }/>
+				for _, opt := range InstanceOptions {
+					<label class="flex items-start gap-2 text-sm">
+						<input type="checkbox" name={ opt.Key } checked?={ cfg.Config[opt.Key] == "true" } class="mt-0.5"/>
+						<span>
+							<span class="font-medium">{ opt.Label }</span>
+							<span class="block text-xs text-muted-foreground">{ opt.Help }</span>
+						</span>
+					</label>
+				}
+				@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline}) {
+					@icon.Icon("save")(icon.Props{Class: "size-4"})
+					Apply options
+				}
+			</form>
+		</div>
+		if caps.Limits {
+			@LimitsForm(inst)
+		}
+		if caps.Profiles {
+			@InstanceProfilesForm(inst, profiles)
+		}
+		<details class="rounded-lg border bg-card p-4">
+			<summary class="cursor-pointer text-lg font-medium">Advanced: raw configuration</summary>
 			<form
 				method="post"
 				action={ templ.URL("/instances/" + url.PathEscape(name) + "/config") }
 				hx-post={ "/instances/" + url.PathEscape(name) + "/config" }
 				hx-target="#config"
 				hx-swap="outerHTML"
-				class="space-y-2"
+				class="mt-3 space-y-2"
 			>
 				// Conditional-write token: a concurrent config change conflicts
 				// (409) instead of being silently overwritten (see updateDevice).
@@ -200,13 +254,13 @@ templ ConfigPanel(name string, cfg backend.InstanceConfig) {
 					<input name="key" placeholder="key (e.g. security.nesting)" class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
 					<textarea name="value" rows="1" placeholder="value" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 text-sm"></textarea>
 				</div>
-				<p class="text-xs text-muted-foreground">Clear a key and apply to remove it.</p>
+				<p class="text-xs text-muted-foreground">Whole-map replace: clear a key and apply to remove it. High-risk keys (security.*, raw.*) can break boot or isolation.</p>
 				@button.Button(button.Props{Type: button.TypeSubmit}) {
 					@icon.Icon("save")(icon.Props{Class: "size-4"})
 					Apply config
 				}
 			</form>
-		</div>
+		</details>
 	</section>
 }
 
@@ -261,7 +315,7 @@ templ DevicesSection(caps backend.Capabilities, name string, cfg backend.Instanc
 						}
 					</div>
 					if caps.Devices {
-						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": base + "/" + url.PathEscape(dn) + "/delete", "hx-target": "#devices", "hx-swap": "outerHTML"}}) {
+						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-post": base + "/" + url.PathEscape(dn) + "/delete", "hx-target": "#devices", "hx-swap": "outerHTML", "hx-confirm": "Remove device " + dn + "? Detaching a disk or NIC can break the instance."}}) {
 							@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 							Remove
 						}

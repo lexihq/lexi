@@ -50,23 +50,29 @@ templ NetworksTable(networks []backend.Network) {
 			@table.Header() {
 				@table.Row() {
 					@table.Head() {
-						Name 
+						Name
 					}
 					@table.Head() {
-						Type 
+						Type
 					}
 					@table.Head() {
-						Managed 
+						Subnet
 					}
 					@table.Head() {
-						Used by 
+						State
+					}
+					@table.Head() {
+						Managed
+					}
+					@table.Head() {
+						Used by
 					}
 					@table.Head()
 				}
 			}
 			@table.Body() {
 				if len(networks) == 0 {
-					@emptyRow("5", "No networks yet — create one to get started.")
+					@emptyRow("7", "No networks yet — create one to get started.")
 				}
 				for _, n := range networks {
 					@table.Row() {
@@ -75,6 +81,20 @@ templ NetworksTable(networks []backend.Network) {
 						}
 						@table.Cell() {
 							{ n.Type }
+						}
+						@table.Cell() {
+							if subnet := networkSubnet(n); subnet != "" {
+								<span class="font-mono text-xs">{ subnet }</span>
+							} else {
+								<span class="text-muted-foreground">—</span>
+							}
+						}
+						@table.Cell() {
+							if n.Status == "" {
+								<span class="text-muted-foreground">—</span>
+							} else {
+								{ n.Status }
+							}
 						}
 						@table.Cell() {
 							if n.Managed {
@@ -99,6 +119,23 @@ templ NetworksTable(networks []backend.Network) {
 			}
 		}
 	</div>
+}
+
+// networkSubnet is the list's at-a-glance addressing: the managed bridge's
+// ipv4.address (with ipv6.address appended when both are set), empty when the
+// network carries no addressing config (physical NICs, unmanaged).
+func networkSubnet(n backend.Network) string {
+	v4 := n.Config["ipv4.address"]
+	v6 := n.Config["ipv6.address"]
+	switch {
+	case v4 != "" && v6 != "" && v6 != "none":
+		return v4 + ", " + v6
+	case v4 != "":
+		return v4
+	case v6 != "" && v6 != "none":
+		return v6
+	}
+	return ""
 }
 
 // NetworkDetailPage shows a network's config and used-by, plus live state,

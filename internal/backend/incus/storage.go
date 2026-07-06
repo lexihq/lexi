@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"os"
 	"path"
 	"regexp"
@@ -23,24 +24,51 @@ import (
 )
 
 func (b *incusBackend) ListStoragePools(ctx context.Context) ([]backend.StoragePool, error) {
-	ps, err := b.project(ctx).GetStoragePools()
+	client := b.project(ctx)
+	ps, err := client.GetStoragePools()
 	if err != nil {
 		return nil, fmt.Errorf("list storage pools: %w", mapErr(err))
 	}
 	out := make([]backend.StoragePool, 0, len(ps))
 	for i := range ps {
-		out = append(out, toPool(&ps[i]))
+		p := toPool(&ps[i])
+		// Capacity is best-effort: the list must render even when a pool's
+		// resources endpoint fails (e.g. an unavailable remote ceph pool).
+		if res, err := client.GetStoragePoolResources(p.Name); err == nil {
+			p.SpaceUsed = clampToInt64(res.Space.Used)
+			p.SpaceTotal = clampToInt64(res.Space.Total)
+		} else {
+			slog.Debug("storage pool resources", "pool", p.Name, "err", err)
+		}
+		out = append(out, p)
 	}
 	return out, nil
 }
 
+// clampToInt64 converts a daemon uint64 byte count into the domain's int64,
+// clamping instead of overflowing on absurd values.
+func clampToInt64(v uint64) int64 {
+	if v > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(v)
+}
+
 func (b *incusBackend) GetStoragePool(ctx context.Context, pool string) (backend.StoragePool, error) {
-	p, etag, err := b.project(ctx).GetStoragePool(pool)
+	client := b.project(ctx)
+	p, etag, err := client.GetStoragePool(pool)
 	if err != nil {
 		return backend.StoragePool{}, fmt.Errorf("get storage pool %q: %w", pool, mapErr(err))
 	}
 	out := toPool(p)
 	out.Version = etag
+	// Same best-effort capacity as the list (the detail header shows it too).
+	if res, err := client.GetStoragePoolResources(pool); err == nil {
+		out.SpaceUsed = clampToInt64(res.Space.Used)
+		out.SpaceTotal = clampToInt64(res.Space.Total)
+	} else {
+		slog.Debug("storage pool resources", "pool", pool, "err", err)
+	}
 	return out, nil
 }
 

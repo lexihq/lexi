@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"fmt"
 	"net/url"
+	"strings"
+	"time"
 
 	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lexihq/lexi/internal/components/button"
@@ -12,10 +15,10 @@ import (
 // InstancePage is the per-instance detail shell: a header (name/status + Export
 // action) over a tabbed body. Export stays a header action; Console is a tab
 // link to the full-page terminal.
-templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, profiles []backend.Profile, tab string) {
+templ InstancePage(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, tab string) {
 	@Layout(inst.Name, caps, Nav{Section: NavInstances, Instance: inst.Name}) {
 		@InstanceHeader(caps, inst)
-		@InstanceBody(caps, inst, snapshots, profiles, tab)
+		@InstanceBody(caps, inst, snapshots, tab)
 		// The Backups tab's restore dialog needs the dialog runtime; it is
 		// idempotent and cheap, so mount it with the page rather than racing
 		// the lazily-swapped panel.
@@ -102,7 +105,7 @@ templ panelLoading() {
 // target this element (outerHTML), so its id must match what the tab links
 // point at. Only the active tab is mounted, keeping panel ids (#metrics, #logs,
 // #snapshots, #limits) unique and stopping the metrics poll when its tab is left.
-templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, profiles []backend.Profile, tab string) {
+templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots []backend.Snapshot, tab string) {
 	{{ active := effectiveTab(caps, tab) }}
 	<div id="instance-body">
 		@instanceTabs(caps, inst.Name, active, true)
@@ -172,21 +175,107 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 					@panelLoading()
 				</div>
 			default:
-				<section class="mb-8 rounded-lg border bg-card p-4">
-					<h2 class="mb-3 text-lg font-medium">Details</h2>
-					<dl class="grid gap-3 text-sm sm:grid-cols-2">
-						<div><dt class="text-muted-foreground">Image</dt><dd>{ inst.Image }</dd></div>
-						<div><dt class="text-muted-foreground">IPv4</dt><dd>{ joinIPv4(inst.IPv4) }</dd></div>
-					</dl>
-				</section>
-				if caps.Limits {
-					@LimitsForm(inst)
-				}
-				if caps.Profiles {
-					@InstanceProfilesForm(inst, profiles)
-				}
+				@SummaryPanel(inst, snapshots)
 		}
 	</div>
+}
+
+// SummaryPanel is the read-only operator overview on the default tab: what the
+// instance is, how to reach it, how it's protected, and (when the metrics
+// store has samples) what it's using right now. Editing — limits, profiles,
+// options, raw config — lives on the Configuration tab.
+templ SummaryPanel(inst backend.Instance, snapshots []backend.Snapshot) {
+	{{ trend := instanceTrendFrom(ctx, inst.Name) }}
+	<section class="mb-8 rounded-lg border bg-card p-4">
+		<h2 class="mb-3 text-lg font-medium">Details</h2>
+		<dl class="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+			<div><dt class="text-muted-foreground">Image</dt><dd>{ orDash(inst.Image) }</dd></div>
+			<div><dt class="text-muted-foreground">IPv4</dt><dd>{ joinIPv4(inst.IPv4) }</dd></div>
+			<div>
+				<dt class="text-muted-foreground">Created</dt>
+				<dd>
+					if inst.CreatedAt.IsZero() {
+						—
+					} else {
+						{ inst.CreatedAt.UTC().Format("2006-01-02") } ({ ageLabel(inst.CreatedAt) })
+					}
+				</dd>
+			</div>
+			<div><dt class="text-muted-foreground">Profiles</dt><dd>{ orDash(strings.Join(inst.Profiles, ", ")) }</dd></div>
+			<div><dt class="text-muted-foreground">Limits</dt><dd>{ limitsSummary(inst) }</dd></div>
+			<div>
+				<dt class="text-muted-foreground">Tags</dt>
+				<dd>
+					if len(inst.Tags) == 0 {
+						—
+					} else {
+						<span class="flex flex-wrap gap-1">
+							for _, tag := range inst.Tags {
+								<span class="rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ tag }</span>
+							}
+						</span>
+					}
+				</dd>
+			</div>
+			<div>
+				<dt class="text-muted-foreground">Snapshots</dt>
+				<dd>
+					{ fmt.Sprint(len(snapshots)) }
+					if last := latestSnapshot(snapshots); last != nil && !last.CreatedAt.IsZero() {
+						<span class="text-muted-foreground">— latest { last.Name }, { ageLabel(last.CreatedAt) }</span>
+					}
+				</dd>
+			</div>
+			if len(trend.CPU) > 0 {
+				<div>
+					<dt class="text-muted-foreground">Usage now</dt>
+					<dd>
+						CPU { fmt.Sprintf("%.0f%%", trend.CPUNow) }
+						if trend.MemUsed > 0 {
+							· { sizeLabel(trend.MemUsed) }
+							if trend.MemTotal > 0 {
+								/ { sizeLabel(trend.MemTotal) }
+							}
+						}
+					</dd>
+				</div>
+			}
+		</dl>
+	</section>
+}
+
+// latestSnapshot returns the newest snapshot by creation time, nil when none.
+func latestSnapshot(snapshots []backend.Snapshot) *backend.Snapshot {
+	var latest *backend.Snapshot
+	for i := range snapshots {
+		if latest == nil || snapshots[i].CreatedAt.After(latest.CreatedAt) {
+			latest = &snapshots[i]
+		}
+	}
+	return latest
+}
+
+// ageLabel renders how long ago t was in the largest useful unit ("3d ago").
+func ageLabel(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	}
+}
+
+// orDash substitutes an em dash for an empty value in the details grid.
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
 }
 
 // effectiveTab resolves the requested tab against the instance's capabilities,
@@ -234,7 +323,9 @@ func effectiveTab(caps backend.Capabilities, tab string) string {
 // navigations (console page, which must unload to close its WebSocket). The
 // Console entry is always a full-page link and is highlighted when active.
 templ instanceTabs(caps backend.Capabilities, name, active string, swap bool) {
-	<div class="mb-4 flex gap-1 border-b">
+	// overflow-x-auto: nine tabs don't fit a phone; scrolling beats clipping
+	// Backups in half with no affordance.
+	<div class="mb-4 flex gap-1 overflow-x-auto whitespace-nowrap border-b">
 		@tabLink(name, "summary", "Summary", "info", active, swap)
 		if caps.Snapshots {
 			@tabLink(name, "snapshots", "Snapshots", "camera", active, swap)
@@ -296,5 +387,5 @@ func joinIPv4(addrs []string) string {
 	if len(addrs) == 0 {
 		return "—"
 	}
-	return addrs[0]
+	return strings.Join(addrs, ", ")
 }

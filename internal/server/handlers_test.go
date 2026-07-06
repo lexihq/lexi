@@ -34,6 +34,23 @@ func TestStatusForSentinels(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, statusFor(fmt.Errorf("split image: %w", backend.ErrUnsupported)))
 }
 
+// Non-HTMX navigations to a failing URL get the full styled error page (shell,
+// status text, a way back) — not http.Error's bare text/plain dead end.
+func TestErrorPageForNativeNavigation(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+
+	res := request(t, New(b), "GET", "/instances/ghost", "", false)
+
+	assertStatus(t, res, http.StatusNotFound)
+	body := res.Body.String()
+	assert.Contains(t, body, "Not Found")
+	assert.Contains(t, body, "not found")
+	// Shell rendered around the error: sidebar nav plus the way home.
+	assert.Contains(t, body, `href="/"`)
+	assert.Contains(t, body, "<!doctype html")
+}
+
 func TestCSRFGuardBlocksCrossOriginPost(t *testing.T) {
 	srv := New(fake.New())
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/instances/demo/start", nil)

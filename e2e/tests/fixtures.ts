@@ -16,6 +16,15 @@ export const test = base.extend<{ autoAcceptConfirms: void }>({
         const accept = () => {
           const d = document.getElementById("confirm-dialog") as HTMLDialogElement | null;
           if (d && d.open) {
+            // Typed-name gate (instance delete): fill the required name so the
+            // accept button enables, mirroring what a deliberate user does.
+            const row = document.getElementById("confirm-dialog-name-row");
+            const input = document.getElementById("confirm-dialog-input") as HTMLInputElement | null;
+            const name = document.getElementById("confirm-dialog-name");
+            if (row && !row.classList.contains("hidden") && input && name) {
+              input.value = name.textContent ?? "";
+              input.dispatchEvent(new Event("input", { bubbles: true }));
+            }
             (document.getElementById("confirm-dialog-accept") as HTMLButtonElement | null)?.click();
           }
         };

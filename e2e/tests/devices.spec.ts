@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 // The instance Devices tab: typed add forms, in-place edit, and removal.
 // All tests run against the shared fake-backed server (instance "demo" seeded).

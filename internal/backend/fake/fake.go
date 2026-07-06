@@ -254,10 +254,10 @@ func New() *Fake {
 	}
 	defaultSpace.networks = map[string]backend.Network{
 		"incusbr0": {
-			Name: "incusbr0", Type: "bridge", Managed: true, Description: "Default bridge",
+			Name: "incusbr0", Type: "bridge", Managed: true, Status: "Created", Description: "Default bridge",
 			Config: map[string]string{"ipv4.address": "10.0.3.1/24", "ipv4.nat": "true"},
 		},
-		"eth0": {Name: "eth0", Type: "physical", Managed: false},
+		"eth0": {Name: "eth0", Type: "physical", Managed: false, Status: "Created"},
 	}
 	defaultSpace.images = map[string]*backend.LocalImage{
 		"fake-debian-12-aarch64": {
@@ -280,8 +280,8 @@ func New() *Fake {
 		},
 		projectVersions: map[string]int{},
 		pools: map[string]*storagePool{
-			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]map[string]*storageVolume{}},
-			"zfs0":    {StoragePool: backend.StoragePool{Name: "zfs0", Driver: "zfs", Config: map[string]string{}}, volumes: map[string]map[string]*storageVolume{}},
+			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}, SpaceUsed: 96 << 30, SpaceTotal: 256 << 30}, volumes: map[string]map[string]*storageVolume{}},
+			"zfs0":    {StoragePool: backend.StoragePool{Name: "zfs0", Driver: "zfs", Config: map[string]string{}, SpaceUsed: 128 << 30, SpaceTotal: 512 << 30}, volumes: map[string]map[string]*storageVolume{}},
 		},
 		serverConfig:        map[string]string{"core.https_address": ":8443"},
 		serverConfigVersion: 1,
@@ -354,7 +354,7 @@ func newSecondaryRemote() *remoteState {
 		},
 		projectVersions: map[string]int{},
 		pools: map[string]*storagePool{
-			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}}, volumes: map[string]map[string]*storageVolume{}},
+			"default": {StoragePool: backend.StoragePool{Name: "default", Driver: "dir", Description: "Default pool", Config: map[string]string{}, SpaceUsed: 96 << 30, SpaceTotal: 256 << 30}, volumes: map[string]map[string]*storageVolume{}},
 		},
 		serverConfig:        map[string]string{"core.https_address": ":8444"},
 		serverConfigVersion: 1,
@@ -427,6 +427,11 @@ func (f *Fake) view(sp *space, in *instance) backend.Instance {
 	if out.LimitsMemory == "" {
 		out.LimitsMemory = profileConfigValue(sp, in.Profiles, "limits.memory")
 	}
+	tags := in.config["user.tags"]
+	if tags == "" {
+		tags = profileConfigValue(sp, in.Profiles, "user.tags")
+	}
+	out.Tags = backend.ParseTags(tags)
 	return out
 }
 

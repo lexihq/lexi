@@ -55,6 +55,10 @@
     // into the close frame; show it instead of a bare "connection closed".
     const reason = ev && ev.reason ? ": " + ev.reason : "";
     term.write("\r\n\x1b[31m[connection closed" + reason + "]\x1b[0m\r\n");
+    // Surface the way back in: a dead terminal with no affordance forces a
+    // manual page reload the user has to guess at.
+    const reconnect = document.getElementById("console-reconnect");
+    if (reconnect) reconnect.classList.remove("hidden");
   };
 
   term.onData(function (data) {

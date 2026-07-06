@@ -1,6 +1,35 @@
 package ui
 
-import "github.com/lexihq/lexi/internal/components/toast"
+import (
+	"net/http"
+	"strconv"
+
+	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/components/button"
+	"github.com/lexihq/lexi/internal/components/toast"
+)
+
+// ErrorPage is the full-page error shell for native (non-HTMX) navigations —
+// dialog form posts and typed URLs. It keeps the sidebar and header so the
+// user still has the app around the failure and an obvious way back, instead
+// of the bare text/plain http.Error dead end.
+templ ErrorPage(caps backend.Capabilities, code int, message string) {
+	@Layout("Error", caps, Nav{}) {
+		<div class="mx-auto mt-16 max-w-lg text-center">
+			<p class="text-6xl font-semibold text-muted-foreground">{ strconv.Itoa(code) }</p>
+			<h1 class="mt-3 text-xl font-medium">{ http.StatusText(code) }</h1>
+			<p class="mt-2 break-words text-sm text-muted-foreground">{ message }</p>
+			<div class="mt-6 flex justify-center gap-2">
+				@button.Button(button.Props{Variant: button.VariantOutline, Type: button.TypeButton, Attributes: templ.Attributes{"onclick": "history.back()"}}) {
+					Go back
+				}
+				@button.Button(button.Props{Href: "/"}) {
+					Instances
+				}
+			</div>
+		</div>
+	}
+}
 
 // ErrorToast renders a backend error as a dismissible top-right toast. It is the
 // body of every 4xx/5xx response (see server.renderError); errors.js forces the

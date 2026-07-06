@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -176,6 +177,20 @@ type Instance struct {
 	LimitsCPU    string   // limits.cpu, e.g. "2"; empty = unset
 	LimitsMemory string   // limits.memory, e.g. "2GiB"; empty = unset
 	Profiles     []string // assigned profile names, in override order
+	Tags         []string // from the user.tags config convention; empty = untagged
+}
+
+// ParseTags splits a user.tags config value ("web, prod") into trimmed,
+// non-empty tags. Both drivers surface Instance.Tags through it so the
+// convention lives in one place.
+func ParseTags(raw string) []string {
+	var tags []string
+	for t := range strings.SplitSeq(raw, ",") {
+		if t = strings.TrimSpace(t); t != "" {
+			tags = append(tags, t)
+		}
+	}
+	return tags
 }
 
 // Limits caps an instance's CPU and memory. Empty strings mean "leave unset"
@@ -206,6 +221,7 @@ type Network struct {
 	Name        string
 	Type        string // bridge | ovn | macvlan | physical | ...
 	Managed     bool
+	Status      string // daemon lifecycle state, e.g. "Created", "Pending"; "" = unknown
 	Description string
 	Config      map[string]string
 	UsedBy      []string
@@ -254,6 +270,10 @@ type StoragePool struct {
 	Description string
 	Config      map[string]string
 	UsedBy      []string
+	// SpaceUsed/SpaceTotal are the pool's disk usage in bytes, populated on
+	// list entries for the capacity column; 0 total = unknown.
+	SpaceUsed  int64
+	SpaceTotal int64
 	// Version is an opaque concurrency token for UpdateStoragePool, populated
 	// by GetStoragePool (empty on list entries).
 	Version string

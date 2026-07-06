@@ -155,3 +155,14 @@ func TestLifecycleChangeInvalidatesConfigVersion(t *testing.T) {
 
 	require.ErrorIs(t, f.UpdateDevice(ctx(), "demo", "web", map[string]string{"type": "proxy", "a": "1"}, cfg.Version), backend.ErrConflict)
 }
+
+// Tags surface through the user.tags config convention, instance-local value
+// winning over profile-provided (mirroring limits resolution).
+func TestInstanceTagsFromConfig(t *testing.T) {
+	f := New()
+	require.NoError(t, f.CreateInstance(ctx(), backend.CreateOptions{Name: "demo", Config: map[string]string{"user.tags": "web, prod"}}))
+
+	inst, err := f.GetInstance(ctx(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"web", "prod"}, inst.Tags)
+}

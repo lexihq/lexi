@@ -174,6 +174,7 @@ func New(b backend.Backend, opts ...Option) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/profiles", h.setInstanceProfiles)
 	mux.HandleFunc("GET /instances/{name}/config", h.config)
 	mux.HandleFunc("POST /instances/{name}/config", h.updateConfig)
+	mux.HandleFunc("POST /instances/{name}/options", h.updateOptions)
 	mux.HandleFunc("GET /instances/{name}/devices", h.devicesPanel)
 	mux.HandleFunc("GET /instances/{name}/files", h.filesPanel)
 	mux.HandleFunc("GET /instances/{name}/files/download", h.downloadFile)

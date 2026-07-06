@@ -10,8 +10,9 @@ test("browse profiles and attach one to an instance", async ({ page }) => {
   await page.getByRole("link", { name: "gpu" }).click();
   await expect(page).toHaveURL(/\/profiles\/gpu$/);
 
-  // Attach gpu to the seeded "demo" instance from its Summary tab.
+  // Attach gpu to the seeded "demo" instance from its Configuration tab.
   await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Configuration" }).click();
   const profiles = page.locator("#profiles");
   await profiles.getByRole("checkbox", { name: "gpu" }).check();
   await Promise.all([

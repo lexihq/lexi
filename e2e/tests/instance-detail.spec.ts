@@ -112,10 +112,11 @@ test("metrics chart axes are theme-aware (legible) in dark mode", async ({ page 
   await expect.poll(maxGutterLuminance, { timeout: 8_000 }).toBeGreaterThan(120);
 });
 
-test("detail tabs expose summary limits, metrics, and logs", async ({ page }) => {
+test("detail tabs expose configuration limits, metrics, and logs", async ({ page }) => {
   await page.goto("/instances/demo");
 
-  // Summary is the default tab: apply resource limits in place.
+  // The limits editor lives on the Configuration tab (Summary is read-only).
+  await page.getByRole("link", { name: "Configuration" }).click();
   await page.locator("#cpu").fill("2");
   await page.locator("#memory").fill("512MiB");
   await page.getByRole("button", { name: "Apply limits" }).click();
@@ -125,6 +126,10 @@ test("detail tabs expose summary limits, metrics, and logs", async ({ page }) =>
   await expect(page.locator("#memory")).toHaveValue("512MiB");
   // Applying limits emits an out-of-band success toast without disturbing the form.
   await expect(page.locator('[data-tui-toast][data-variant="success"]')).toBeVisible();
+
+  // The Summary tab reflects the applied limits read-only.
+  await page.getByRole("link", { name: "Summary" }).click();
+  await expect(page.getByRole("main")).toContainText("2 / 512MiB");
 
   // The Metrics and Logs panels each live behind their own tab.
   await page.getByRole("link", { name: "Metrics" }).click();

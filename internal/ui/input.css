@@ -128,6 +128,16 @@
     @apply opacity-60;
     cursor: progress;
   }
+
+  /* Sort direction marker for the instances list headers. list-filter.js sets
+     aria-sort on the active th; the arrow rides on the accessible state rather
+     than a parallel class. */
+  th[data-sort][aria-sort="ascending"]::after {
+    content: " ↑";
+  }
+  th[data-sort][aria-sort="descending"]::after {
+    content: " ↓";
+  }
 }
 
 /* Honor the OS "reduce motion" setting: collapse animations, transitions, and

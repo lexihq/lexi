@@ -24,7 +24,7 @@ func TestInstanceRowSparklineGatedOnTrendContext(t *testing.T) {
 	inst := backend.Instance{Name: "demo", Status: "Running"}
 
 	// With CPU history in context, the row draws a sparkline.
-	ctx := WithInstanceTrends(context.Background(), map[string][]float64{"demo": {5, 80, 30}})
+	ctx := WithInstanceTrends(context.Background(), map[string]InstanceTrend{"demo": {CPU: []float64{5, 80, 30}, CPUNow: 30}})
 	var withTrend bytes.Buffer
 	if err := InstanceRow(testCaps(), inst).Render(ctx, &withTrend); err != nil {
 		t.Fatal(err)

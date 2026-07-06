@@ -174,14 +174,17 @@ templ FilesPanel(caps backend.Capabilities, name, dir string, entries []backend.
 									</a>
 								}
 								if caps.FileDelete {
-									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{
-										"hx-post":    "/instances/" + url.PathEscape(name) + "/files/delete?path=" + url.QueryEscape(childPath(dir, e.Name)),
-										"hx-confirm": "Delete " + e.Name + "?",
-										"hx-target":  "#files",
-										"hx-swap":    "outerHTML",
+									// Icon-only on purpose: delete must not be the most
+									// prominent action on every row of a file browser.
+									@button.Button(button.Props{Size: button.SizeIcon, Variant: button.VariantGhost, Class: "text-muted-foreground hover:text-destructive", Attributes: templ.Attributes{
+										"hx-post":      "/instances/" + url.PathEscape(name) + "/files/delete?path=" + url.QueryEscape(childPath(dir, e.Name)),
+										"hx-confirm":   "Delete " + e.Name + "?",
+										"hx-target":    "#files",
+										"hx-swap":      "outerHTML",
+										"aria-label":   "Delete " + e.Name,
+										"title":        "Delete " + e.Name,
 									}}) {
 										@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
-										Delete
 									}
 								}
 							</div>

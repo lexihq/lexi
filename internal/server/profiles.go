@@ -13,7 +13,7 @@ import (
 func (h handlers) profiles(w http.ResponseWriter, r *http.Request) {
 	profiles, err := h.backend.ListProfiles(r.Context())
 	if err != nil {
-		http.Error(w, err.Error(), statusFor(err))
+		h.fail(w, r, err)
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.ProfilesPage(h.backend.Capabilities(r.Context()), profiles))
@@ -22,7 +22,7 @@ func (h handlers) profiles(w http.ResponseWriter, r *http.Request) {
 func (h handlers) profileDetail(w http.ResponseWriter, r *http.Request) {
 	p, err := h.backend.GetProfile(r.Context(), r.PathValue("name"))
 	if err != nil {
-		http.Error(w, err.Error(), statusFor(err))
+		h.fail(w, r, err)
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.ProfileDetailPage(h.backend.Capabilities(r.Context()), p))

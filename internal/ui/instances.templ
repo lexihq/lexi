@@ -15,7 +15,116 @@ import (
 	"github.com/lexihq/lexi/internal/components/table"
 )
 
-templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, images []backend.Image, profiles []backend.Profile, pools []backend.StoragePool, networks []backend.Network) {
+// Overview is the at-a-glance cluster band above the instance list: fleet
+// status counts plus best-effort host memory, unacked warnings, and running
+// tasks. The Has* flags distinguish "feature off / fetch failed" (tile hidden)
+// from a legitimate zero.
+type Overview struct {
+	CPUThreads   int
+	MemoryUsed   int64
+	MemoryTotal  int64
+	HasHost      bool
+	NewWarnings  int
+	HasWarnings  bool
+	RunningTasks int
+	HasTasks     bool
+}
+
+// statusCounts tallies the list by lifecycle state for the overview band.
+func statusCounts(instances []backend.Instance) (running, stopped, frozen, broken int) {
+	for _, inst := range instances {
+		switch inst.Status {
+		case backend.StatusRunning:
+			running++
+		case backend.StatusFrozen:
+			frozen++
+		case backend.StatusError:
+			broken++
+		default:
+			stopped++
+		}
+	}
+	return running, stopped, frozen, broken
+}
+
+// overviewTile is one card in the band: a muted label over a stat line.
+templ overviewTile(label string) {
+	<div class="rounded-lg border bg-card p-3">
+		<p class="text-xs font-medium uppercase text-muted-foreground">{ label }</p>
+		<div class="mt-1.5 text-sm">
+			{ children... }
+		</div>
+	</div>
+}
+
+// InstancesOverview is the cluster health band. Status counts always render
+// (they come from the list itself); the host/warnings/tasks tiles appear only
+// when their data was fetched.
+templ InstancesOverview(instances []backend.Instance, ov Overview) {
+	{{ running, stopped, frozen, broken := statusCounts(instances) }}
+	<div class="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+		@overviewTile("Instances") {
+			<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+				<span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-green-500"></span>{ fmt.Sprint(running) } running</span>
+				<span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-gray-400"></span>{ fmt.Sprint(stopped) } stopped</span>
+				if frozen > 0 {
+					<span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-blue-500"></span>{ fmt.Sprint(frozen) } frozen</span>
+				}
+				if broken > 0 {
+					<span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-red-500"></span>{ fmt.Sprint(broken) } error</span>
+				}
+			</div>
+		}
+		if ov.HasHost {
+			@overviewTile("Host memory") {
+				<div class="flex items-baseline justify-between gap-2">
+					<span>{ sizeLabel(ov.MemoryUsed) } / { sizeLabel(ov.MemoryTotal) }</span>
+					<span class="text-xs text-muted-foreground">{ fmt.Sprint(ov.CPUThreads) } CPU threads</span>
+				</div>
+				if ov.MemoryTotal > 0 {
+					<div class="mt-2 h-1.5 overflow-hidden rounded-full bg-muted" role="img" aria-label={ fmt.Sprintf("Memory %.0f%% used", memoryPercent(ov)) }>
+						<div class="h-full rounded-full bg-primary" style={ fmt.Sprintf("width: %.0f%%", memoryPercent(ov)) }></div>
+					</div>
+				}
+			}
+		}
+		if ov.HasWarnings {
+			@overviewTile("Warnings") {
+				<a href="/server" class="flex items-center gap-1.5 underline-offset-4 hover:underline">
+					if ov.NewWarnings > 0 {
+						@icon.Icon("triangle-alert")(icon.Props{Class: "size-4 text-amber-500"})
+						{ fmt.Sprint(ov.NewWarnings) } new
+					} else {
+						@icon.Icon("check")(icon.Props{Class: "size-4 text-green-500"})
+						None new
+					}
+				</a>
+			}
+		}
+		if ov.HasTasks {
+			@overviewTile("Tasks") {
+				if ov.RunningTasks > 0 {
+					<label for="ops-toggle" class="flex cursor-pointer items-center gap-1.5 underline-offset-4 hover:underline">
+						@icon.Icon("loader-circle")(icon.Props{Class: "size-4 animate-spin text-muted-foreground"})
+						{ fmt.Sprint(ov.RunningTasks) } running
+					</label>
+				} else {
+					<span class="text-muted-foreground">None running</span>
+				}
+			}
+		}
+	</div>
+}
+
+// memoryPercent is the clamped host-memory fill for the overview bar.
+func memoryPercent(ov Overview) float64 {
+	if ov.MemoryTotal <= 0 {
+		return 0
+	}
+	return max(0, min(100, float64(ov.MemoryUsed)/float64(ov.MemoryTotal)*100))
+}
+
+templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, images []backend.Image, profiles []backend.Profile, pools []backend.StoragePool, networks []backend.Network, overview Overview) {
 	@Layout("Instances", caps, Nav{Section: NavInstances}) {
 		if caps.Move && len(pools) > 0 {
 			// One shared datalist for every row's move-to-pool input, so the
@@ -26,7 +135,7 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, ima
 				}
 			</datalist>
 		}
-		<div class="mb-6 flex flex-wrap items-center justify-between gap-4">
+		<div class="mb-4 flex flex-wrap items-center justify-between gap-4">
 			<div>
 				<h1 class="text-2xl font-semibold">Instances</h1>
 				<p class="text-muted-foreground">Create and manage Incus containers on this node.</p>
@@ -48,6 +157,8 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, ima
 				}
 			</div>
 		</div>
+		@InstancesOverview(instances, overview)
+		@instancesToolbar()
 		@InstancesTable(caps, instances)
 		@CreateInstanceDialog(images, profiles, pools, networks)
 		if caps.Backup {
@@ -56,6 +167,36 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, ima
 		@dropdown.Script()
 		@dialog.Script()
 	}
+}
+
+// instancesToolbar is the filter row above the instance table: a text filter
+// (name/image/IP/profiles/tags) and a status select, both applied client-side
+// by list-filter.js. It lives outside #instances-table so typed state survives
+// the idle refresh swapping the table under it.
+templ instancesToolbar() {
+	<div class="mb-3 flex flex-wrap items-center gap-2">
+		<input
+			type="search"
+			data-list-filter
+			placeholder="Filter by name, image, IP, profile, tag…"
+			autocomplete="off"
+			aria-label="Filter instances"
+			class="h-9 w-full max-w-xs rounded-md border bg-background px-3 text-sm"
+		/>
+		<select data-status-filter aria-label="Filter by status" class="h-9 rounded-md border bg-background px-2 text-sm">
+			<option value="">Any status</option>
+			<option value="Running">Running</option>
+			<option value="Stopped">Stopped</option>
+			<option value="Frozen">Frozen</option>
+			<option value="Error">Error</option>
+		</select>
+	</div>
+}
+
+// sortableHead marks a header cell sortable by list-filter.js: click toggles
+// asc/desc DOM-side (the list is one page, so there is nothing to refetch).
+func sortableHead(key string) templ.Attributes {
+	return templ.Attributes{"data-sort": key, "role": "button", "tabindex": "0", "class": "cursor-pointer select-none"}
 }
 
 // InstancesTable is the swappable list body: a bulk-action bar (hidden until a
@@ -80,28 +221,28 @@ templ InstancesTable(caps backend.Capabilities, instances []backend.Instance) {
 					@table.Head(table.HeadProps{Class: "hidden w-10 sm:table-cell"}) {
 						<input type="checkbox" data-bulk-all aria-label="Select all instances" class="size-4 cursor-pointer align-middle"/>
 					}
-					@table.Head() {
+					@table.Head(table.HeadProps{Attributes: sortableHead("text")}) {
 						Name
 					}
-					@table.Head() {
+					@table.Head(table.HeadProps{Attributes: sortableHead("text")}) {
 						Status
 					}
-					@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+					@table.Head(table.HeadProps{Class: "hidden lg:table-cell", Attributes: sortableHead("text")}) {
 						Image
 					}
 					@table.Head() {
 						IPv4
 					}
 					@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
-						CPU / Mem
+						Usage
 					}
 					@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
 						Profiles
 					}
-					@table.Head() {
+					@table.Head(table.HeadProps{Attributes: sortableHead("num")}) {
 						Snapshots
 					}
-					@table.Head(table.HeadProps{Class: "hidden lg:table-cell"}) {
+					@table.Head(table.HeadProps{Class: "hidden lg:table-cell", Attributes: sortableHead("text")}) {
 						Created
 					}
 					@table.Head() {
@@ -135,7 +276,7 @@ templ bulkActionButton(a BulkAction) {
 	}
 	cls := ""
 	if a.Destructive {
-		attrs["hx-confirm"] = "Run “" + a.Label + "” on the selected instances?"
+		attrs["hx-confirm"] = "Run “" + a.Label + "” on the selected instances" + scopeSuffix(ctx) + "?"
 		cls = "text-destructive"
 	}
 	}}
@@ -152,6 +293,13 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 		}
 		@table.Cell() {
 			<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/instances/" + url.PathEscape(inst.Name)) }>{ inst.Name }</a>
+			if len(inst.Tags) > 0 {
+				<div class="mt-1 flex flex-wrap gap-1">
+					for _, tag := range inst.Tags {
+						<span class="rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ tag }</span>
+					}
+				</div>
+			}
 		}
 		@table.Cell() {
 			@statusBadge(inst.Status)
@@ -171,10 +319,30 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 			}
 		}
 		@table.Cell(table.CellProps{Class: "hidden lg:table-cell"}) {
-			<div class="space-y-1">
-				<div>{ limitsSummary(inst) }</div>
-				@cpuSparkline(instanceTrendFrom(ctx, inst.Name))
-			</div>
+			{{ trend := instanceTrendFrom(ctx, inst.Name) }}
+			if len(trend.CPU) >= 2 {
+				<div class="space-y-1" title={ "Limits: " + limitsSummary(inst) }>
+					<div class="text-xs">
+						CPU { fmt.Sprintf("%.0f%%", trend.CPUNow) }
+						if trend.MemUsed > 0 {
+							· { sizeLabel(trend.MemUsed) }
+							if trend.MemTotal > 0 {
+								/ { sizeLabel(trend.MemTotal) }
+							}
+						}
+					</div>
+					<div class="flex items-center gap-2">
+						@usageSparkline(trend.CPU, fmt.Sprintf("CPU around %.0f%%", trend.CPUNow))
+						if len(trend.MemPercent) >= 2 {
+							@usageSparkline(trend.MemPercent, fmt.Sprintf("Memory around %.0f%%", trend.MemPercent[len(trend.MemPercent)-1]))
+						}
+					</div>
+				</div>
+			} else {
+				// No samples (stopped, or the store hasn't warmed): show the
+				// configured limits so the cell still says something useful.
+				<div title="CPU / memory limits">{ limitsSummary(inst) }</div>
+			}
 		}
 		@table.Cell(table.CellProps{Class: "hidden lg:table-cell"}) {
 			if len(inst.Profiles) > 0 {
@@ -328,7 +496,7 @@ templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 				}
 			}
 			@dropdown.Separator()
-			@dropdown.Item(dropdown.ItemProps{Class: "text-destructive", Attributes: deleteAttrs(inst.Name)}) {
+			@dropdown.Item(dropdown.ItemProps{Class: "text-destructive", Attributes: deleteAttrs(ctx, inst.Name)}) {
 				Delete
 			}
 		}
@@ -430,14 +598,14 @@ templ instanceActionDialog(id, title, action, field, label, submit string, input
 	}
 }
 
-// cpuSparkline draws a tiny inline CPU% trend (0–100, oldest left) as an SVG
-// polyline so the list shows at-a-glance fleet load without opening each
+// usageSparkline draws a tiny inline percent trend (0–100, oldest left) as an
+// SVG polyline so the list shows at-a-glance fleet load without opening each
 // instance. It uses currentColor (inherits the cell's text color, so it
 // re-themes for free); too little history renders nothing.
-templ cpuSparkline(cpu []float64) {
-	if len(cpu) >= 2 {
-		<svg viewBox="0 0 80 20" width="80" height="20" preserveAspectRatio="none" class="block text-muted-foreground" role="img" aria-label={ fmt.Sprintf("CPU around %.0f%%", cpu[len(cpu)-1]) }>
-			<polyline points={ sparkPoints(cpu, 80, 20) } fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"></polyline>
+templ usageSparkline(values []float64, label string) {
+	if len(values) >= 2 {
+		<svg viewBox="0 0 80 20" width="80" height="20" preserveAspectRatio="none" class="block text-muted-foreground" role="img" aria-label={ label }>
+			<polyline points={ sparkPoints(values, 80, 20) } fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round"></polyline>
 		</svg>
 	}
 }
@@ -484,9 +652,13 @@ func instanceActionAttrs(name, action string) templ.Attributes {
 	}
 }
 
-func deleteAttrs(name string) templ.Attributes {
+// deleteAttrs arms the delete menu item: a scoped confirm prompt plus
+// data-confirm-name, which makes confirm-dialog.js require typing the instance
+// name before the destructive request fires.
+func deleteAttrs(ctx context.Context, name string) templ.Attributes {
 	attrs := instanceActionAttrs(name, "delete")
-	attrs["hx-confirm"] = "Delete instance " + name + "?"
+	attrs["hx-confirm"] = "Delete instance " + name + scopeSuffix(ctx) + "? This cannot be undone."
+	attrs["data-confirm-name"] = name
 	return attrs
 }
 

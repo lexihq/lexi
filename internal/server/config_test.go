@@ -204,3 +204,32 @@ func TestUpdateDeviceMissingVersionIs400(t *testing.T) {
 	res := formRequest(t, New(b), "/instances/demo/devices/web", url.Values{"listen": {"x"}}, true)
 	assertStatus(t, res, http.StatusBadRequest)
 }
+
+// updateOptions merges only the toggle keys: other config keys survive, a
+// checked box sets "true", an unchecked one removes the key.
+func TestUpdateOptionsMergesToggleKeys(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, b.UpdateInstanceConfig(t.Context(), "demo",
+		map[string]string{"user.note": "keep me", "security.nesting": "true"}, ""))
+	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+
+	res := formRequest(t, New(b), "/instances/demo/options",
+		url.Values{"version": {cfg.Version}, "boot.autostart": {"on"}}, true)
+	assertStatus(t, res, http.StatusOK)
+
+	cfg, err = b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "true", cfg.Config["boot.autostart"])
+	assert.Equal(t, "keep me", cfg.Config["user.note"])
+	// security.nesting was set but its box came back unchecked → removed.
+	assert.NotContains(t, cfg.Config, "security.nesting")
+}
+
+func TestUpdateOptionsRequiresVersionToken(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	res := formRequest(t, New(b), "/instances/demo/options", url.Values{"boot.autostart": {"on"}}, true)
+	assertStatus(t, res, http.StatusBadRequest)
+}

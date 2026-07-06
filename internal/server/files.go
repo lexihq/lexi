@@ -130,7 +130,7 @@ func (h handlers) uploadFile(w http.ResponseWriter, r *http.Request) {
 
 	// Some browsers send a client-side path; keep only the base name.
 	base := path.Base(strings.ReplaceAll(header.Filename, `\`, "/"))
-	if base == "." || base == "/" || base == "" {
+	if base == "." || base == ".." || base == "/" || base == "" {
 		h.renderError(w, r, http.StatusBadRequest, "upload has no usable file name")
 		return
 	}

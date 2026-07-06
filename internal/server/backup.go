@@ -1,7 +1,7 @@
 package server
 
 import (
-	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -58,23 +58,26 @@ func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
 }
 
 // export streams a portable backup tarball as a file download. It validates the
-// instance up front so a missing one returns a clean 404 before any backup work
-// or response body is committed.
+// instance up front so a missing one returns a clean 404. The attachmentWriter
+// defers the download headers until the first byte, so a pre-stream failure
+// renders a clean error and a rare mid-stream failure aborts without appending
+// error text into the tarball.
 func (h handlers) export(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.backend.GetInstance(r.Context(), name); err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name+".tar.gz"))
-	if err := h.backend.ExportInstance(r.Context(), name, w); err != nil {
-		// The driver spools before writing, so failures arrive pre-body: drop
-		// the attachment headers so the error renders instead of downloading
-		// as a corrupt tarball (mirrors exportVolume).
-		w.Header().Del("Content-Disposition")
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		http.Error(w, err.Error(), statusFor(err))
+	aw := &attachmentWriter{w: w, filename: name + ".tar.gz"}
+	if err := h.backend.ExportInstance(r.Context(), name, aw); err != nil {
+		if aw.wrote {
+			slog.Warn("export aborted mid-stream", "instance", name, "err", err)
+			return
+		}
+		h.fail(w, r, err)
 		return
+	}
+	if !aw.wrote {
+		aw.setHeaders() // empty tarball: still deliver a (zero-byte) download
 	}
 }

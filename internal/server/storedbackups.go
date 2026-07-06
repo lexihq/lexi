@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -51,18 +52,23 @@ func (h handlers) deleteStoredBackup(w http.ResponseWriter, r *http.Request) {
 	h.redirectOrPanel(w, r, name)
 }
 
-// downloadStoredBackup streams a stored backup's tarball.
+// downloadStoredBackup streams a stored backup's tarball. The attachmentWriter
+// defers the download headers until the first byte, so a pre-stream failure
+// renders a clean error and a rare mid-stream failure aborts without appending
+// error text into the tarball.
 func (h handlers) downloadStoredBackup(w http.ResponseWriter, r *http.Request) {
 	name, backup := r.PathValue("name"), r.PathValue("backup")
-	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name+"-"+backup+".tar.gz"))
-	if err := h.backend.ExportInstanceBackup(r.Context(), name, backup, w); err != nil {
-		// The driver spools before writing, so failures arrive pre-body: drop
-		// the attachment headers so the error renders instead of downloading
-		// as a corrupt tarball (mirrors exportVolume).
-		w.Header().Del("Content-Disposition")
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		http.Error(w, err.Error(), statusFor(err))
+	aw := &attachmentWriter{w: w, filename: name + "-" + backup + ".tar.gz"}
+	if err := h.backend.ExportInstanceBackup(r.Context(), name, backup, aw); err != nil {
+		if aw.wrote {
+			slog.Warn("stored backup download aborted mid-stream", "instance", name, "backup", backup, "err", err)
+			return
+		}
+		h.fail(w, r, err)
+		return
+	}
+	if !aw.wrote {
+		aw.setHeaders() // empty tarball: still deliver a (zero-byte) download
 	}
 }
 

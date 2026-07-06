@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -56,18 +57,23 @@ func (h handlers) deleteVolumeBackup(w http.ResponseWriter, r *http.Request) {
 	h.redirectOrVolumeBackups(w, r, pool, volume)
 }
 
-// exportVolumeBackup streams a stored backup's tarball.
+// exportVolumeBackup streams a stored backup's tarball. The attachmentWriter
+// defers the download headers until the first byte, so a pre-stream failure
+// renders a clean error and a rare mid-stream failure aborts without appending
+// error text into the tarball.
 func (h handlers) exportVolumeBackup(w http.ResponseWriter, r *http.Request) {
 	pool, volume, backup := r.PathValue("pool"), r.PathValue("volume"), r.PathValue("backup")
-	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, volume+"-"+backup+".tar.gz"))
-	if err := h.backend.ExportVolumeBackup(r.Context(), pool, volume, backup, w); err != nil {
-		// The driver spools before writing, so failures arrive pre-body: drop
-		// the attachment headers so the error renders instead of downloading
-		// as a corrupt tarball (mirrors exportVolume).
-		w.Header().Del("Content-Disposition")
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		http.Error(w, err.Error(), statusFor(err))
+	aw := &attachmentWriter{w: w, filename: volume + "-" + backup + ".tar.gz"}
+	if err := h.backend.ExportVolumeBackup(r.Context(), pool, volume, backup, aw); err != nil {
+		if aw.wrote {
+			slog.Warn("volume backup download aborted mid-stream", "pool", pool, "volume", volume, "backup", backup, "err", err)
+			return
+		}
+		h.fail(w, r, err)
+		return
+	}
+	if !aw.wrote {
+		aw.setHeaders() // empty tarball: still deliver a (zero-byte) download
 	}
 }
 

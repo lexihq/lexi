@@ -19,6 +19,11 @@ func (b *incusBackend) ListNetworkLeases(ctx context.Context, network string) ([
 	}
 	out := make([]backend.NetworkLease, 0, len(leases))
 	for _, l := range leases {
+		// Gateway entries are the bridge's own address, not a tenant lease; the
+		// UI shows tenant addresses only (as documented above and in the fake).
+		if l.Type == "gateway" {
+			continue
+		}
 		out = append(out, backend.NetworkLease{
 			Hostname: l.Hostname,
 			MAC:      l.Hwaddr,

@@ -109,6 +109,25 @@
     root.querySelectorAll?.("[data-tui-toast]").forEach(setupToast);
   }
 
+  // Cancel a toast's pending auto-dismiss and drop its Map entry. Used when a
+  // toast leaves the DOM by some path other than dismissToast — e.g. an htmx
+  // swap that replaces a region containing it — so the timer doesn't fire on a
+  // detached node and the Map doesn't retain it.
+  function cleanupToast(toast) {
+    const state = toastTimers.get(toast);
+    if (!state) return;
+    clearTimeout(state.timer);
+    toastTimers.delete(toast);
+  }
+
+  function cleanupToasts(root) {
+    if (!root || root.nodeType !== 1) return;
+    if (root.matches?.("[data-tui-toast]")) {
+      cleanupToast(root);
+    }
+    root.querySelectorAll?.("[data-tui-toast]").forEach(cleanupToast);
+  }
+
   // Initialize pre-rendered toasts
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () =>
@@ -124,6 +143,11 @@
       m.addedNodes.forEach((node) => {
         if (node.nodeType === 1) {
           initializeToasts(node);
+        }
+      });
+      m.removedNodes.forEach((node) => {
+        if (node.nodeType === 1) {
+          cleanupToasts(node);
         }
       });
     });

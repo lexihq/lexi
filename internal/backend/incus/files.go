@@ -40,6 +40,12 @@ func (b *incusBackend) ListFiles(ctx context.Context, instance, path string) ([]
 			closeAndLogFile(prefix+name, c)
 			entry.Dir = r.Type == "directory"
 			entry.Mode = fmt.Sprintf("%04o", r.Mode)
+		} else {
+			// The entry is listed but its stat failed (e.g. a dangling symlink):
+			// keep it in the listing rather than failing the whole directory, but
+			// log it so a systematic failure — which would render directories as
+			// plain files — is discoverable rather than silent.
+			slog.Warn("stat file entry", "path", prefix+name, "err", err)
 		}
 		entries = append(entries, entry)
 	}

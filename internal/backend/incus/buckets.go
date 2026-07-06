@@ -71,6 +71,12 @@ func (b *incusBackend) ListBucketKeys(ctx context.Context, pool, bucket string) 
 // CreateBucketKey adds a credential; the daemon generates the access/secret
 // pair, returned to the caller.
 func (b *incusBackend) CreateBucketKey(ctx context.Context, pool, bucket, name, description, role string) (backend.BucketKey, error) {
+	// The contract defaults an empty role to read-only (the handler and the fake
+	// both permit ""); the daemon rejects an empty role rather than defaulting it,
+	// so apply the default here.
+	if role == "" {
+		role = "read-only"
+	}
 	post := api.StorageBucketKeysPost{}
 	post.Name = name
 	post.Description = description

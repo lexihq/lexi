@@ -398,10 +398,12 @@ func (b *incusBackend) CreateVolumeFromISO(ctx context.Context, pool, volume str
 	return nil
 }
 
-// validAPIName mirrors the daemon's validate.IsAPIName rules (≤64 chars, no
-// whitespace, none of the reserved URL characters), matching the fake's
-// validator.
-func validAPIName(name string) bool {
+// validBaseName mirrors the daemon's validate.IsAPIName character rules (≤64
+// chars, no whitespace, none of the reserved URL characters) WITHOUT the
+// start/end-alphanumeric (min-two) rule apiNameEnds layers on top. Instance
+// names follow the looser hostname rules, so a single-character instance name
+// is legal; RenameInstance validates against this, matching the fake.
+func validBaseName(name string) bool {
 	if name == "" || len(name) > 64 {
 		return false
 	}
@@ -410,12 +412,15 @@ func validAPIName(name string) bool {
 			return false
 		}
 	}
-	if strings.ContainsAny(name, `$?&+"'`+"`*/") {
-		return false
-	}
-	// The daemon also requires names to start and end with an alphanumeric
-	// character (validate.IsAPIName), which implies a minimum of two.
-	return apiNameEnds.MatchString(name)
+	return !strings.ContainsAny(name, `$?&+"'`+"`*/")
+}
+
+// validAPIName mirrors the daemon's full validate.IsAPIName rules (validBaseName
+// plus the start/end-alphanumeric rule, which implies a minimum of two
+// characters), matching the fake's validator. It applies where the daemon runs
+// the full IsAPIName (projects, volume creation), not to instance names.
+func validAPIName(name string) bool {
+	return validBaseName(name) && apiNameEnds.MatchString(name)
 }
 
 var apiNameEnds = regexp.MustCompile(`^[a-zA-Z0-9]+.*[a-zA-Z0-9]+$`)

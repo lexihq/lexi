@@ -14,7 +14,7 @@ func (b *incusBackend) RenameInstance(ctx context.Context, name, newName string)
 	// so the daemon's name validation can't be mapped after the fact (same
 	// pre-check as RenameProject; no apiNameEnds — single-char instance
 	// names are legal).
-	if !validAPIName(newName) {
+	if !validBaseName(newName) {
 		return fmt.Errorf("invalid instance name %q: %w", newName, backend.ErrInvalid)
 	}
 	op, err := b.project(ctx).RenameInstance(name, api.InstancePost{Name: newName})

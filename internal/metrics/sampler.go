@@ -39,17 +39,12 @@ func NewSampler(b backend.Backend, store *Store, interval time.Duration) *Sample
 	return &Sampler{backend: b, store: store, interval: interval}
 }
 
-// Run samples on every interval tick until ctx is cancelled. It recovers from a
-// panic in the sampling path and logs it, so a backend bug stops history
-// collection loudly rather than silently taking down the process.
+// Run samples on every interval tick until ctx is cancelled. Each tick recovers
+// from a panic in the sampling path and logs it (see sampleOnce), so a transient
+// backend bug skips one tick loudly rather than ending history collection for the
+// whole process or taking it down.
 func (s *Sampler) Run(ctx context.Context) {
 	slog.Info("metrics sampler: started", "interval", s.interval)
-	defer func() {
-		if r := recover(); r != nil {
-			slog.Error("metrics sampler: panic, history collection stopped", "panic", r)
-		}
-	}()
-
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 	for {
@@ -63,8 +58,16 @@ func (s *Sampler) Run(ctx context.Context) {
 	}
 }
 
-// sampleOnce records one metrics sample for each running instance.
+// sampleOnce records one metrics sample for each running instance. It recovers
+// from a panic in the sampling path so a single bad tick is contained: the loop
+// in Run keeps sampling on the next tick instead of the goroutine unwinding and
+// history collection stopping for the process lifetime.
 func (s *Sampler) sampleOnce(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("metrics sampler: panic sampling tick, skipping", "panic", r)
+		}
+	}()
 	instances, err := s.backend.ListInstances(ctx)
 	if err != nil {
 		// A list failure stalls the whole tick (no instance is sampled), so it

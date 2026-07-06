@@ -59,23 +59,32 @@ func (b *incusBackend) GetInstanceConfig(ctx context.Context, name string) (back
 
 // UpdateInstanceConfig replaces the editable local config (GET-then-PUT, like
 // UpdateLimits), preserving the managed keys and ignoring any a client tries to
-// set through the editor.
-func (b *incusBackend) UpdateInstanceConfig(ctx context.Context, name string, config map[string]string) error {
-	return b.mutateInstance(ctx, name, func(put *api.InstancePut) {
-		next := map[string]string{}
-		for k, v := range put.Config {
-			if managedConfigKey(k) {
-				next[k] = v
-			}
-		}
-		for k, v := range config {
-			if managedConfigKey(k) {
-				continue
-			}
+// set through the editor. A non-empty version makes the PUT conditional on the
+// etag from GetInstanceConfig (→ ErrConflict when stale), like UpdateDevice.
+func (b *incusBackend) UpdateInstanceConfig(ctx context.Context, name string, config map[string]string, version string) error {
+	inst, etag, err := b.project(ctx).GetInstance(name)
+	if err != nil {
+		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
+	}
+	put := inst.Writable()
+	next := map[string]string{}
+	for k, v := range put.Config {
+		if managedConfigKey(k) {
 			next[k] = v
 		}
-		put.Config = next
-	}, "update config on %q", name)
+	}
+	for k, v := range config {
+		if managedConfigKey(k) {
+			continue
+		}
+		next[k] = v
+	}
+	put.Config = next
+	if version == "" {
+		version = etag
+	}
+	op, err := b.project(ctx).UpdateInstance(name, put, version)
+	return waitOp(ctx, op, err, "update config on %q", name)
 }
 
 // AddDevice attaches or overwrites a local device (GET-then-PUT, like UpdateLimits).

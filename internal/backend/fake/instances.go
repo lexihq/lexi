@@ -3,6 +3,8 @@ package fake
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 
 	"github.com/lexihq/lexi/internal/backend"
@@ -38,6 +40,12 @@ func (f *Fake) CreateInstance(ctx context.Context, opt backend.CreateOptions) er
 	defer f.mu.Unlock()
 	sp := f.space(ctx)
 
+	// Same name rule as the daemon: fake-backed tests must reject the names
+	// production does. No apiNameEnds here — that tail rule applies to
+	// projects/volumes, and single-character instance names are legal.
+	if !validAPIName(opt.Name) {
+		return invalid("invalid instance name %q", opt.Name)
+	}
 	if _, ok := sp.instances[opt.Name]; ok {
 		return conflict("instance %q already exists", opt.Name)
 	}
@@ -201,14 +209,20 @@ func (f *Fake) CloneInstance(ctx context.Context, src, dst string) error {
 	if _, ok := sp.instances[dst]; ok {
 		return conflict("instance %q already exists", dst)
 	}
+	// A real copy carries the whole instance (profiles, config, devices,
+	// limits, snapshots); only identity and runtime state reset.
+	inst := from.Instance
+	inst.Name = dst
+	inst.Status = backend.StatusStopped
+	inst.IPv4 = nil
+	inst.CreatedAt = f.now()
+	inst.Profiles = slices.Clone(from.Profiles)
 	sp.instances[dst] = &instance{
-		Instance: backend.Instance{
-			Name:      dst,
-			Status:    backend.StatusStopped,
-			Image:     from.Image,
-			CreatedAt: f.now(),
-		},
-		files: cloneFiles(from.files),
+		Instance:  inst,
+		snapshots: slices.Clone(from.snapshots),
+		config:    maps.Clone(from.config),
+		devices:   cloneDevices(from.devices),
+		files:     cloneFiles(from.files),
 	}
 	f.logOp(sp, fmt.Sprintf("Cloning instance %q to %q", src, dst))
 	return nil

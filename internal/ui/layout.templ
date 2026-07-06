@@ -86,7 +86,10 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 			<script src="/static/js/theme.js"></script>
 			<link href="/static/css/app.css" rel="stylesheet"/>
 			<script src="/static/js/htmx.min.js" defer></script>
-			if caps.Metrics && nav.Instance != "" {
+			// Not gated on nav.Instance: hx-boost swaps only the body, so a
+			// boosted navigation from a non-instance page would never load the
+			// chart assets and the Metrics tab's charts would stay blank.
+			if caps.Metrics {
 				<link href="/static/css/uplot.min.css" rel="stylesheet"/>
 				<script src="/static/js/uplot.min.js" defer></script>
 				<script src="/static/js/metrics-charts.js" defer></script>

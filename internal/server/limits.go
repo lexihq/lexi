@@ -18,12 +18,12 @@ func (h handlers) updateLimits(w http.ResponseWriter, r *http.Request) {
 		CPU:    strings.TrimSpace(r.Form.Get("cpu")),
 		Memory: strings.TrimSpace(r.Form.Get("memory")),
 	}); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	inst, err := h.backend.GetInstance(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {

@@ -233,6 +233,11 @@ func (f *Fake) SetInstanceProfiles(ctx context.Context, name string, profiles []
 // of every project sharing the profile namespace. Callers must hold the mutex.
 func (f *Fake) profileView(ctx context.Context, sp *space, name string) backend.Profile {
 	p := sp.profiles[name]
+	// Clone the maps: the struct copy above still shares them with the store,
+	// and callers read the result after the mutex is released while writers
+	// (Add/Update/RemoveProfileDevice) mutate the stored maps in place.
+	p.Config = maps.Clone(p.Config)
+	p.Devices = cloneDevices(p.Devices)
 	var usedBy []string
 	for instName, in := range f.profileUsers(ctx) {
 		for _, pn := range in.Profiles {

@@ -16,7 +16,7 @@ func (h handlers) metrics(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	m, err := h.backend.Metrics(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.MetricsPanel(name, m))

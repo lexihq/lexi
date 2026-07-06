@@ -14,7 +14,7 @@ import (
 func (h handlers) networkACLs(w http.ResponseWriter, r *http.Request) {
 	acls, err := h.backend.ListNetworkACLs(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.NetworkACLsPage(h.backend.Capabilities(r.Context()), acls))
@@ -23,7 +23,7 @@ func (h handlers) networkACLs(w http.ResponseWriter, r *http.Request) {
 func (h handlers) networkACLDetail(w http.ResponseWriter, r *http.Request) {
 	acl, err := h.backend.GetNetworkACL(r.Context(), r.PathValue("name"))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.NetworkACLDetailPage(h.backend.Capabilities(r.Context()), acl))
@@ -38,11 +38,11 @@ func (h handlers) createNetworkACL(w http.ResponseWriter, r *http.Request) {
 	}
 	name := strings.TrimSpace(r.Form.Get("name"))
 	if name == "" {
-		h.fail(w, fmt.Errorf("ACL name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("ACL name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.CreateNetworkACL(r.Context(), backend.NetworkACL{Name: name, Description: r.Form.Get("description")}); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/network-acls/"+url.PathEscape(name), http.StatusSeeOther)
@@ -59,11 +59,11 @@ func (h handlers) updateNetworkACL(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	acl, err := h.backend.GetNetworkACL(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if err := h.backend.UpdateNetworkACL(r.Context(), name, r.Form.Get("description"), acl.Ingress, acl.Egress, r.Form.Get("version")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/network-acls/"+url.PathEscape(name), http.StatusSeeOther)
@@ -76,11 +76,11 @@ func (h handlers) renameNetworkACL(w http.ResponseWriter, r *http.Request) {
 	}
 	newName := strings.TrimSpace(r.Form.Get("new_name"))
 	if newName == "" {
-		h.fail(w, fmt.Errorf("new ACL name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("new ACL name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.RenameNetworkACL(r.Context(), r.PathValue("name"), newName); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/network-acls/"+url.PathEscape(newName), http.StatusSeeOther)
@@ -88,7 +88,7 @@ func (h handlers) renameNetworkACL(w http.ResponseWriter, r *http.Request) {
 
 func (h handlers) deleteNetworkACL(w http.ResponseWriter, r *http.Request) {
 	if err := h.backend.DeleteNetworkACL(r.Context(), r.PathValue("name")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/network-acls", http.StatusSeeOther)
@@ -104,13 +104,13 @@ func (h handlers) addNetworkACLRule(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	direction := r.Form.Get("direction")
 	if direction != "ingress" && direction != "egress" {
-		h.fail(w, fmt.Errorf("direction %q must be ingress or egress: %w", direction, backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("direction %q must be ingress or egress: %w", direction, backend.ErrInvalid))
 		return
 	}
 	// The rule forms always carry the token; a request without one would write
 	// unconditionally, letting a stale form clobber concurrent rule changes.
 	if r.Form.Get("version") == "" {
-		h.fail(w, fmt.Errorf("missing ACL version token: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("missing ACL version token: %w", backend.ErrInvalid))
 		return
 	}
 	rule := backend.NetworkACLRule{
@@ -124,7 +124,7 @@ func (h handlers) addNetworkACLRule(w http.ResponseWriter, r *http.Request) {
 	}
 	acl, err := h.backend.GetNetworkACL(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	ingress, egress := acl.Ingress, acl.Egress
@@ -134,7 +134,7 @@ func (h handlers) addNetworkACLRule(w http.ResponseWriter, r *http.Request) {
 		egress = append(egress, rule)
 	}
 	if err := h.backend.UpdateNetworkACL(r.Context(), name, acl.Description, ingress, egress, r.Form.Get("version")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/network-acls/"+url.PathEscape(name), http.StatusSeeOther)
@@ -154,39 +154,39 @@ func (h handlers) deleteNetworkACLRule(w http.ResponseWriter, r *http.Request) {
 	// token a concurrent rule change could shift indices between render and
 	// write.
 	if r.Form.Get("version") == "" {
-		h.fail(w, fmt.Errorf("missing ACL version token: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("missing ACL version token: %w", backend.ErrInvalid))
 		return
 	}
 	index, err := strconv.Atoi(r.Form.Get("index"))
 	if err != nil {
-		h.fail(w, fmt.Errorf("rule index %q: %w", r.Form.Get("index"), backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("rule index %q: %w", r.Form.Get("index"), backend.ErrInvalid))
 		return
 	}
 	acl, getErr := h.backend.GetNetworkACL(r.Context(), name)
 	if getErr != nil {
-		h.fail(w, getErr)
+		h.fail(w, r, getErr)
 		return
 	}
 	ingress, egress := acl.Ingress, acl.Egress
 	switch direction {
 	case "ingress":
 		if index < 0 || index >= len(ingress) {
-			h.fail(w, fmt.Errorf("ingress rule %d out of range: %w", index, backend.ErrInvalid))
+			h.fail(w, r, fmt.Errorf("ingress rule %d out of range: %w", index, backend.ErrInvalid))
 			return
 		}
 		ingress = append(ingress[:index], ingress[index+1:]...)
 	case "egress":
 		if index < 0 || index >= len(egress) {
-			h.fail(w, fmt.Errorf("egress rule %d out of range: %w", index, backend.ErrInvalid))
+			h.fail(w, r, fmt.Errorf("egress rule %d out of range: %w", index, backend.ErrInvalid))
 			return
 		}
 		egress = append(egress[:index], egress[index+1:]...)
 	default:
-		h.fail(w, fmt.Errorf("direction %q must be ingress or egress: %w", direction, backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("direction %q must be ingress or egress: %w", direction, backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.UpdateNetworkACL(r.Context(), name, acl.Description, ingress, egress, r.Form.Get("version")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/network-acls/"+url.PathEscape(name), http.StatusSeeOther)

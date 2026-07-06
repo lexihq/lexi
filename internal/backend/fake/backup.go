@@ -2,7 +2,6 @@ package fake
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 
@@ -35,7 +34,7 @@ func (f *Fake) ImportInstance(ctx context.Context, name string, r io.Reader) err
 	}
 	image, ok := strings.CutPrefix(string(blob), fakeBackupMagic)
 	if !ok {
-		return fmt.Errorf("not a lexi backup: %w", backend.ErrInvalid)
+		return invalid("not a lexi backup")
 	}
 
 	f.mu.Lock()

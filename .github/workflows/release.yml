@@ -41,4 +41,4 @@ jobs:
           files: |
             dist/lexi-linux-amd64
             dist/lexi-linux-arm64
-            install.sh
+            scripts/install.sh

@@ -75,7 +75,10 @@
 
   // Dismiss toast with fade out
   function dismissToast(toast) {
-    // Clean up timer state
+    // Clean up timer state, cancelling a pending auto-dismiss so a manual
+    // dismiss doesn't fire the timer again on the detached node.
+    const state = toastTimers.get(toast);
+    if (state) clearTimeout(state.timer);
     toastTimers.delete(toast);
 
     // Add transition for smooth fade out

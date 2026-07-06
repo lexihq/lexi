@@ -484,9 +484,6 @@ func (b *incusBackend) ImportImage(ctx context.Context, r io.Reader, alias strin
 	return nil
 }
 
-// UpdateImage sets the description property and the public flag via
-// GET-preserve-PUT with the fresh etag, so AutoUpdate/ExpiresAt/Profiles and
-// the other properties survive (a PUT silently clears omitted fields).
 // normalizeImageExpiry maps the daemon sentinel for "never expires" (epoch
 // or earlier) to the zero time the domain uses.
 func normalizeImageExpiry(t time.Time) time.Time {

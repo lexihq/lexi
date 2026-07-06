@@ -13,7 +13,7 @@ import (
 func (h handlers) networks(w http.ResponseWriter, r *http.Request) {
 	nets, err := h.backend.ListNetworks(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.NetworksPage(h.backend.Capabilities(r.Context()), nets))
@@ -22,7 +22,7 @@ func (h handlers) networks(w http.ResponseWriter, r *http.Request) {
 func (h handlers) networkDetail(w http.ResponseWriter, r *http.Request) {
 	n, err := h.backend.GetNetwork(r.Context(), r.PathValue("name"))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	caps := h.backend.Capabilities(r.Context())
@@ -33,16 +33,16 @@ func (h handlers) networkDetail(w http.ResponseWriter, r *http.Request) {
 	var forwards []backend.NetworkForward
 	if n.Managed {
 		if st, err = h.backend.GetNetworkState(r.Context(), n.Name); err != nil {
-			h.fail(w, err)
+			h.fail(w, r, err)
 			return
 		}
 		if leases, err = h.backend.ListNetworkLeases(r.Context(), n.Name); err != nil {
-			h.fail(w, err)
+			h.fail(w, r, err)
 			return
 		}
 		if caps.NetworkForwards {
 			if forwards, err = h.backend.ListNetworkForwards(r.Context(), n.Name); err != nil {
-				h.fail(w, err)
+				h.fail(w, r, err)
 				return
 			}
 		}
@@ -63,11 +63,11 @@ func (h handlers) createNetworkForward(w http.ResponseWriter, r *http.Request) {
 		DefaultTarget: strings.TrimSpace(r.Form.Get("target_address")),
 	}
 	if fw.ListenAddress == "" {
-		h.fail(w, fmt.Errorf("listen address is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("listen address is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.CreateNetworkForward(r.Context(), network, fw); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/networks/"+url.PathEscape(network), http.StatusSeeOther)
@@ -106,7 +106,7 @@ func (h handlers) updateNetworkForward(w http.ResponseWriter, r *http.Request) {
 		fw.Ports = append(fw.Ports, p)
 	}
 	if err := h.backend.UpdateNetworkForward(r.Context(), network, fw); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/networks/"+url.PathEscape(network), http.StatusSeeOther)
@@ -115,7 +115,7 @@ func (h handlers) updateNetworkForward(w http.ResponseWriter, r *http.Request) {
 func (h handlers) deleteNetworkForward(w http.ResponseWriter, r *http.Request) {
 	network := r.PathValue("name")
 	if err := h.backend.DeleteNetworkForward(r.Context(), network, r.PathValue("addr")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/networks/"+url.PathEscape(network), http.StatusSeeOther)
@@ -135,7 +135,7 @@ func (h handlers) createNetwork(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.Form.Get("name"))
 	netType := strings.TrimSpace(r.Form.Get("type"))
 	if name == "" || netType == "" {
-		h.fail(w, fmt.Errorf("network name and type are required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("network name and type are required: %w", backend.ErrInvalid))
 		return
 	}
 	n := backend.Network{
@@ -145,7 +145,7 @@ func (h handlers) createNetwork(w http.ResponseWriter, r *http.Request) {
 		Config:      zipConfigPairs(r.Form["key"], r.Form["value"]),
 	}
 	if err := h.backend.CreateNetwork(r.Context(), n); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/networks", http.StatusSeeOther)
@@ -163,7 +163,7 @@ func (h handlers) updateNetwork(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
 	if err := h.backend.UpdateNetwork(r.Context(), name, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/networks/"+url.PathEscape(name), http.StatusSeeOther)
@@ -172,12 +172,12 @@ func (h handlers) updateNetwork(w http.ResponseWriter, r *http.Request) {
 // deleteNetwork removes a network, then re-renders the list table on HTMX.
 func (h handlers) deleteNetwork(w http.ResponseWriter, r *http.Request) {
 	if err := h.backend.DeleteNetwork(r.Context(), r.PathValue("name")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	nets, err := h.backend.ListNetworks(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {

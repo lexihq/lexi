@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"net/url"
+
 	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lexihq/lexi/internal/components/icon"
 )
@@ -112,7 +114,7 @@ templ Sidebar(caps backend.Capabilities, nav Nav) {
 templ SidebarInstances(instances []backend.Instance, active string) {
 	for _, inst := range instances {
 		<a
-			href={ templ.URL("/instances/" + inst.Name) }
+			href={ templ.URL("/instances/" + url.PathEscape(inst.Name)) }
 			title={ inst.Name + " — " + string(inst.Status) }
 			class={ "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm",
 				templ.KV("bg-accent text-accent-foreground", inst.Name == active),

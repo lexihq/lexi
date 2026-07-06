@@ -38,9 +38,12 @@ func TestRemoteCookieScopesRequests(t *testing.T) {
 	assert.Contains(t, res.Body.String(), "sec-inst")
 }
 
-func TestStaleRemoteCookieExpiresAndFallsBack(t *testing.T) {
+func TestStaleRemoteCookieExpiresAndRedirects(t *testing.T) {
+	// A stale cookie must not silently retarget the request at the default
+	// remote; the GET is bounced (with the cookie expired) so the retry runs
+	// unambiguously scoped.
 	res := cookieRequest(t, New(fake.New()), "/", &http.Cookie{Name: remoteCookie, Value: "ghost"}) //nolint:gosec // G124: request cookie; attributes are response-only.
-	assertStatus(t, res, http.StatusOK)
+	assertStatus(t, res, http.StatusSeeOther)
 
 	expired := false
 	for _, c := range res.Result().Cookies() {

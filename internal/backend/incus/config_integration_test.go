@@ -42,13 +42,13 @@ func TestInstanceConfigRoundTrip(t *testing.T) {
 	t.Cleanup(func() { cleanupInstance(t, b, name) })
 	require.NoError(t, b.CreateInstance(ctx, backend.CreateOptions{Name: name, Image: testImage}))
 
-	require.NoError(t, b.UpdateInstanceConfig(ctx, name, map[string]string{"security.nesting": "true"}))
+	require.NoError(t, b.UpdateInstanceConfig(ctx, name, map[string]string{"security.nesting": "true"}, ""))
 	cfg, err := b.GetInstanceConfig(ctx, name)
 	require.NoError(t, err)
 	assert.Equal(t, "true", cfg.Config["security.nesting"])
 	assert.NotEmpty(t, cfg.Devices) // expanded devices from the default profile
 
-	require.NoError(t, b.UpdateInstanceConfig(ctx, name, map[string]string{}))
+	require.NoError(t, b.UpdateInstanceConfig(ctx, name, map[string]string{}, ""))
 	cfg, err = b.GetInstanceConfig(ctx, name)
 	require.NoError(t, err)
 	_, present := cfg.Config["security.nesting"]

@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"fmt"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -111,7 +112,6 @@ func newSpace() *space {
 	}
 }
 
-// Fake is a mutex-guarded, in-memory Backend with a deterministic clock.
 // remoteState is one fake daemon: everything a single Incus server owns.
 // Project-scoped state lives in its spaces; pools, certificates, and server
 // config are daemon-global, like Incus.
@@ -443,6 +443,19 @@ func profileConfigValue(sp *space, profiles []string, key string) string {
 
 func notFound(name string) error {
 	return fmt.Errorf("instance %q: %w", name, backend.ErrNotFound)
+}
+
+// cloneDevices deep-copies a device map (device name → config map) so readers
+// never alias the store's nested maps after the mutex is released.
+func cloneDevices(devices map[string]map[string]string) map[string]map[string]string {
+	if devices == nil {
+		return nil
+	}
+	out := make(map[string]map[string]string, len(devices))
+	for name, dev := range devices {
+		out[name] = maps.Clone(dev)
+	}
+	return out
 }
 
 func notFoundf(format string, args ...any) error {

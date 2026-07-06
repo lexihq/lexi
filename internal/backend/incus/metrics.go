@@ -43,22 +43,25 @@ func (b *incusBackend) Metrics(ctx context.Context, name string) (backend.Metric
 	return m, nil
 }
 
-// cpuPercent turns the delta between two cumulative CPU-time samples into a
-// percentage. It records the new sample and returns 0 on the first reading or
-// any non-positive interval.
+// cpuEpochSnapshot reads the current sample epoch under the lock; cpuPercent
+// discards a reading taken against a stale epoch.
 func (b *incusBackend) cpuEpochSnapshot() uint64 {
 	b.cpuMu.Lock()
 	defer b.cpuMu.Unlock()
 	return b.cpuEpoch
 }
 
-// cpuSampleKey qualifies the instance name with the request's project:
-// instances in different projects share names, and a delta computed across
-// projects would be garbage.
+// cpuSampleKey qualifies the instance name with the request's remote and
+// project: one driver value serves every remote, and instances on different
+// remotes (or in different projects) share names — a delta computed across
+// scopes would be garbage.
 func cpuSampleKey(ctx context.Context, name string) string {
-	return backend.ProjectFromContext(ctx) + "/" + name
+	return backend.RemoteFromContext(ctx) + "/" + backend.ProjectFromContext(ctx) + "/" + name
 }
 
+// cpuPercent turns the delta between two cumulative CPU-time samples into a
+// percentage. It records the new sample and returns 0 on the first reading or
+// any non-positive interval.
 func (b *incusBackend) cpuPercent(key string, cpuNanos int64, epoch uint64) float64 {
 	now := time.Now()
 	b.cpuMu.Lock()

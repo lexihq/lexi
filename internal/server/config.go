@@ -17,7 +17,7 @@ func (h handlers) config(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.ConfigPanel(name, cfg))
@@ -31,20 +31,28 @@ func (h handlers) devicesPanel(w http.ResponseWriter, r *http.Request) {
 
 // updateConfig replaces the instance's editable config from the parallel
 // key/value form fields (whole-map replace; blank keys are dropped), then
-// re-renders the panel.
+// re-renders the panel. The hidden version field makes the write conditional,
+// so a concurrent change conflicts (409) instead of being silently overwritten
+// (same contract as updateDevice).
 func (h handlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	name := r.PathValue("name")
-	if err := h.backend.UpdateInstanceConfig(r.Context(), name, zipConfigPairs(r.Form["key"], r.Form["value"])); err != nil {
-		h.fail(w, err)
+	// The editor always carries the token; a request without one would write
+	// unconditionally, defeating the conflict protection.
+	if r.Form.Get("version") == "" {
+		h.fail(w, r, fmt.Errorf("missing config version token: %w", backend.ErrInvalid))
+		return
+	}
+	if err := h.backend.UpdateInstanceConfig(r.Context(), name, zipConfigPairs(r.Form["key"], r.Form["value"]), r.Form.Get("version")); err != nil {
+		h.fail(w, r, err)
 		return
 	}
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {
@@ -64,12 +72,12 @@ func (h handlers) addDevice(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	device := strings.TrimSpace(r.Form.Get("device"))
 	if device == "" {
-		h.fail(w, fmt.Errorf("device name required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("device name required: %w", backend.ErrInvalid))
 		return
 	}
 	cfg := deviceConfigFromForm(r.Form.Get("type"), r.Form)
 	if err := h.backend.AddDevice(r.Context(), name, device, cfg); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderDevices(w, r, name, "Device added")
@@ -90,22 +98,22 @@ func (h handlers) updateDevice(w http.ResponseWriter, r *http.Request) {
 	// The edit form always carries the token; a request without one would
 	// write unconditionally, defeating the conflict protection.
 	if r.Form.Get("version") == "" {
-		h.fail(w, fmt.Errorf("missing config version token: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("missing config version token: %w", backend.ErrInvalid))
 		return
 	}
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	current, ok := cfg.LocalDevices[device]
 	if !ok {
-		h.fail(w, fmt.Errorf("device %q on %q: %w", device, name, backend.ErrNotFound))
+		h.fail(w, r, fmt.Errorf("device %q on %q: %w", device, name, backend.ErrNotFound))
 		return
 	}
 	next := mergeDeviceFields(current, r.Form)
 	if err := h.backend.UpdateDevice(r.Context(), name, device, next, r.Form.Get("version")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderDevices(w, r, name, "Device updated")
@@ -115,7 +123,7 @@ func (h handlers) updateDevice(w http.ResponseWriter, r *http.Request) {
 func (h handlers) removeDevice(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.RemoveDevice(r.Context(), name, r.PathValue("device")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderDevices(w, r, name, "Device removed")
@@ -126,7 +134,7 @@ func (h handlers) removeDevice(w http.ResponseWriter, r *http.Request) {
 func (h handlers) renderDevices(w http.ResponseWriter, r *http.Request, name, msg string) {
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if !isHTMX(r) {

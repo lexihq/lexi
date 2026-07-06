@@ -260,29 +260,29 @@ func parseFakeImageBlob(blob []byte) (fingerprint, imgType string, err error) {
 		return orig, "container", nil
 	}
 	if !bytes.HasPrefix(blob, []byte("PK\x03\x04")) {
-		return "", "", fmt.Errorf("not a lexi image tarball: %w", backend.ErrInvalid)
+		return "", "", invalid("not a lexi image tarball")
 	}
 	zr, err := zip.NewReader(bytes.NewReader(blob), int64(len(blob)))
 	if err != nil {
-		return "", "", fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
+		return "", "", invalid("corrupt split-image zip")
 	}
 	var meta, rootfs []byte
 	imgType = ""
 	readEntry := func(zf *zip.File) ([]byte, error) {
 		rc, err := zf.Open()
 		if err != nil {
-			return nil, fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
+			return nil, invalid("corrupt split-image zip")
 		}
 		data, err := io.ReadAll(rc)
 		closeErr := rc.Close()
 		if err != nil || closeErr != nil {
-			return nil, fmt.Errorf("corrupt split-image zip: %w", backend.ErrInvalid)
+			return nil, invalid("corrupt split-image zip")
 		}
 		return data, nil
 	}
 	for _, zf := range zr.File {
 		if zf.Method != zip.Store {
-			return "", "", fmt.Errorf("split-image zip entry %q is compressed: %w", zf.Name, backend.ErrInvalid)
+			return "", "", invalid("split-image zip entry %q is compressed", zf.Name)
 		}
 		switch zf.Name {
 		case "metadata":
@@ -300,17 +300,18 @@ func parseFakeImageBlob(blob []byte) (fingerprint, imgType string, err error) {
 				imgType = "virtual-machine"
 			}
 		default:
-			return "", "", fmt.Errorf("unexpected split-image zip entry %q: %w", zf.Name, backend.ErrInvalid)
+			return "", "", invalid("unexpected split-image zip entry %q", zf.Name)
 		}
 	}
 	orig, ok := strings.CutPrefix(string(meta), fakeImageMagic)
 	if !ok || imgType == "" || !strings.HasPrefix(string(rootfs), fakeRootfsMagic) {
-		return "", "", fmt.Errorf("split-image zip is missing metadata or rootfs: %w", backend.ErrInvalid)
+		return "", "", invalid("split-image zip is missing metadata or rootfs")
 	}
 	return orig, imgType, nil
 }
 
-// UpdateImage sets the image's description and public flag.
+// UpdateImage applies every ImageEdit field: description, public, auto-update,
+// and expiry.
 func (f *Fake) UpdateImage(ctx context.Context, fingerprint string, edit backend.ImageEdit) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

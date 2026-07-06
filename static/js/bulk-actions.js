@@ -59,4 +59,20 @@
     if (table.querySelector("dialog[open], :popover-open")) return;
     window.htmx.ajax("GET", "/partials/instances", { target: "#instances-table", swap: "outerHTML" });
   }, 15000);
+
+  // The tick-time guards above race the request round-trip: a checkbox ticked
+  // or dialog opened while the poll GET is in flight would still be wiped by
+  // the arriving swap. Re-check at swap time and drop the stale response
+  // (scoped to the idle poll by verb+path so bulk POST swaps are unaffected).
+  document.body.addEventListener("htmx:beforeSwap", function (evt) {
+    const cfg = evt.detail && evt.detail.requestConfig;
+    if (!cfg || cfg.verb !== "get" || cfg.path !== "/partials/instances") return;
+    const table = document.getElementById("instances-table");
+    if (
+      document.querySelector("[data-bulk-cb]:checked") ||
+      (table && table.querySelector("dialog[open], :popover-open"))
+    ) {
+      evt.detail.shouldSwap = false;
+    }
+  });
 })();

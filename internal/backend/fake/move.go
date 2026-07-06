@@ -14,6 +14,11 @@ func (f *Fake) RenameInstance(ctx context.Context, name, newName string) error {
 	if !ok {
 		return notFound(name)
 	}
+	// Same pre-check as the incus driver: fake-backed tests must reject the
+	// names production does (no apiNameEnds — single-char names are legal).
+	if !validAPIName(newName) {
+		return invalid("invalid instance name %q", newName)
+	}
 	if _, ok := sp.instances[newName]; ok {
 		return conflict("instance %q already exists", newName)
 	}

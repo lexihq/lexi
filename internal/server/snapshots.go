@@ -19,19 +19,25 @@ func (h handlers) createSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
+	// The UI hides snapshots on tiers without the capability; re-check here so
+	// a crafted request is rejected too (same defense as the bulk endpoint).
+	if !h.backend.Capabilities(r.Context()).Snapshots {
+		h.fail(w, r, fmt.Errorf("snapshots are not supported here: %w", backend.ErrUnsupported))
+		return
+	}
 	snapshot := strings.TrimSpace(r.Form.Get("snapshot"))
 	if snapshot == "" {
-		h.renderError(w, http.StatusBadRequest, "snapshot name is required")
+		h.renderError(w, r, http.StatusBadRequest, "snapshot name is required")
 		return
 	}
 	expiresAt, err := parseSnapshotExpiry(r.Form.Get("expires_at"))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	opts := backend.SnapshotOptions{Stateful: r.Form.Get("stateful") != "", ExpiresAt: expiresAt}
 	if err := h.backend.CreateSnapshot(r.Context(), name, snapshot, opts); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderSnapshotsOrRedirect(w, r, name, "Snapshot created")
@@ -45,11 +51,11 @@ func (h handlers) renameSnapshot(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	newName := strings.TrimSpace(r.Form.Get("new_name"))
 	if newName == "" {
-		h.fail(w, fmt.Errorf("new snapshot name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("new snapshot name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.RenameSnapshot(r.Context(), name, r.PathValue("snap"), newName); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderSnapshotsOrRedirect(w, r, name, "Snapshot renamed")
@@ -63,11 +69,11 @@ func (h handlers) updateSnapshotExpiry(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	expiresAt, err := parseSnapshotExpiry(r.Form.Get("expires_at"))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if err := h.backend.UpdateSnapshotExpiry(r.Context(), name, r.PathValue("snap"), expiresAt); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderSnapshotsOrRedirect(w, r, name, "Expiry updated")
@@ -78,7 +84,7 @@ func (h handlers) snapshotSchedule(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	s, err := h.backend.GetSnapshotSchedule(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.SnapshotScheduleForm(name, s))
@@ -98,7 +104,7 @@ func (h handlers) setSnapshotSchedule(w http.ResponseWriter, r *http.Request) {
 		Pattern:  strings.TrimSpace(r.Form.Get("pattern")),
 	}
 	if err := h.backend.SetSnapshotSchedule(r.Context(), name, s); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if !isHTMX(r) {
@@ -107,7 +113,7 @@ func (h handlers) setSnapshotSchedule(w http.ResponseWriter, r *http.Request) {
 	}
 	cur, err := h.backend.GetSnapshotSchedule(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.SnapshotScheduleForm(name, cur))
@@ -133,7 +139,7 @@ func parseSnapshotExpiry(v string) (time.Time, error) {
 func (h handlers) restoreSnapshot(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.RestoreSnapshot(r.Context(), name, r.PathValue("snap")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderSnapshotsOrRedirect(w, r, name, "Snapshot restored")
@@ -142,7 +148,7 @@ func (h handlers) restoreSnapshot(w http.ResponseWriter, r *http.Request) {
 func (h handlers) deleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.DeleteSnapshot(r.Context(), name, r.PathValue("snap")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderSnapshotsOrRedirect(w, r, name, "Snapshot deleted")
@@ -157,7 +163,7 @@ func (h handlers) renderSnapshotsOrRedirect(w http.ResponseWriter, r *http.Reque
 	}
 	snapshots, err := h.backend.ListSnapshots(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderWithToast(w, r, http.StatusOK, ui.SnapshotTable(name, snapshots), msg)

@@ -50,8 +50,11 @@
     }
   };
 
-  ws.onclose = function () {
-    term.write("\r\n\x1b[31m[connection closed]\x1b[0m\r\n");
+  ws.onclose = function (ev) {
+    // The server packs the exec failure reason ("instance is not running")
+    // into the close frame; show it instead of a bare "connection closed".
+    const reason = ev && ev.reason ? ": " + ev.reason : "";
+    term.write("\r\n\x1b[31m[connection closed" + reason + "]\x1b[0m\r\n");
   };
 
   term.onData(function (data) {

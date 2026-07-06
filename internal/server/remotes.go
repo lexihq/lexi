@@ -14,8 +14,12 @@ const remoteCookie = "lexi-remote"
 
 // withRemote tags every request context with the validated remote selection
 // from the cookie. A stale cookie — the remote left the config or was down at
-// startup — is expired and the request continues on the default remote, so
-// the UI can never be trapped on an unreachable server. It runs before
+// startup — is expired and the request is bounced (redirect for GETs, 409 for
+// mutations) rather than silently retargeted at the default remote, where a
+// same-named instance could receive the action. A cookie naming the default
+// remote leaves the context untagged, so scoping (e.g. metrics series keys,
+// which the background sampler writes unscoped) matches the no-cookie state —
+// the same normalization withProject applies to "default". It runs before
 // withProject, so project validation happens against the selected remote.
 func (h handlers) withRemote(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,13 +37,25 @@ func (h handlers) withRemote(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		known, err := h.remoteKnown(r, name)
+		known, isDefault, err := h.remoteKnown(r, name)
 		if err != nil {
 			http.Error(w, err.Error(), statusFor(err))
 			return
 		}
 		if !known {
 			expireRemoteCookie(w)
+			if r.Method == http.MethodGet || r.Method == http.MethodHead {
+				// Same-URL retry (now cookieless). Location is written
+				// directly: RequestURI is always a rooted path+query, so
+				// http.Redirect's open-redirect taint doesn't apply.
+				w.Header().Set("Location", r.URL.RequestURI())
+				w.WriteHeader(http.StatusSeeOther)
+				return
+			}
+			h.renderError(w, r, http.StatusConflict, fmt.Sprintf("remote %q is no longer available; select a remote and retry", name))
+			return
+		}
+		if isDefault {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -47,18 +63,20 @@ func (h handlers) withRemote(next http.Handler) http.Handler {
 	})
 }
 
-// remoteKnown reports whether the named remote is in the reachable set.
-func (h handlers) remoteKnown(r *http.Request, name string) (bool, error) {
+// remoteKnown reports whether the named remote is in the reachable set, and
+// whether it is the request context's Current remote — which, on the untagged
+// context withRemote runs with, is the default remote.
+func (h handlers) remoteKnown(r *http.Request, name string) (known, isDefault bool, err error) {
 	remotes, err := h.backend.ListRemotes(r.Context())
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	for _, rem := range remotes {
 		if rem.Name == name {
-			return true, nil
+			return true, rem.Current, nil
 		}
 	}
-	return false, nil
+	return false, false, nil
 }
 
 // selectRemote switches the UI's remote: validate, set the cookie, and land
@@ -72,16 +90,16 @@ func (h handlers) selectRemote(w http.ResponseWriter, r *http.Request) {
 	}
 	name := strings.TrimSpace(r.Form.Get("remote"))
 	if name == "" {
-		h.fail(w, fmt.Errorf("remote name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("remote name is required: %w", backend.ErrInvalid))
 		return
 	}
-	known, err := h.remoteKnown(r, name)
+	known, _, err := h.remoteKnown(r, name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if !known {
-		h.fail(w, fmt.Errorf("remote %q: %w", name, backend.ErrNotFound))
+		h.fail(w, r, fmt.Errorf("remote %q: %w", name, backend.ErrNotFound))
 		return
 	}
 	setRemoteCookie(w, name)
@@ -100,21 +118,21 @@ func (h handlers) migrateInstance(w http.ResponseWriter, r *http.Request) {
 	}
 	target := strings.TrimSpace(r.Form.Get("target"))
 	if target == "" {
-		h.fail(w, fmt.Errorf("target remote is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("target remote is required: %w", backend.ErrInvalid))
 		return
 	}
 	current, err := h.currentRemote(r)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if target == current {
-		h.fail(w, fmt.Errorf("instance is already on %q: %w", target, backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("instance is already on %q: %w", target, backend.ErrInvalid))
 		return
 	}
 	name := r.PathValue("name")
 	if err := h.backend.MigrateInstance(r.Context(), name, target, strings.TrimSpace(r.Form.Get("new_name"))); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -135,13 +153,8 @@ func (h handlers) currentRemote(r *http.Request) (string, error) {
 	return "", nil
 }
 
-// setRemoteCookie pins the remote selection; query-escaped and without the
-// Secure attribute for the same reasons as the project cookie (see
-// setProjectCookie).
-func setRemoteCookie(w http.ResponseWriter, name string) {
-	http.SetCookie(w, &http.Cookie{Name: remoteCookie, Value: url.QueryEscape(name), Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124: see setProjectCookie.
-}
+// setRemoteCookie pins the remote selection (see setSelectionCookie for the
+// escaping and attribute rationale).
+func setRemoteCookie(w http.ResponseWriter, name string) { setSelectionCookie(w, remoteCookie, name) }
 
-func expireRemoteCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: remoteCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124: expiry; see setProjectCookie.
-}
+func expireRemoteCookie(w http.ResponseWriter) { expireSelectionCookie(w, remoteCookie) }

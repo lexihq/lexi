@@ -280,11 +280,19 @@ func TestSaveFileBadOwnershipIs400(t *testing.T) {
 		{"content": {"x"}, "mode": {"0644"}, "uid": {"-1"}, "gid": {"0"}},
 		{"content": {"x"}, "mode": {"0644"}, "uid": {"0"}, "gid": {"-5"}},
 		{"content": {"x"}, "mode": {"rwxr"}, "uid": {"0"}, "gid": {"0"}},
-		{"content": {"x"}, "mode": {"7777"}, "uid": {"0"}, "gid": {"0"}},
+		{"content": {"x"}, "mode": {"17777"}, "uid": {"0"}, "gid": {"0"}},
 	} {
 		res := formRequest(t, New(demoFake(t)), "/instances/demo/files/edit?path=%2Fetc%2Fhostname", form, false)
 		assertStatus(t, res, http.StatusBadRequest)
 	}
+}
+
+// Setuid/setgid/sticky bits round-trip through the editor's hidden mode field
+// ("%04o" of the real mode), so a 4755 file must save, not 400.
+func TestSaveFileSpecialModeBitsAccepted(t *testing.T) {
+	form := url.Values{"content": {"x"}, "mode": {"4755"}, "uid": {"0"}, "gid": {"0"}}
+	res := formRequest(t, New(demoFake(t)), "/instances/demo/files/edit?path=%2Fetc%2Fhostname", form, false)
+	assertStatus(t, res, http.StatusSeeOther)
 }
 
 func TestSaveFileBinaryContentIs400(t *testing.T) {

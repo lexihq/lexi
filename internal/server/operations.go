@@ -14,7 +14,7 @@ import (
 func (h handlers) operationsPanel(w http.ResponseWriter, r *http.Request) {
 	ops, err := h.backend.ListOperations(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.OperationRows(ops))
@@ -32,7 +32,7 @@ func (h handlers) operationsEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	ticks, err := h.backend.WatchOperations(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -94,10 +94,15 @@ func writeSSE(w io.Writer, event, data string) error {
 }
 
 // cancelOperation cancels a running operation, then re-renders the Tasks panel
-// body so the status flips in place.
+// body so the status flips in place; a non-HTMX post redirects to the
+// operations page like every other mutation handler.
 func (h handlers) cancelOperation(w http.ResponseWriter, r *http.Request) {
 	if err := h.backend.CancelOperation(r.Context(), r.PathValue("id")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
+		return
+	}
+	if !isHTMX(r) {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 	h.operationsPanel(w, r)

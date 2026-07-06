@@ -101,26 +101,36 @@ func (f *Fake) ListFiles(ctx context.Context, instance, p string) ([]backend.Fil
 }
 
 func (f *Fake) PullFile(ctx context.Context, instance, p string, w io.Writer) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	sp := f.space(ctx)
+	// Resolve the content under the lock, but stream it after releasing it: a
+	// slow reader must not stall every other request on the shared mutex.
+	// PushFile replaces the content slice wholesale, so the reference stays
+	// consistent after unlock.
+	content, err := func() ([]byte, error) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		sp := f.space(ctx)
 
-	in, ok := sp.instances[instance]
-	if !ok {
-		return notFound(instance)
-	}
-	p, err := normalizePath(p)
+		in, ok := sp.instances[instance]
+		if !ok {
+			return nil, notFound(instance)
+		}
+		p, err := normalizePath(p)
+		if err != nil {
+			return nil, err
+		}
+		node, ok := in.files[p]
+		if !ok {
+			return nil, notFoundf("file %q", p)
+		}
+		if node.dir {
+			return nil, invalid("%q is a directory", p)
+		}
+		return node.content, nil
+	}()
 	if err != nil {
 		return err
 	}
-	node, ok := in.files[p]
-	if !ok {
-		return notFoundf("file %q", p)
-	}
-	if node.dir {
-		return invalid("%q is a directory", p)
-	}
-	_, err = io.Copy(w, bytes.NewReader(node.content))
+	_, err = io.Copy(w, bytes.NewReader(content))
 	return err
 }
 

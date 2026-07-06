@@ -3,7 +3,6 @@ package fake
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"maps"
 	"slices"
@@ -321,11 +320,11 @@ func (f *Fake) ImportVolume(ctx context.Context, pool, volume string, r io.Reade
 	}
 	payload, ok := strings.CutPrefix(string(blob), fakeVolumeBackupMagic)
 	if !ok {
-		return fmt.Errorf("not a lexi volume backup: %w", backend.ErrInvalid)
+		return invalid("not a lexi volume backup")
 	}
 	var vb volumeBackupBlob
 	if err := json.Unmarshal([]byte(payload), &vb); err != nil {
-		return fmt.Errorf("corrupt volume backup: %w", backend.ErrInvalid)
+		return invalid("corrupt volume backup")
 	}
 
 	f.mu.Lock()

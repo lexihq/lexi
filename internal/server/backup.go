@@ -31,24 +31,24 @@ func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
 	}
 	name := strings.TrimSpace(r.FormValue("name"))
 	if name == "" {
-		h.renderError(w, http.StatusBadRequest, "name is required")
+		h.renderError(w, r, http.StatusBadRequest, "name is required")
 		return
 	}
 	file, _, err := r.FormFile("backup")
 	if err != nil {
-		h.renderError(w, http.StatusBadRequest, "backup file is required")
+		h.renderError(w, r, http.StatusBadRequest, "backup file is required")
 		return
 	}
 	defer closeAndLog("uploaded backup file", file)
 
 	if err := h.backend.ImportInstance(r.Context(), name, file); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {
 		inst, err := h.backend.GetInstance(r.Context(), name)
 		if err != nil {
-			h.fail(w, err)
+			h.fail(w, r, err)
 			return
 		}
 		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(r.Context()), inst))
@@ -63,12 +63,17 @@ func (h handlers) importInstance(w http.ResponseWriter, r *http.Request) {
 func (h handlers) export(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if _, err := h.backend.GetInstance(r.Context(), name); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name+".tar.gz"))
 	if err := h.backend.ExportInstance(r.Context(), name, w); err != nil {
+		// The driver spools before writing, so failures arrive pre-body: drop
+		// the attachment headers so the error renders instead of downloading
+		// as a corrupt tarball (mirrors exportVolume).
+		w.Header().Del("Content-Disposition")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		http.Error(w, err.Error(), statusFor(err))
 		return
 	}

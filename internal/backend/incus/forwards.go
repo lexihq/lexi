@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/lxc/incus/v6/shared/api"
 
@@ -96,6 +97,12 @@ func (b *incusBackend) CreateNetworkForward(ctx context.Context, network string,
 		ListenAddress:     fw.ListenAddress,
 	}
 	if err := b.project(ctx).CreateNetworkForward(network, req); err != nil {
+		// The daemon reports a duplicate as a plain 400, which mapErr's typed
+		// BadRequest branch would turn into ErrInvalid before the string
+		// fallback can see it (same patch as the zone/bucket/ACL creates).
+		if strings.Contains(err.Error(), "already exists") {
+			return fmt.Errorf("forward %q on %q already exists: %w", fw.ListenAddress, network, backend.ErrConflict)
+		}
 		return fmt.Errorf("create forward %q on %q: %w", fw.ListenAddress, network, mapErr(err))
 	}
 	return nil

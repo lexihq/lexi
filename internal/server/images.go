@@ -17,12 +17,12 @@ import (
 func (h handlers) imagesPage(w http.ResponseWriter, r *http.Request) {
 	images, err := h.backend.ListLocalImages(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	instances, err := h.backend.ListInstances(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderWithSidebar(w, r, http.StatusOK, instances,
@@ -33,13 +33,13 @@ func (h handlers) imagesPage(w http.ResponseWriter, r *http.Request) {
 // redirects back to the Images page.
 func (h handlers) imageAction(w http.ResponseWriter, r *http.Request, action func() error) {
 	if err := action(); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {
 		images, err := h.backend.ListLocalImages(r.Context())
 		if err != nil {
-			h.fail(w, err)
+			h.fail(w, r, err)
 			return
 		}
 		h.render(w, r, http.StatusOK, ui.ImagesTable(h.backend.Capabilities(r.Context()), images))
@@ -55,7 +55,7 @@ func (h handlers) copyImage(w http.ResponseWriter, r *http.Request) {
 	}
 	alias := strings.TrimSpace(r.Form.Get("alias"))
 	if alias == "" {
-		h.fail(w, fmt.Errorf("image alias is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("image alias is required: %w", backend.ErrInvalid))
 		return
 	}
 	h.imageAction(w, r, func() error { return h.backend.CopyImage(r.Context(), alias) })
@@ -68,7 +68,7 @@ func (h handlers) publishImage(w http.ResponseWriter, r *http.Request) {
 	}
 	instance := strings.TrimSpace(r.Form.Get("instance"))
 	if instance == "" {
-		h.fail(w, fmt.Errorf("instance is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("instance is required: %w", backend.ErrInvalid))
 		return
 	}
 	alias := strings.TrimSpace(r.Form.Get("alias"))
@@ -90,7 +90,7 @@ func (h handlers) updateImage(w http.ResponseWriter, r *http.Request) {
 	fingerprint := r.PathValue("fingerprint")
 	expiresAt, err := parseSnapshotExpiry(r.Form.Get("expires_at"))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	edit := backend.ImageEdit{
@@ -117,7 +117,7 @@ func (h handlers) exportImage(w http.ResponseWriter, r *http.Request) {
 	fingerprint := r.PathValue("fingerprint")
 	filename, rc, err := h.backend.ExportImage(r.Context(), fingerprint)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	defer closeAndLog("image export spool", rc)
@@ -138,13 +138,13 @@ func (h handlers) importImage(w http.ResponseWriter, r *http.Request) {
 	}
 	file, _, err := r.FormFile("image")
 	if err != nil {
-		h.renderError(w, http.StatusBadRequest, "image file is required")
+		h.renderError(w, r, http.StatusBadRequest, "image file is required")
 		return
 	}
 	defer closeAndLog("uploaded image file", file)
 
 	if err := h.backend.ImportImage(r.Context(), file, strings.TrimSpace(r.FormValue("alias"))); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/images", http.StatusSeeOther)
@@ -157,7 +157,7 @@ func (h handlers) addImageAlias(w http.ResponseWriter, r *http.Request) {
 	}
 	alias := strings.TrimSpace(r.Form.Get("alias"))
 	if alias == "" {
-		h.fail(w, fmt.Errorf("image alias is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("image alias is required: %w", backend.ErrInvalid))
 		return
 	}
 	fingerprint := r.PathValue("fingerprint")
@@ -174,7 +174,7 @@ func (h handlers) removeImageAlias(w http.ResponseWriter, r *http.Request) {
 	}
 	alias := strings.TrimSpace(r.Form.Get("alias"))
 	if alias == "" {
-		h.fail(w, fmt.Errorf("image alias is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("image alias is required: %w", backend.ErrInvalid))
 		return
 	}
 	h.imageAction(w, r, func() error { return h.backend.RemoveImageAlias(r.Context(), alias) })

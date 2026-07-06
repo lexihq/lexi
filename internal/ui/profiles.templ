@@ -184,8 +184,8 @@ templ InstanceProfilesForm(inst backend.Instance, all []backend.Profile) {
 		<h2 class="mb-3 text-lg font-medium">Profiles</h2>
 		<form
 			method="post"
-			action={ templ.URL("/instances/" + inst.Name + "/profiles") }
-			hx-post={ "/instances/" + inst.Name + "/profiles" }
+			action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/profiles") }
+			hx-post={ "/instances/" + url.PathEscape(inst.Name) + "/profiles" }
 			hx-target="#profiles"
 			hx-swap="outerHTML"
 			class="space-y-2"

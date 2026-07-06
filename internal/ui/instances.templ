@@ -151,7 +151,7 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 			<input type="checkbox" name="name" value={ inst.Name } data-bulk-cb aria-label={ "Select " + inst.Name } class="size-4 cursor-pointer align-middle"/>
 		}
 		@table.Cell() {
-			<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/instances/" + inst.Name) }>{ inst.Name }</a>
+			<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/instances/" + url.PathEscape(inst.Name)) }>{ inst.Name }</a>
 		}
 		@table.Cell() {
 			@statusBadge(inst.Status)
@@ -200,7 +200,7 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 				<div class="hidden items-center gap-2 sm:flex">
 					@instancePrimaryAction(caps, inst)
 					if caps.Console && inst.Status == backend.StatusRunning {
-						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+						@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Href: "/instances/" + url.PathEscape(inst.Name) + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
 							@icon.Icon("square-terminal")(icon.Props{Class: "size-4"})
 							Console
 						}
@@ -261,7 +261,7 @@ templ instanceMobileActions(caps backend.Capabilities, inst backend.Instance) {
 		}
 	}
 	if caps.Console && inst.Status == backend.StatusRunning {
-		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Href: "/instances/" + inst.Name + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+		@dropdown.Item(dropdown.ItemProps{Class: "sm:hidden", Href: "/instances/" + url.PathEscape(inst.Name) + "/console", Attributes: templ.Attributes{"hx-boost": "false"}}) {
 			Console
 		}
 	}
@@ -289,7 +289,7 @@ templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 				}
 			}
 			if caps.Backup {
-				@dropdown.Item(dropdown.ItemProps{Href: "/instances/" + inst.Name + "/export", Attributes: templ.Attributes{"hx-boost": "false"}}) {
+				@dropdown.Item(dropdown.ItemProps{Href: "/instances/" + url.PathEscape(inst.Name) + "/export", Attributes: templ.Attributes{"hx-boost": "false"}}) {
 					Export
 				}
 			}
@@ -340,7 +340,7 @@ templ instanceMenu(caps backend.Capabilities, inst backend.Instance) {
 // full-page POST), so handler and redirect behavior are unchanged.
 templ instanceDialogs(caps backend.Capabilities, inst backend.Instance) {
 	if caps.Clone {
-		@instanceActionDialog("clone-"+inst.Name, "Clone "+inst.Name, "/instances/"+inst.Name+"/clone", "dst", "New instance name", "Clone", nil)
+		@instanceActionDialog("clone-"+inst.Name, "Clone "+inst.Name, "/instances/"+url.PathEscape(inst.Name)+"/clone", "dst", "New instance name", "Clone", nil)
 	}
 	if caps.Move {
 		@instanceActionDialog("rename-"+inst.Name, "Rename "+inst.Name, "/instances/"+url.PathEscape(inst.Name)+"/rename", "new_name", "New name", "Rename", nil)
@@ -476,8 +476,10 @@ func limitsSummary(inst backend.Instance) string {
 
 func instanceActionAttrs(name, action string) templ.Attributes {
 	return templ.Attributes{
-		"hx-post":   "/instances/" + name + "/" + action,
-		"hx-target": "#instance-" + name,
+		"hx-post": "/instances/" + url.PathEscape(name) + "/" + action,
+		// An attribute selector, not "#instance-"+name: names may contain
+		// CSS-significant characters ('.', '#') that break an id selector.
+		"hx-target": "[id='instance-" + name + "']",
 		"hx-swap":   "outerHTML",
 	}
 }

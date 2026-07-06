@@ -34,8 +34,8 @@ type Capabilities struct {
 	ServerInfo string // e.g. "Incus 6.0.4"
 	Snapshots  bool
 	Clone      bool
-	Backup     bool // false in v1
-	Console    bool // false in v1
+	Backup     bool // portable export/import tarballs
+	Console    bool // interactive terminal (exec over WebSocket)
 	Metrics    bool // live resource metrics
 	Limits     bool // CPU and memory limits
 	Pause      bool // freeze/unfreeze (pause/resume)
@@ -281,20 +281,22 @@ type StorageVolumeSnapshot struct {
 }
 
 // InstanceConfig is an instance's editable local config plus its devices. Config
-// excludes volatile.* and limits.cpu/limits.memory, which are managed elsewhere
-// and preserved on update. Devices is the full expanded set (read-only);
+// excludes the managed keys — volatile.*, limits.cpu/limits.memory, and
+// snapshots.schedule/expiry/pattern — which are owned elsewhere and preserved
+// on update. Devices is the full expanded set (read-only);
 // LocalDevices is the instance-owned subset (editable).
 type InstanceConfig struct {
 	Config       map[string]string
 	Devices      map[string]map[string]string
 	LocalDevices map[string]map[string]string
-	// Version is an opaque concurrency token for UpdateDevice, populated by
-	// GetInstanceConfig.
+	// Version is an opaque concurrency token for UpdateInstanceConfig and
+	// UpdateDevice, populated by GetInstanceConfig.
 	Version string
 }
 
-// Metrics is a point-in-time resource snapshot. CPUPercent is derived from the
-// delta between two CPU-time samples, so it reads 0 until a prior sample exists.
+// Metrics is a point-in-time resource snapshot. The incus driver derives
+// CPUPercent from the delta between two CPU-time samples, so it reads 0 until
+// a prior sample exists (the fake returns canned values from the first call).
 type Metrics struct {
 	CPUPercent  float64
 	MemoryUsage int64
@@ -764,7 +766,11 @@ type Backend interface {
 	SetInstanceProfiles(ctx context.Context, name string, profiles []string) error
 
 	GetInstanceConfig(ctx context.Context, name string) (InstanceConfig, error)
-	UpdateInstanceConfig(ctx context.Context, name string, config map[string]string) error
+	// UpdateInstanceConfig replaces the editable config wholesale. A non-empty
+	// version (from GetInstanceConfig) makes the update conditional:
+	// ErrConflict if the instance changed since that read, so two editors
+	// can't silently clobber each other (same contract as UpdateDevice).
+	UpdateInstanceConfig(ctx context.Context, name string, config map[string]string, version string) error
 	// AddDevice attaches (or overwrites) a local device on the instance.
 	AddDevice(ctx context.Context, name, device string, config map[string]string) error
 	// UpdateDevice replaces the named local device's config map. The device
@@ -1012,8 +1018,9 @@ type Backend interface {
 	// when non-empty (a failed alias rolls the import back, like
 	// PublishImage).
 	ImportImage(ctx context.Context, r io.Reader, alias string) error
-	// UpdateImage sets the image's description and public visibility,
-	// preserving its other properties and flags (GET-preserve-PUT; the small
+	// UpdateImage applies every ImageEdit field — description, public,
+	// auto-update, and expiry — preserving the image's other properties and
+	// flags (GET-preserve-PUT; the small
 	// two-field edit is deliberately unversioned — last write wins).
 	UpdateImage(ctx context.Context, fingerprint string, edit ImageEdit) error
 	// RefreshImage re-pulls an image from its update source (Incus extension

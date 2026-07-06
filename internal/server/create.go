@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strings"
 
 	"github.com/lexihq/lexi/internal/backend"
@@ -62,7 +61,7 @@ func (h handlers) createDialogData(ctx context.Context, caps backend.Capabilitie
 func (h handlers) imagePicker(w http.ResponseWriter, r *http.Request) {
 	all, err := h.backend.ListImages(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	q := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("q")))
@@ -107,22 +106,22 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.Form.Get("name"))
 	image := strings.TrimSpace(r.Form.Get("image"))
 	if name == "" {
-		h.renderError(w, http.StatusBadRequest, "name is required")
+		h.renderError(w, r, http.StatusBadRequest, "name is required")
 		return
 	}
 	if image == "" {
-		h.renderError(w, http.StatusBadRequest, "image is required")
+		h.renderError(w, r, http.StatusBadRequest, "image is required")
 		return
 	}
 
 	images, err := h.backend.ListImages(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	selected, ok := imageByFingerprint(images, image)
 	if !ok {
-		h.renderError(w, http.StatusBadRequest, "selected image is unavailable")
+		h.renderError(w, r, http.StatusBadRequest, "selected image is unavailable")
 		return
 	}
 
@@ -138,12 +137,12 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 		Network:  strings.TrimSpace(r.Form.Get("network")),
 		Config:   nilIfEmpty(zipConfigPairs(r.Form["key"], r.Form["value"])),
 	}); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	inst, err := h.backend.GetInstance(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {
@@ -158,12 +157,12 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 func (h handlers) rebuildForm(w http.ResponseWriter, r *http.Request) {
 	inst, err := h.backend.GetInstance(r.Context(), r.PathValue("name"))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	images, err := h.backend.ListImages(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.RebuildPage(h.backend.Capabilities(r.Context()), inst, images))
@@ -179,25 +178,25 @@ func (h handlers) rebuild(w http.ResponseWriter, r *http.Request) {
 	}
 	image := strings.TrimSpace(r.Form.Get("image"))
 	if image == "" {
-		h.renderError(w, http.StatusBadRequest, "image is required")
+		h.renderError(w, r, http.StatusBadRequest, "image is required")
 		return
 	}
 	images, err := h.backend.ListImages(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	selected, ok := imageByFingerprint(images, image)
 	if !ok {
-		h.renderError(w, http.StatusBadRequest, "selected image is unavailable")
+		h.renderError(w, r, http.StatusBadRequest, "selected image is unavailable")
 		return
 	}
 	name := r.PathValue("name")
 	if err := h.backend.RebuildInstance(r.Context(), name, selected.Alias, selected.Fingerprint); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/instances/"+url.PathEscape(name), http.StatusSeeOther)
+	redirectToInstance(w, name)
 }
 
 // nilIfEmpty keeps CreateOptions.Config nil for a plain create so the zero

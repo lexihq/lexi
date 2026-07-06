@@ -15,11 +15,11 @@ func (h handlers) renameInstance(w http.ResponseWriter, r *http.Request) {
 	}
 	newName := strings.TrimSpace(r.Form.Get("new_name"))
 	if newName == "" {
-		h.fail(w, fmt.Errorf("new instance name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("new instance name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.RenameInstance(r.Context(), r.PathValue("name"), newName); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	redirectToInstance(w, newName)
@@ -32,11 +32,11 @@ func (h handlers) moveInstance(w http.ResponseWriter, r *http.Request) {
 	}
 	pool := strings.TrimSpace(r.Form.Get("pool"))
 	if pool == "" {
-		h.fail(w, fmt.Errorf("target pool is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("target pool is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.MoveInstance(r.Context(), r.PathValue("name"), pool); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	redirectToInstance(w, r.PathValue("name"))

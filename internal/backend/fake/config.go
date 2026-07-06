@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 	"strconv"
+	"strings"
 
 	"github.com/lexihq/lexi/internal/backend"
 )
@@ -32,14 +33,41 @@ func (f *Fake) GetInstanceConfig(ctx context.Context, name string) (backend.Inst
 		expanded[devName] = maps.Clone(dev)
 	}
 	return backend.InstanceConfig{
-		Config:       maps.Clone(in.config),
+		Config:       editableConfig(in.config),
 		Devices:      expanded,
-		LocalDevices: maps.Clone(in.devices),
+		LocalDevices: cloneDevices(in.devices),
 		Version:      strconv.Itoa(in.configVersion),
 	}, nil
 }
 
-func (f *Fake) UpdateInstanceConfig(ctx context.Context, name string, config map[string]string) error {
+// managedConfigKey mirrors the incus driver's rule: volatile.* (internal),
+// limits.cpu/limits.memory (owned by the Limits form), and snapshots.* (owned
+// by the snapshot-schedule form) are hidden from the config editor and
+// preserved on update — so both drivers expose the same editable subset.
+func managedConfigKey(k string) bool {
+	return strings.HasPrefix(k, "volatile.") ||
+		k == "limits.cpu" || k == "limits.memory" ||
+		k == "snapshots.schedule" || k == "snapshots.expiry" || k == "snapshots.pattern"
+}
+
+// editableConfig returns the user-editable subset of the stored config (a
+// copy), excluding the managed keys.
+func editableConfig(local map[string]string) map[string]string {
+	out := make(map[string]string, len(local))
+	for k, v := range local {
+		if managedConfigKey(k) {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// UpdateInstanceConfig mirrors the incus driver: managed keys (volatile.*,
+// limits, snapshots.*) are preserved from the stored config and ignored on
+// input, so saving the editor can't wipe a snapshot schedule. A non-empty
+// stale version conflicts, same as UpdateDevice.
+func (f *Fake) UpdateInstanceConfig(ctx context.Context, name string, config map[string]string, version string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.space(ctx)
@@ -48,7 +76,22 @@ func (f *Fake) UpdateInstanceConfig(ctx context.Context, name string, config map
 	if !ok {
 		return notFound(name)
 	}
-	in.config = maps.Clone(config)
+	if version != "" && version != strconv.Itoa(in.configVersion) {
+		return conflict("instance %q config version %s", name, version)
+	}
+	next := map[string]string{}
+	for k, v := range in.config {
+		if managedConfigKey(k) {
+			next[k] = v
+		}
+	}
+	for k, v := range config {
+		if managedConfigKey(k) {
+			continue
+		}
+		next[k] = v
+	}
+	in.config = next
 	in.configVersion++
 	return nil
 }

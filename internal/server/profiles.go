@@ -37,11 +37,11 @@ func (h handlers) createProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	name := strings.TrimSpace(r.Form.Get("name"))
 	if name == "" {
-		h.fail(w, fmt.Errorf("profile name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("profile name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.CreateProfile(r.Context(), name, r.Form.Get("description")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/profiles/"+url.PathEscape(name), http.StatusSeeOther)
@@ -59,7 +59,7 @@ func (h handlers) updateProfile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
 	if err := h.backend.UpdateProfile(r.Context(), name, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/profiles/"+url.PathEscape(name), http.StatusSeeOther)
@@ -69,7 +69,7 @@ func (h handlers) updateProfile(w http.ResponseWriter, r *http.Request) {
 // in-use profiles are refused by the backend).
 func (h handlers) deleteProfile(w http.ResponseWriter, r *http.Request) {
 	if err := h.backend.DeleteProfile(r.Context(), r.PathValue("name")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/profiles", http.StatusSeeOther)
@@ -84,11 +84,11 @@ func (h handlers) renameProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	newName := strings.TrimSpace(r.Form.Get("new_name"))
 	if newName == "" {
-		h.fail(w, fmt.Errorf("new profile name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("new profile name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.RenameProfile(r.Context(), r.PathValue("name"), newName); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/profiles/"+url.PathEscape(newName), http.StatusSeeOther)
@@ -104,11 +104,11 @@ func (h handlers) addProfileDevice(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	device := strings.TrimSpace(r.Form.Get("device"))
 	if device == "" {
-		h.fail(w, fmt.Errorf("device name required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("device name required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.AddProfileDevice(r.Context(), name, device, deviceConfigFromForm(r.Form.Get("type"), r.Form)); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderProfileDevices(w, r, name)
@@ -125,21 +125,21 @@ func (h handlers) updateProfileDevice(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	device := r.PathValue("device")
 	if r.Form.Get("version") == "" {
-		h.fail(w, fmt.Errorf("missing profile version token: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("missing profile version token: %w", backend.ErrInvalid))
 		return
 	}
 	p, err := h.backend.GetProfile(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	current, ok := p.Devices[device]
 	if !ok {
-		h.fail(w, fmt.Errorf("device %q on profile %q: %w", device, name, backend.ErrNotFound))
+		h.fail(w, r, fmt.Errorf("device %q on profile %q: %w", device, name, backend.ErrNotFound))
 		return
 	}
 	if err := h.backend.UpdateProfileDevice(r.Context(), name, device, mergeDeviceFields(current, r.Form), r.Form.Get("version")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderProfileDevices(w, r, name)
@@ -149,7 +149,7 @@ func (h handlers) updateProfileDevice(w http.ResponseWriter, r *http.Request) {
 func (h handlers) removeProfileDevice(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.RemoveProfileDevice(r.Context(), name, r.PathValue("device")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderProfileDevices(w, r, name)
@@ -158,7 +158,7 @@ func (h handlers) removeProfileDevice(w http.ResponseWriter, r *http.Request) {
 func (h handlers) renderProfileDevices(w http.ResponseWriter, r *http.Request, name string) {
 	p, err := h.backend.GetProfile(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {
@@ -179,17 +179,17 @@ func (h handlers) setInstanceProfiles(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	inst, err := h.backend.GetInstance(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	ordered := mergeProfileOrder(inst.Profiles, r.Form["profile"])
 	if err := h.backend.SetInstanceProfiles(r.Context(), name, ordered); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	all, err := h.backend.ListProfiles(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	inst.Profiles = ordered

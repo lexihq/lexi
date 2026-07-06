@@ -65,7 +65,7 @@ func TestUpdateInstanceConfigPreservesVolatileAndLimits(t *testing.T) {
 	}}
 	b := &incusBackend{srv: srv}
 	require.NoError(t, b.UpdateInstanceConfig(context.Background(), "demo",
-		map[string]string{"boot.autostart": "1"}))
+		map[string]string{"boot.autostart": "1"}, ""))
 	require.NotNil(t, srv.updatedPut)
 	assert.Equal(t, api.ConfigMap{
 		"boot.autostart":      "1",

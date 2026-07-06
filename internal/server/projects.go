@@ -17,7 +17,7 @@ import (
 func (h handlers) projectsPage(w http.ResponseWriter, r *http.Request) {
 	projects, err := h.backend.ListProjects(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	caps := h.backend.Capabilities(r.Context())
@@ -29,7 +29,7 @@ func (h handlers) projectsPage(w http.ResponseWriter, r *http.Request) {
 		for _, p := range projects {
 			usage, err := h.backend.GetProjectUsage(r.Context(), p.Name)
 			if err != nil {
-				h.fail(w, err)
+				h.fail(w, r, err)
 				return
 			}
 			for _, u := range usage {
@@ -45,14 +45,14 @@ func (h handlers) projectsPage(w http.ResponseWriter, r *http.Request) {
 func (h handlers) projectDetail(w http.ResponseWriter, r *http.Request) {
 	p, err := h.backend.GetProject(r.Context(), r.PathValue("name"))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	caps := h.backend.Capabilities(r.Context())
 	var usage []backend.ProjectUsage
 	if caps.ProjectUsage {
 		if usage, err = h.backend.GetProjectUsage(r.Context(), p.Name); err != nil {
-			h.fail(w, err)
+			h.fail(w, r, err)
 			return
 		}
 	}
@@ -89,7 +89,7 @@ func (h handlers) updateProjectLimits(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	p, err := h.backend.GetProject(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	config := maps.Clone(p.Config)
@@ -104,17 +104,17 @@ func (h handlers) updateProjectLimits(w http.ResponseWriter, r *http.Request) {
 		}
 		if f.Size {
 			if !sizeValue.MatchString(raw) {
-				h.fail(w, fmt.Errorf("%s must be a size like 1GiB: %w", f.Key, backend.ErrInvalid))
+				h.fail(w, r, fmt.Errorf("%s must be a size like 1GiB: %w", f.Key, backend.ErrInvalid))
 				return
 			}
 		} else if n, err := strconv.Atoi(raw); err != nil || n < 0 {
-			h.fail(w, fmt.Errorf("%s must be a non-negative integer: %w", f.Key, backend.ErrInvalid))
+			h.fail(w, r, fmt.Errorf("%s must be a non-negative integer: %w", f.Key, backend.ErrInvalid))
 			return
 		}
 		config[f.Key] = raw
 	}
 	if err := h.backend.UpdateProject(r.Context(), name, p.Description, config, p.Version); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/projects/"+url.PathEscape(name), http.StatusSeeOther)
@@ -130,7 +130,7 @@ func (h handlers) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 	name := strings.TrimSpace(r.Form.Get("name"))
 	if name == "" {
-		h.fail(w, fmt.Errorf("project name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("project name is required: %w", backend.ErrInvalid))
 		return
 	}
 	config := map[string]string{}
@@ -138,7 +138,7 @@ func (h handlers) createProject(w http.ResponseWriter, r *http.Request) {
 		config[feature] = strconv.FormatBool(r.Form.Get(feature) != "")
 	}
 	if err := h.backend.CreateProject(r.Context(), backend.Project{Name: name, Description: r.Form.Get("description"), Config: config}); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/projects/"+url.PathEscape(name), http.StatusSeeOther)
@@ -154,7 +154,7 @@ func (h handlers) updateProject(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
 	if err := h.backend.UpdateProject(r.Context(), name, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/projects/"+url.PathEscape(name), http.StatusSeeOther)
@@ -170,11 +170,11 @@ func (h handlers) renameProject(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	newName := strings.TrimSpace(r.Form.Get("new_name"))
 	if newName == "" {
-		h.fail(w, fmt.Errorf("new project name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("new project name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.RenameProject(r.Context(), name, newName); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if backend.ProjectFromContext(r.Context()) == name {
@@ -188,7 +188,7 @@ func (h handlers) renameProject(w http.ResponseWriter, r *http.Request) {
 func (h handlers) deleteProject(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.DeleteProject(r.Context(), name); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if backend.ProjectFromContext(r.Context()) == name {
@@ -243,7 +243,7 @@ func (h handlers) selectProject(w http.ResponseWriter, r *http.Request) {
 	}
 	name := strings.TrimSpace(r.Form.Get("project"))
 	if name == "" {
-		h.fail(w, fmt.Errorf("project name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("project name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if name == "default" {
@@ -252,23 +252,27 @@ func (h handlers) selectProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.backend.GetProject(r.Context(), name); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	setProjectCookie(w, name)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// setProjectCookie pins the project selection. The name is query-escaped:
-// the daemon allows characters in project names (e.g. ";") that Go silently
-// strips from cookie values, which could otherwise scope requests to a
-// different existing project. No Secure attribute: lexi routinely serves
+// setSelectionCookie pins a UI selection (project/remote). The value is
+// query-escaped: the daemon allows characters in names (e.g. ";") that Go
+// silently strips from cookie values, which could otherwise scope requests to
+// a different existing object. No Secure attribute: lexi routinely serves
 // plain HTTP (dev, LAN), where a Secure cookie silently breaks selection;
 // the value is a non-secret UI preference.
-func setProjectCookie(w http.ResponseWriter, name string) {
-	http.SetCookie(w, &http.Cookie{Name: projectCookie, Value: url.QueryEscape(name), Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124: see above.
+func setSelectionCookie(w http.ResponseWriter, cookie, name string) {
+	http.SetCookie(w, &http.Cookie{Name: cookie, Value: url.QueryEscape(name), Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124: see above.
 }
 
-func expireProjectCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{Name: projectCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124: expiry; see selectProject.
+func expireSelectionCookie(w http.ResponseWriter, cookie string) {
+	http.SetCookie(w, &http.Cookie{Name: cookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode}) //nolint:gosec // G124: expiry; see setSelectionCookie.
 }
+
+func setProjectCookie(w http.ResponseWriter, name string) { setSelectionCookie(w, projectCookie, name) }
+
+func expireProjectCookie(w http.ResponseWriter) { expireSelectionCookie(w, projectCookie) }

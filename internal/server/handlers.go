@@ -21,12 +21,12 @@ type handlers struct {
 func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, action func(string) error) {
 	name := r.PathValue("name")
 	if err := action(name); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	inst, err := h.backend.GetInstance(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {
@@ -36,10 +36,20 @@ func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, action 
 			h.render(w, r, http.StatusOK, ui.InstanceHeader(h.backend.Capabilities(r.Context()), inst))
 			return
 		}
-		h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(r.Context()), inst))
+		h.renderInstanceRow(w, r, inst)
 		return
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// renderInstanceRow renders a single swapped list row with the remote-switcher
+// and CPU-trend context injected, so the row's Migrate… gating and sparkline
+// survive the swap the same way they do on full table renders (the bug 208ccb2
+// fixed for the table-fragment paths).
+func (h handlers) renderInstanceRow(w http.ResponseWriter, r *http.Request, inst backend.Instance) {
+	ctx := ui.WithInstanceTrends(r.Context(), h.instanceTrends(r.Context(), []backend.Instance{inst}))
+	r = r.WithContext(h.withRemoteSwitcher(ctx))
+	h.render(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(r.Context()), inst))
 }
 
 func instanceURL(name string) string {
@@ -51,13 +61,29 @@ func redirectToInstance(w http.ResponseWriter, name string) {
 	w.WriteHeader(http.StatusSeeOther)
 }
 
-// fail renders err as an HTMX error alert, mapping it to a status via statusFor.
-// It's the common error path for handlers that act on a named instance.
-func (h handlers) fail(w http.ResponseWriter, err error) {
-	h.renderError(w, statusFor(err), err.Error())
+// redirectToInstanceTab lands on one of the instance detail tabs. Like
+// redirectToInstance, it writes the Location header directly (the path is
+// escaped here, not attacker-shaped) to avoid http.Redirect's open-redirect
+// taint on user-derived names.
+func redirectToInstanceTab(w http.ResponseWriter, name, tab string) {
+	w.Header().Set("Location", instanceURL(name)+"?tab="+tab)
+	w.WriteHeader(http.StatusSeeOther)
 }
 
-func (h handlers) renderError(w http.ResponseWriter, code int, message string) {
+// fail renders err as an HTMX error alert, mapping it to a status via statusFor.
+// It's the common error path for handlers that act on a named instance.
+func (h handlers) fail(w http.ResponseWriter, r *http.Request, err error) {
+	h.renderError(w, r, statusFor(err), err.Error())
+}
+
+func (h handlers) renderError(w http.ResponseWriter, r *http.Request, code int, message string) {
+	// Native (non-HTMX) form posts — the hx-boost="false" dialogs — navigate to
+	// the response, so a bare toast fragment would replace the whole page with
+	// an unstyled div. Give them a plain error page instead.
+	if !isHTMX(r) {
+		http.Error(w, message, code)
+		return
+	}
 	writeHTML(w, code)
 	if err := ui.ErrorToast(message).Render(context.Background(), w); err != nil {
 		slog.Warn("write error response", "err", err)
@@ -75,10 +101,10 @@ func (h handlers) parseMultipartUpload(w http.ResponseWriter, r *http.Request, l
 	if err := r.ParseMultipartForm(32 << 20); err != nil { //nolint:gosec // G120: MaxBytesReader caps the complete upload.
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			h.renderError(w, http.StatusRequestEntityTooLarge, tooLargeMsg)
+			h.renderError(w, r, http.StatusRequestEntityTooLarge, tooLargeMsg)
 			return false
 		}
-		h.renderError(w, http.StatusBadRequest, err.Error())
+		h.renderError(w, r, http.StatusBadRequest, err.Error())
 		return false
 	}
 	return true
@@ -187,7 +213,11 @@ func csrfGuard(next http.Handler) http.Handler {
 }
 
 func isHTMX(r *http.Request) bool {
-	return r.Header.Get("Hx-Request") == "true"
+	// A history-restore request (Back/Forward with a cold htmx snapshot cache)
+	// replays the URL expecting a full page to swap into document.body, so it
+	// must get the non-HTMX (full page) response despite carrying Hx-Request.
+	return r.Header.Get("Hx-Request") == "true" &&
+		r.Header.Get("Hx-History-Restore-Request") != "true"
 }
 
 // isBoosted reports whether the request came from an hx-boost navigation (as

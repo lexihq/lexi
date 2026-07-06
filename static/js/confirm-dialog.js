@@ -11,7 +11,7 @@
     var msg = document.getElementById("confirm-dialog-message");
     var accept = document.getElementById("confirm-dialog-accept");
     var cancel = document.getElementById("confirm-dialog-cancel");
-    if (!dlg || !accept || !cancel) {
+    if (!dlg || !msg || !accept || !cancel) {
       // Dialog missing for some reason — fall back to native confirm so a
       // destructive action is never silently fired without a prompt.
       if (window.confirm(question)) onAccept();
@@ -40,7 +40,7 @@
     }
     accept.addEventListener("click", yes);
     cancel.addEventListener("click", no);
-    dlg.addEventListener("cancel", no); // Esc / backdrop dismiss
+    dlg.addEventListener("cancel", no); // Esc dismiss
     dlg.showModal();
     accept.focus();
   }

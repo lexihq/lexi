@@ -44,13 +44,9 @@ func New(b backend.Backend, opts ...Option) *http.Server {
 		opt(&h)
 	}
 	mux := http.NewServeMux()
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static.FS)))
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		if _, err := w.Write([]byte("ok\n")); err != nil {
-			slog.Warn("write health response", "err", err)
-		}
-	})
-	mux.HandleFunc("GET /", h.list)
+	// "/{$}" matches only the root: an unknown path must 404, not render the
+	// instances page (and pay its backend calls) for every typo URL.
+	mux.HandleFunc("GET /{$}", h.list)
 	mux.HandleFunc("GET /partials/sidebar", h.sidebar)
 	mux.HandleFunc("GET /partials/instances", h.instancesPartial)
 	mux.HandleFunc("POST /project", h.selectProject)
@@ -198,8 +194,27 @@ func New(b backend.Backend, opts ...Option) *http.Server {
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/restore", h.restoreSnapshot)
 	mux.HandleFunc("POST /instances/{name}/snapshots/{snap}/delete", h.deleteSnapshot)
 
+	// Static assets and the health probe bypass the remote/project middleware:
+	// they never touch the backend, and routing them through it would cost a
+	// ListRemotes/GetProject daemon round-trip per asset request — and let a
+	// stale cookie fail /healthz while the process is healthy.
+	outer := http.NewServeMux()
+	staticFiles := http.StripPrefix("/static/", http.FileServerFS(static.FS))
+	outer.Handle("GET /static/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Embedded assets change only on redeploy; embed.FS has no ModTime, so
+		// without a cache header every page load re-downloads all of them.
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+		staticFiles.ServeHTTP(w, r)
+	}))
+	outer.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		if _, err := w.Write([]byte("ok\n")); err != nil {
+			slog.Warn("write health response", "err", err)
+		}
+	})
+	outer.Handle("/", csrfGuard(h.withRemote(h.withProject(mux))))
+
 	return &http.Server{
-		Handler:           csrfGuard(h.withRemote(h.withProject(mux))),
+		Handler:           outer,
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 }

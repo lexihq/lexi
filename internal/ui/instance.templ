@@ -77,7 +77,7 @@ templ InstanceHeader(caps backend.Capabilities, inst backend.Instance) {
 				}
 			}
 			if caps.Backup {
-				@button.Button(button.Props{Size: button.SizeSm, Href: "/instances/" + inst.Name + "/export", Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-boost": "false"}}) {
+				@button.Button(button.Props{Size: button.SizeSm, Href: "/instances/" + url.PathEscape(inst.Name) + "/export", Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-boost": "false"}}) {
 					@icon.Icon("download")(icon.Props{Class: "size-4"})
 					Export
 				}
@@ -128,7 +128,7 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 			case "metrics":
 				<div
 					id="metrics"
-					hx-get={ "/instances/" + inst.Name + "/metrics" }
+					hx-get={ "/instances/" + url.PathEscape(inst.Name) + "/metrics" }
 					hx-trigger="load, every 3s"
 					hx-swap="outerHTML"
 				>
@@ -138,7 +138,7 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 			case "logs":
 				<div
 					id="logs"
-					hx-get={ "/instances/" + inst.Name + "/logs" }
+					hx-get={ "/instances/" + url.PathEscape(inst.Name) + "/logs" }
 					hx-trigger="load"
 					hx-swap="outerHTML"
 				>
@@ -147,7 +147,7 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 			case "config":
 				<div
 					id="config"
-					hx-get={ "/instances/" + inst.Name + "/config" }
+					hx-get={ "/instances/" + url.PathEscape(inst.Name) + "/config" }
 					hx-trigger="load"
 					hx-swap="outerHTML"
 				>
@@ -156,7 +156,7 @@ templ InstanceBody(caps backend.Capabilities, inst backend.Instance, snapshots [
 			case "devices":
 				<div
 					id="devices"
-					hx-get={ "/instances/" + inst.Name + "/devices" }
+					hx-get={ "/instances/" + url.PathEscape(inst.Name) + "/devices" }
 					hx-trigger="load"
 					hx-swap="outerHTML"
 				>
@@ -244,7 +244,7 @@ templ instanceTabs(caps backend.Capabilities, name, active string, swap bool) {
 		}
 		if caps.Console {
 			<a
-				href={ templ.URL("/instances/" + name + "/console") }
+				href={ templ.URL("/instances/" + url.PathEscape(name) + "/console") }
 				hx-boost="false"
 				class={ "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm",
 					templ.KV("border-primary font-medium", active == "console"),
@@ -276,9 +276,9 @@ templ instanceTabs(caps backend.Capabilities, name, active string, swap bool) {
 // active tab is underlined.
 templ tabLink(name, tab, label, iconName, active string, swap bool) {
 	<a
-		href={ templ.URL("/instances/" + name + "?tab=" + tab) }
+		href={ templ.URL("/instances/" + url.PathEscape(name) + "?tab=" + tab) }
 		if swap {
-			hx-get={ "/instances/" + name + "?tab=" + tab }
+			hx-get={ "/instances/" + url.PathEscape(name) + "?tab=" + tab }
 			hx-target="#instance-body"
 			hx-swap="outerHTML"
 			hx-push-url="true"

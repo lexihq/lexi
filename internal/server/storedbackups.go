@@ -15,7 +15,7 @@ func (h handlers) backupsPanel(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	bks, err := h.backend.ListInstanceBackups(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.BackupsPanel(name, bks))
@@ -30,13 +30,13 @@ func (h handlers) createStoredBackup(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	expiresAt, err := parseSnapshotExpiry(r.Form.Get("expires_at"))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	backupName := strings.TrimSpace(r.Form.Get("name"))
 	instanceOnly := r.Form.Get("instance_only") != ""
 	if err := h.backend.CreateInstanceBackup(r.Context(), name, backupName, expiresAt, instanceOnly); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.redirectOrPanel(w, r, name)
@@ -45,7 +45,7 @@ func (h handlers) createStoredBackup(w http.ResponseWriter, r *http.Request) {
 func (h handlers) deleteStoredBackup(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.DeleteInstanceBackup(r.Context(), name, r.PathValue("backup")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.redirectOrPanel(w, r, name)
@@ -57,8 +57,12 @@ func (h handlers) downloadStoredBackup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/gzip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, name+"-"+backup+".tar.gz"))
 	if err := h.backend.ExportInstanceBackup(r.Context(), name, backup, w); err != nil {
-		// Headers may already be written; the broken download is the signal.
-		h.fail(w, err)
+		// The driver spools before writing, so failures arrive pre-body: drop
+		// the attachment headers so the error renders instead of downloading
+		// as a corrupt tarball (mirrors exportVolume).
+		w.Header().Del("Content-Disposition")
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		http.Error(w, err.Error(), statusFor(err))
 	}
 }
 
@@ -71,12 +75,12 @@ func (h handlers) restoreStoredBackup(w http.ResponseWriter, r *http.Request) {
 	}
 	newName := strings.TrimSpace(r.Form.Get("new_name"))
 	if newName == "" {
-		h.fail(w, fmt.Errorf("new instance name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("new instance name is required: %w", backend.ErrInvalid))
 		return
 	}
 	name := r.PathValue("name")
 	if err := h.backend.RestoreInstanceBackup(r.Context(), name, r.PathValue("backup"), newName); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/instances/"+url.PathEscape(newName), http.StatusSeeOther)
@@ -89,5 +93,5 @@ func (h handlers) redirectOrPanel(w http.ResponseWriter, r *http.Request, name s
 		h.backupsPanel(w, r)
 		return
 	}
-	http.Redirect(w, r, "/instances/"+url.PathEscape(name)+"?tab=backups", http.StatusSeeOther)
+	redirectToInstanceTab(w, name, "backups")
 }

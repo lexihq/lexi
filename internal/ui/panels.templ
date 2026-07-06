@@ -149,8 +149,8 @@ templ LimitsForm(inst backend.Instance) {
 		<h2 class="mb-3 text-lg font-medium">Resource limits</h2>
 		<form
 			method="post"
-			action={ templ.URL("/instances/" + inst.Name + "/limits") }
-			hx-post={ "/instances/" + inst.Name + "/limits" }
+			action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/limits") }
+			hx-post={ "/instances/" + url.PathEscape(inst.Name) + "/limits" }
 			hx-target="#limits"
 			hx-swap="outerHTML"
 			class="grid items-end gap-3 sm:grid-cols-3"
@@ -181,12 +181,15 @@ templ ConfigPanel(name string, cfg backend.InstanceConfig) {
 			<h2 class="mb-3 text-lg font-medium">Configuration</h2>
 			<form
 				method="post"
-				action={ templ.URL("/instances/" + name + "/config") }
-				hx-post={ "/instances/" + name + "/config" }
+				action={ templ.URL("/instances/" + url.PathEscape(name) + "/config") }
+				hx-post={ "/instances/" + url.PathEscape(name) + "/config" }
 				hx-target="#config"
 				hx-swap="outerHTML"
 				class="space-y-2"
 			>
+				// Conditional-write token: a concurrent config change conflicts
+				// (409) instead of being silently overwritten (see updateDevice).
+				<input type="hidden" name="version" value={ cfg.Version }/>
 				for _, k := range sortedKeys(cfg.Config) {
 					<div class="flex gap-2">
 						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
@@ -237,7 +240,7 @@ func inheritedDevices(cfg backend.InstanceConfig) map[string]map[string]string {
 // caps.Devices), inherited (read-only), and the typed add forms (caps.Devices).
 // Re-rendered standalone by addDevice/removeDevice (id="devices").
 templ DevicesSection(caps backend.Capabilities, name string, cfg backend.InstanceConfig) {
-	{{ base := "/instances/" + name + "/devices" }}
+	{{ base := "/instances/" + url.PathEscape(name) + "/devices" }}
 	<div id="devices" class="rounded-lg border bg-card p-4">
 		<h2 class="mb-3 text-lg font-medium">Devices</h2>
 		<h3 class="mb-2 text-sm font-medium text-muted-foreground">Local</h3>
@@ -391,7 +394,7 @@ templ MetricsPanel(name string, m backend.Metrics) {
 	<section
 		id="metrics"
 		class="mb-8 rounded-lg border bg-card p-4"
-		hx-get={ "/instances/" + name + "/metrics" }
+		hx-get={ "/instances/" + url.PathEscape(name) + "/metrics" }
 		hx-trigger="every 3s"
 		hx-swap="outerHTML"
 	>
@@ -416,7 +419,7 @@ templ MetricsCharts(name string) {
 	<section
 		id="metrics-charts"
 		data-instance={ name }
-		data-series-url={ "/instances/" + name + "/metrics/series" }
+		data-series-url={ "/instances/" + url.PathEscape(name) + "/metrics/series" }
 		class="mb-8 rounded-lg border bg-card p-4"
 	>
 		<h2 class="mb-3 text-lg font-medium">Resource history</h2>
@@ -444,7 +447,7 @@ templ LogsPanel(name string, log string) {
 	<section id="logs" class="mb-8 rounded-lg border bg-card p-4">
 		<div class="mb-3 flex flex-wrap items-center justify-between gap-4">
 			<h2 class="text-lg font-medium">Console log</h2>
-			@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-get": "/instances/" + name + "/logs", "hx-target": "#logs", "hx-swap": "outerHTML"}}) {
+			@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Attributes: templ.Attributes{"hx-get": "/instances/" + url.PathEscape(name) + "/logs", "hx-target": "#logs", "hx-swap": "outerHTML"}}) {
 				@icon.Icon("refresh-cw")(icon.Props{Class: "size-4"})
 				Refresh
 			}

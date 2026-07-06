@@ -13,7 +13,7 @@ import (
 func (h handlers) storagePools(w http.ResponseWriter, r *http.Request) {
 	pools, err := h.backend.ListStoragePools(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.StoragePoolsPage(h.backend.Capabilities(r.Context()), pools))
@@ -23,12 +23,12 @@ func (h handlers) storagePool(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
 	p, err := h.backend.GetStoragePool(r.Context(), pool)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	vols, err := h.backend.ListVolumes(r.Context(), pool)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	caps := h.backend.Capabilities(r.Context())
@@ -36,13 +36,13 @@ func (h handlers) storagePool(w http.ResponseWriter, r *http.Request) {
 	bucketKeys := map[string][]backend.BucketKey{}
 	if caps.StorageBuckets {
 		if buckets, err = h.backend.ListBuckets(r.Context(), pool); err != nil {
-			h.fail(w, err)
+			h.fail(w, r, err)
 			return
 		}
 		for _, bucket := range buckets {
 			keys, err := h.backend.ListBucketKeys(r.Context(), pool, bucket.Name)
 			if err != nil {
-				h.fail(w, err)
+				h.fail(w, r, err)
 				return
 			}
 			bucketKeys[bucket.Name] = keys
@@ -65,7 +65,7 @@ func (h handlers) createPool(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.Form.Get("name"))
 	driver := strings.TrimSpace(r.Form.Get("driver"))
 	if name == "" || driver == "" {
-		h.fail(w, fmt.Errorf("pool name and driver are required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("pool name and driver are required: %w", backend.ErrInvalid))
 		return
 	}
 	p := backend.StoragePool{
@@ -75,14 +75,12 @@ func (h handlers) createPool(w http.ResponseWriter, r *http.Request) {
 		Config:      zipConfigPairs(r.Form["key"], r.Form["value"]),
 	}
 	if err := h.backend.CreateStoragePool(r.Context(), p); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/storage", http.StatusSeeOther)
 }
 
-// deletePool removes an unused pool from its detail page, then redirects to
-// the list (the detail page no longer exists). In-use pools 409 in the backend.
 // updatePool applies the pool editor: description plus key/value rows that
 // replace the pool's config. The hidden version field carries the token the
 // form was rendered from, so a concurrent change conflicts (409) instead of
@@ -95,15 +93,17 @@ func (h handlers) updatePool(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
 	if err := h.backend.UpdateStoragePool(r.Context(), pool, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/storage/"+url.PathEscape(pool), http.StatusSeeOther)
 }
 
+// deletePool removes an unused pool from its detail page, then redirects to
+// the list (the detail page no longer exists). In-use pools 409 in the backend.
 func (h handlers) deletePool(w http.ResponseWriter, r *http.Request) {
 	if err := h.backend.DeleteStoragePool(r.Context(), r.PathValue("pool")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/storage", http.StatusSeeOther)
@@ -120,7 +120,7 @@ func (h handlers) createVolume(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.Form.Get("name"))
 	contentType := strings.TrimSpace(r.Form.Get("content_type"))
 	if name == "" || contentType == "" {
-		h.fail(w, fmt.Errorf("volume name and content type are required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("volume name and content type are required: %w", backend.ErrInvalid))
 		return
 	}
 	v := backend.StorageVolume{
@@ -129,7 +129,7 @@ func (h handlers) createVolume(w http.ResponseWriter, r *http.Request) {
 		Config:      zipConfigPairs(r.Form["key"], r.Form["value"]),
 	}
 	if err := h.backend.CreateVolume(r.Context(), pool, v); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderVolumesOrRedirect(w, r, pool)
@@ -139,7 +139,7 @@ func (h handlers) createVolume(w http.ResponseWriter, r *http.Request) {
 func (h handlers) deleteVolume(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
 	if err := h.backend.DeleteVolume(r.Context(), pool, r.PathValue("volume")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderVolumesOrRedirect(w, r, pool)
@@ -157,7 +157,7 @@ func (h handlers) renderVolumesOrRedirect(w http.ResponseWriter, r *http.Request
 	}
 	vols, err := h.backend.ListVolumes(r.Context(), pool)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.StorageVolumesTable(pool, vols))
@@ -168,12 +168,12 @@ func (h handlers) storageVolume(w http.ResponseWriter, r *http.Request) {
 	volume := r.PathValue("volume")
 	v, err := h.backend.GetVolume(r.Context(), pool, volume)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	snaps, err := h.backend.ListVolumeSnapshots(r.Context(), pool, volume)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	caps := h.backend.Capabilities(r.Context())
@@ -181,11 +181,11 @@ func (h handlers) storageVolume(w http.ResponseWriter, r *http.Request) {
 	var pools []backend.StoragePool
 	if caps.VolumeStoredBackups {
 		if backups, err = h.backend.ListVolumeBackups(r.Context(), pool, volume); err != nil {
-			h.fail(w, err)
+			h.fail(w, r, err)
 			return
 		}
 		if pools, err = h.backend.ListStoragePools(r.Context()); err != nil {
-			h.fail(w, err)
+			h.fail(w, r, err)
 			return
 		}
 	}
@@ -201,11 +201,11 @@ func (h handlers) createVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
 	volume := r.PathValue("volume")
 	snapshot := strings.TrimSpace(r.Form.Get("snapshot"))
 	if snapshot == "" {
-		h.fail(w, fmt.Errorf("snapshot name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("snapshot name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.CreateVolumeSnapshot(r.Context(), pool, volume, snapshot); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
@@ -215,7 +215,7 @@ func (h handlers) restoreVolumeSnapshot(w http.ResponseWriter, r *http.Request) 
 	pool := r.PathValue("pool")
 	volume := r.PathValue("volume")
 	if err := h.backend.RestoreVolumeSnapshot(r.Context(), pool, volume, r.PathValue("snap")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
@@ -225,7 +225,7 @@ func (h handlers) deleteVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
 	volume := r.PathValue("volume")
 	if err := h.backend.DeleteVolumeSnapshot(r.Context(), pool, volume, r.PathValue("snap")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
@@ -243,7 +243,7 @@ func (h handlers) updateVolume(w http.ResponseWriter, r *http.Request) {
 	volume := r.PathValue("volume")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
 	if err := h.backend.UpdateVolume(r.Context(), pool, volume, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/storage/"+url.PathEscape(pool)+"/volumes/"+url.PathEscape(volume), http.StatusSeeOther)
@@ -258,11 +258,11 @@ func (h handlers) renameVolume(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
 	newName := strings.TrimSpace(r.Form.Get("new_name"))
 	if newName == "" {
-		h.fail(w, fmt.Errorf("new volume name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("new volume name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.RenameVolume(r.Context(), pool, r.PathValue("volume"), newName); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/storage/"+url.PathEscape(pool)+"/volumes/"+url.PathEscape(newName), http.StatusSeeOther)
@@ -277,11 +277,11 @@ func (h handlers) renameVolumeSnapshot(w http.ResponseWriter, r *http.Request) {
 	volume := r.PathValue("volume")
 	newName := strings.TrimSpace(r.Form.Get("new_name"))
 	if newName == "" {
-		h.fail(w, fmt.Errorf("new snapshot name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("new snapshot name is required: %w", backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.RenameVolumeSnapshot(r.Context(), pool, volume, r.PathValue("snap"), newName); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
@@ -296,11 +296,11 @@ func (h handlers) updateVolumeSnapshotExpiry(w http.ResponseWriter, r *http.Requ
 	volume := r.PathValue("volume")
 	expiresAt, err := parseSnapshotExpiry(r.Form.Get("expires_at"))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if err := h.backend.UpdateVolumeSnapshotExpiry(r.Context(), pool, volume, r.PathValue("snap"), expiresAt); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderVolumeSnapshotsOrRedirect(w, r, pool, volume)
@@ -317,7 +317,7 @@ func (h handlers) renderVolumeSnapshotsOrRedirect(w http.ResponseWriter, r *http
 	}
 	snaps, err := h.backend.ListVolumeSnapshots(r.Context(), pool, volume)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.StorageVolumeSnapshotsTable(pool, volume, snaps))
@@ -330,7 +330,7 @@ func (h handlers) renderVolumeSnapshotsOrRedirect(w http.ResponseWriter, r *http
 func (h handlers) exportVolume(w http.ResponseWriter, r *http.Request) {
 	pool, volume := r.PathValue("pool"), r.PathValue("volume")
 	if _, err := h.backend.GetVolume(r.Context(), pool, volume); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -352,18 +352,18 @@ func (h handlers) importVolume(w http.ResponseWriter, r *http.Request) {
 	}
 	volume := strings.TrimSpace(r.FormValue("name"))
 	if volume == "" {
-		h.fail(w, fmt.Errorf("volume name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("volume name is required: %w", backend.ErrInvalid))
 		return
 	}
 	file, _, err := r.FormFile("backup")
 	if err != nil {
-		h.renderError(w, http.StatusBadRequest, "backup file is required")
+		h.renderError(w, r, http.StatusBadRequest, "backup file is required")
 		return
 	}
 	defer closeAndLog("uploaded volume backup", file)
 
 	if err := h.backend.ImportVolume(r.Context(), pool, volume, file); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/storage/"+url.PathEscape(pool), http.StatusSeeOther)
@@ -379,18 +379,18 @@ func (h handlers) uploadISOVolume(w http.ResponseWriter, r *http.Request) {
 	}
 	volume := strings.TrimSpace(r.FormValue("name"))
 	if volume == "" {
-		h.fail(w, fmt.Errorf("volume name is required: %w", backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("volume name is required: %w", backend.ErrInvalid))
 		return
 	}
 	file, _, err := r.FormFile("iso")
 	if err != nil {
-		h.renderError(w, http.StatusBadRequest, "ISO file is required")
+		h.renderError(w, r, http.StatusBadRequest, "ISO file is required")
 		return
 	}
 	defer closeAndLog("uploaded ISO image", file)
 
 	if err := h.backend.CreateVolumeFromISO(r.Context(), pool, volume, file); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	http.Redirect(w, r, "/storage/"+url.PathEscape(pool), http.StatusSeeOther)

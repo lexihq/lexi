@@ -55,13 +55,13 @@ func (h handlers) list(w http.ResponseWriter, r *http.Request) {
 }
 
 // instancesPartial renders just the instances table fragment for the list's
-// idle auto-refresh (bulk-actions.js polls this every few seconds while nothing
+// idle auto-refresh (bulk-actions.js polls this every 15s while nothing
 // is selected, so live status and CPU sparklines update without a manual
 // reload). It mirrors list's trend injection but emits only the table fragment.
 func (h handlers) instancesPartial(w http.ResponseWriter, r *http.Request) {
 	instances, err := h.backend.ListInstances(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	r = r.WithContext(ui.WithInstanceTrends(r.Context(), h.instanceTrends(r.Context(), instances)))
@@ -77,7 +77,7 @@ func (h handlers) instancesPartial(w http.ResponseWriter, r *http.Request) {
 func (h handlers) sidebar(w http.ResponseWriter, r *http.Request) {
 	instances, err := h.backend.ListInstances(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.SidebarInstances(instances, r.URL.Query().Get("active")))
@@ -139,7 +139,7 @@ func (h handlers) resume(w http.ResponseWriter, r *http.Request) {
 func (h handlers) delete(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	if err := h.backend.DeleteInstance(r.Context(), name); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {
@@ -179,26 +179,26 @@ var bulkOps = map[string]func(h handlers, r *http.Request, name, snap string) er
 // the first, then re-renders the table fragment reflecting the new state.
 func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		h.renderError(w, http.StatusBadRequest, err.Error())
+		h.renderError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	action := r.Form.Get("action")
 	names := r.Form["name"]
 	if len(names) == 0 {
-		h.renderError(w, http.StatusBadRequest, "select at least one instance")
+		h.renderError(w, r, http.StatusBadRequest, "select at least one instance")
 		return
 	}
 	meta, ok := ui.BulkActionByKey(action)
 	op := bulkOps[action]
 	if !ok || op == nil {
-		h.renderError(w, http.StatusBadRequest, "unknown bulk action")
+		h.renderError(w, r, http.StatusBadRequest, "unknown bulk action")
 		return
 	}
 	// Defensive at the boundary: the UI hides actions the tier doesn't support,
 	// but a crafted request could still post one — reject it once here instead of
 	// failing per instance.
 	if meta.Needs != nil && !meta.Needs(h.backend.Capabilities(r.Context())) {
-		h.renderError(w, http.StatusUnprocessableEntity, meta.Label+" is not supported here")
+		h.renderError(w, r, http.StatusUnprocessableEntity, meta.Label+" is not supported here")
 		return
 	}
 	// One shared snapshot name for the batch (each instance gets its own snapshot
@@ -243,7 +243,7 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 
 	instances, err := h.backend.ListInstances(r.Context())
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	msg := fmt.Sprintf("%s %d of %d", meta.Verb, len(names)-len(failed), len(names))
@@ -260,19 +260,26 @@ func (h handlers) bulk(w http.ResponseWriter, r *http.Request) {
 // it stops doing work and can be inspected (logs/console/config tabs) without
 // racing further. Snapshot-then-pause so the checkpoint captures the live state.
 func (h handlers) rescue(w http.ResponseWriter, r *http.Request) {
+	// The UI gates Rescue on Pause && Snapshots; re-check here so a crafted
+	// request can't leave a partial mutation (an orphan snapshot on a tier
+	// that then fails the pause) — same defense the bulk endpoint applies.
+	if caps := h.backend.Capabilities(r.Context()); !caps.Pause || !caps.Snapshots {
+		h.fail(w, r, fmt.Errorf("rescue is not supported here: %w", backend.ErrUnsupported))
+		return
+	}
 	name := r.PathValue("name")
 	snap := "rescue-" + time.Now().UTC().Format("20060102-150405")
 	if err := h.backend.CreateSnapshot(r.Context(), name, snap, backend.SnapshotOptions{}); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if err := h.backend.PauseInstance(r.Context(), name); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	inst, err := h.backend.GetInstance(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {
@@ -290,16 +297,16 @@ func (h handlers) clone(w http.ResponseWriter, r *http.Request) {
 	}
 	dst := strings.TrimSpace(r.Form.Get("dst"))
 	if dst == "" {
-		h.renderError(w, http.StatusBadRequest, "clone name is required")
+		h.renderError(w, r, http.StatusBadRequest, "clone name is required")
 		return
 	}
 	if err := h.backend.CloneInstance(r.Context(), r.PathValue("name"), dst); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	inst, err := h.backend.GetInstance(r.Context(), dst)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if isHTMX(r) {

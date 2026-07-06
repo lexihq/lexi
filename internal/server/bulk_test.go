@@ -140,3 +140,28 @@ func TestBulkRejectsEmptySelectionAndUnknownAction(t *testing.T) {
 		t.Fatalf("expected a untouched (Stopped), got %s", inst.Status)
 	}
 }
+
+// A batch with a failing member must report the failure by name in the toast
+// (and still apply the rest) — the partial-failure branch of the concurrent
+// apply path.
+func TestBulkPartialFailureReportsFailedNames(t *testing.T) {
+	b := seedInstances(t, "a", "b")
+	form := url.Values{"action": {"start"}, "name": {"a", "ghost", "b"}}
+
+	res := formRequest(t, New(b), "/instances/bulk", form, true)
+
+	assertStatus(t, res, http.StatusOK)
+	body := res.Body.String()
+	if !strings.Contains(body, "failed: ghost") {
+		t.Fatalf("expected the toast to name the failed instance, got %q", body)
+	}
+	for _, n := range []string{"a", "b"} {
+		inst, err := b.GetInstance(t.Context(), n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if inst.Status != backend.StatusRunning {
+			t.Fatalf("%s: expected Running despite the partial failure, got %s", n, inst.Status)
+		}
+	}
+}

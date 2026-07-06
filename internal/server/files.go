@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -43,7 +42,7 @@ func (h handlers) filesPanel(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	dir, err := requestPath(r)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderFiles(w, r, name, dir)
@@ -53,12 +52,12 @@ func (h handlers) filesPanel(w http.ResponseWriter, r *http.Request) {
 // redirects back to the instance's Files tab.
 func (h handlers) renderFiles(w http.ResponseWriter, r *http.Request, name, dir string) {
 	if !isHTMX(r) {
-		http.Redirect(w, r, "/instances/"+url.PathEscape(name)+"?tab=files", http.StatusSeeOther)
+		redirectToInstanceTab(w, name, "files")
 		return
 	}
 	entries, err := h.backend.ListFiles(r.Context(), name, dir)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.FilesPanel(h.backend.Capabilities(r.Context()), name, dir, entries))
@@ -91,7 +90,7 @@ func (h handlers) downloadFile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	filePath, err := requestPath(r)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	aw := &attachmentWriter{w: w, filename: path.Base(filePath)}
@@ -102,7 +101,7 @@ func (h handlers) downloadFile(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("download aborted mid-stream", "instance", name, "path", filePath, "err", err)
 			return
 		}
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if !aw.wrote {
@@ -119,12 +118,12 @@ func (h handlers) uploadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	dir, err := normalizeAbsPath(strings.TrimSpace(r.FormValue("path")))
 	if err != nil {
-		h.renderError(w, http.StatusBadRequest, "directory path must be absolute")
+		h.renderError(w, r, http.StatusBadRequest, "directory path must be absolute")
 		return
 	}
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		h.renderError(w, http.StatusBadRequest, "file is required")
+		h.renderError(w, r, http.StatusBadRequest, "file is required")
 		return
 	}
 	defer closeAndLog("uploaded file", file)
@@ -132,12 +131,12 @@ func (h handlers) uploadFile(w http.ResponseWriter, r *http.Request) {
 	// Some browsers send a client-side path; keep only the base name.
 	base := path.Base(strings.ReplaceAll(header.Filename, `\`, "/"))
 	if base == "." || base == "/" || base == "" {
-		h.renderError(w, http.StatusBadRequest, "upload has no usable file name")
+		h.renderError(w, r, http.StatusBadRequest, "upload has no usable file name")
 		return
 	}
 	target := strings.TrimSuffix(dir, "/") + "/" + base
 	if err := h.backend.PushFile(r.Context(), name, target, file, backend.FileWriteOptions{}); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderFiles(w, r, name, dir)
@@ -149,11 +148,11 @@ func (h handlers) deleteFile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	p, err := normalizeAbsPath(strings.TrimSpace(r.FormValue("path")))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if err := h.backend.DeleteFile(r.Context(), name, p); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderFiles(w, r, name, path.Dir(p))
@@ -174,22 +173,22 @@ func (h handlers) editFileForm(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	p, err := requestPath(r)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	var buf bytes.Buffer
 	info, err := h.backend.PullFileInfo(r.Context(), name, p, &buf, maxEditableFileBytes)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if info.Type != "file" {
-		h.renderError(w, http.StatusBadRequest, fmt.Sprintf("%q is not an editable file", p))
+		h.renderError(w, r, http.StatusBadRequest, fmt.Sprintf("%q is not an editable file", p))
 		return
 	}
 	content := buf.Bytes()
 	if bytes.ContainsRune(content, 0) || !utf8.Valid(content) {
-		h.renderError(w, http.StatusBadRequest, fmt.Sprintf("%q is a binary file; download it instead", p))
+		h.renderError(w, r, http.StatusBadRequest, fmt.Sprintf("%q is a binary file; download it instead", p))
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.FileEditorPage(h.backend.Capabilities(r.Context()), name, p, string(content), info))
@@ -202,17 +201,17 @@ func (h handlers) viewFile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	p, err := requestPath(r)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	var buf bytes.Buffer
 	info, truncated, err := h.backend.PullFileHead(r.Context(), name, p, &buf, maxViewableFileBytes)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	if info.Type != "file" {
-		h.renderError(w, http.StatusBadRequest, fmt.Sprintf("%q is not a viewable file", p))
+		h.renderError(w, r, http.StatusBadRequest, fmt.Sprintf("%q is not a viewable file", p))
 		return
 	}
 	// Neutralize bytes that break the page: invalid UTF-8 sequences and NUL
@@ -229,16 +228,18 @@ func (h handlers) saveFile(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	p, err := requestPath(r)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
-	// 4x leaves room for the URL-encoding of the form body (worst case 3x)
-	// plus the metadata fields; the decoded content is checked exactly below.
-	r.Body = http.MaxBytesReader(w, r.Body, 4*maxEditableFileBytes)
+	// 7x leaves room for the URL-encoding of the form body — textarea values
+	// are CRLF-normalized before percent-encoding, so an LF byte becomes
+	// %0D%0A (6x); other bytes encode to at most 3x — plus the metadata
+	// fields. The decoded content is checked exactly below.
+	r.Body = http.MaxBytesReader(w, r.Body, 7*maxEditableFileBytes)
 	if err := r.ParseForm(); err != nil {
 		var tooLarge *http.MaxBytesError
 		if errors.As(err, &tooLarge) {
-			h.renderError(w, http.StatusRequestEntityTooLarge, "file is too large to edit")
+			h.renderError(w, r, http.StatusRequestEntityTooLarge, "file is too large to edit")
 			return
 		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -246,34 +247,36 @@ func (h handlers) saveFile(w http.ResponseWriter, r *http.Request) {
 	}
 	uid, err := strconv.ParseInt(r.Form.Get("uid"), 10, 64)
 	if err != nil || uid < 0 {
-		h.fail(w, fmt.Errorf("bad uid %q: %w", r.Form.Get("uid"), backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("bad uid %q: %w", r.Form.Get("uid"), backend.ErrInvalid))
 		return
 	}
 	gid, err := strconv.ParseInt(r.Form.Get("gid"), 10, 64)
 	if err != nil || gid < 0 {
-		h.fail(w, fmt.Errorf("bad gid %q: %w", r.Form.Get("gid"), backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("bad gid %q: %w", r.Form.Get("gid"), backend.ErrInvalid))
 		return
 	}
-	if mode, err := strconv.ParseUint(r.Form.Get("mode"), 8, 32); err != nil || mode > 0o777 {
-		h.fail(w, fmt.Errorf("bad mode %q: %w", r.Form.Get("mode"), backend.ErrInvalid))
+	// 0o7777 admits the setuid/setgid/sticky bits the editor round-trips from
+	// the file's real mode ("%04o"), not just the permission bits.
+	if mode, err := strconv.ParseUint(r.Form.Get("mode"), 8, 32); err != nil || mode > 0o7777 {
+		h.fail(w, r, fmt.Errorf("bad mode %q: %w", r.Form.Get("mode"), backend.ErrInvalid))
 		return
 	}
 	// Textareas submit CRLF line endings; instance files are LF.
 	content := strings.ReplaceAll(r.Form.Get("content"), "\r\n", "\n")
 	if int64(len(content)) > maxEditableFileBytes {
-		h.renderError(w, http.StatusRequestEntityTooLarge, "file is too large to edit")
+		h.renderError(w, r, http.StatusRequestEntityTooLarge, "file is too large to edit")
 		return
 	}
 	if strings.ContainsRune(content, 0) || !utf8.ValidString(content) {
-		h.renderError(w, http.StatusBadRequest, "content must be text")
+		h.renderError(w, r, http.StatusBadRequest, "content must be text")
 		return
 	}
 	opts := backend.FileWriteOptions{Mode: r.Form.Get("mode"), UID: uid, GID: gid}
 	if err := h.backend.PushFile(r.Context(), name, p, strings.NewReader(content), opts); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
-	http.Redirect(w, r, "/instances/"+url.PathEscape(name)+"?tab=files", http.StatusSeeOther)
+	redirectToInstanceTab(w, name, "files")
 }
 
 // makeDirectory creates a folder named by the name form value inside the dir
@@ -282,16 +285,16 @@ func (h handlers) makeDirectory(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	dir, err := normalizeAbsPath(strings.TrimSpace(r.FormValue("dir")))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	folder := strings.TrimSpace(r.FormValue("name"))
 	if folder == "" || folder == "." || folder == ".." || strings.Contains(folder, "/") {
-		h.fail(w, fmt.Errorf("folder name %q must be a single path component: %w", folder, backend.ErrInvalid))
+		h.fail(w, r, fmt.Errorf("folder name %q must be a single path component: %w", folder, backend.ErrInvalid))
 		return
 	}
 	if err := h.backend.MakeDirectory(r.Context(), name, strings.TrimSuffix(dir, "/")+"/"+folder); err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderFiles(w, r, name, dir)

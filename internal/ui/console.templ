@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/lexihq/lexi/internal/backend"
+import (
+	"net/url"
+
+	"github.com/lexihq/lexi/internal/backend"
+)
 
 // ConsolePage hosts the interactive xterm.js terminal. The vendored xterm
 // scripts and console.js are deferred so they run in order after parsing; the
@@ -15,7 +19,7 @@ templ ConsolePage(caps backend.Capabilities, inst backend.Instance) {
 		@instanceTabs(caps, inst.Name, "console", false)
 		<div
 			id="terminal"
-			data-ws={ "/instances/" + inst.Name + "/console/ws" }
+			data-ws={ "/instances/" + url.PathEscape(inst.Name) + "/console/ws" }
 			class="h-[70vh] overflow-hidden rounded-lg border bg-black p-2"
 		></div>
 		<script src="/static/js/xterm.js" defer></script>

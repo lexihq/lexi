@@ -21,7 +21,7 @@ var wsUpgrader = websocket.Upgrader{}
 func (h handlers) console(w http.ResponseWriter, r *http.Request) {
 	inst, err := h.backend.GetInstance(r.Context(), r.PathValue("name"))
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.renderShell(w, r, http.StatusOK, ui.ConsolePage(h.backend.Capabilities(r.Context()), inst))
@@ -65,9 +65,18 @@ func (h handlers) consoleWS(w http.ResponseWriter, r *http.Request) {
 				if err := json.Unmarshal(data, &msg); err != nil {
 					continue
 				}
+				sz := backend.WinSize{Cols: msg.Cols, Rows: msg.Rows}
 				select {
-				case resize <- backend.WinSize{Cols: msg.Cols, Rows: msg.Rows}:
-				default: // drop a resize if one is already queued
+				case resize <- sz:
+				default: // replace a queued resize so the newest size wins
+					select {
+					case <-resize:
+					default:
+					}
+					select {
+					case resize <- sz:
+					default:
+					}
 				}
 			}
 		}
@@ -111,7 +120,7 @@ func (h handlers) logs(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	log, err := h.backend.ConsoleLog(r.Context(), name)
 	if err != nil {
-		h.fail(w, err)
+		h.fail(w, r, err)
 		return
 	}
 	h.render(w, r, http.StatusOK, ui.LogsPanel(name, log))

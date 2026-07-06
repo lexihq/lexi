@@ -40,18 +40,12 @@ func (b *incusBackend) MigrateInstance(ctx context.Context, name, targetRemote, 
 	if err != nil {
 		return fmt.Errorf("migrate %q to %q: %w", name, targetRemote, mapErr(err))
 	}
-	if err := op.Wait(); err != nil {
+	if err := waitRemoteOperation(ctx, op); err != nil {
 		return fmt.Errorf("migrate %q to %q: %w", name, targetRemote, mapErr(err))
 	}
 
 	delOp, err := src.DeleteInstance(name)
-	if err != nil {
-		return fmt.Errorf("remove migrated source %q: %w", name, mapErr(err))
-	}
-	if err := delOp.Wait(); err != nil {
-		return fmt.Errorf("remove migrated source %q: %w", name, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, delOp, err, "remove migrated source %q", name)
 }
 
 // ListRemotes reports the remotes that were reachable at startup, sorted by

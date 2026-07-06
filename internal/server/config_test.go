@@ -22,7 +22,7 @@ func TestZipConfigPairsDropsBlankKeys(t *testing.T) {
 func TestConfigPanelRenders(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
-	require.NoError(t, b.UpdateInstanceConfig(t.Context(), "demo", map[string]string{"security.nesting": "true"}))
+	require.NoError(t, b.UpdateInstanceConfig(t.Context(), "demo", map[string]string{"security.nesting": "true"}, ""))
 	res := request(t, New(b), "GET", "/instances/demo/config", "", true)
 	assertStatus(t, res, http.StatusOK)
 	assert.Contains(t, res.Body.String(), "security.nesting")
@@ -43,7 +43,7 @@ func TestUpdateConfigAppliesAndReturnsPanel(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
 	res := formRequest(t, New(b), "/instances/demo/config",
-		url.Values{"key": {"security.nesting", ""}, "value": {"true", ""}}, true)
+		url.Values{"key": {"security.nesting", ""}, "value": {"true", ""}, "version": {"0"}}, true)
 	assertStatus(t, res, http.StatusOK)
 	assert.Contains(t, res.Body.String(), "security.nesting")
 	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
@@ -57,7 +57,7 @@ func TestConfigPanelValueTextareaEscapesContent(t *testing.T) {
 	require.NoError(t, b.UpdateInstanceConfig(t.Context(), "demo", map[string]string{
 		"user.user-data": "#cloud-config\npackages:\n  - htop",
 		"user.evil":      "</textarea><script>boom()</script>",
-	}))
+	}, ""))
 	res := request(t, New(b), "GET", "/instances/demo/config", "", true)
 	assertStatus(t, res, http.StatusOK)
 	body := res.Body.String()
@@ -74,7 +74,7 @@ func TestUpdateConfigMultilineValueRoundTrips(t *testing.T) {
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
 	// Browsers submit textarea newlines as CRLF; stored values must be LF.
 	res := formRequest(t, New(b), "/instances/demo/config",
-		url.Values{"key": {"user.user-data"}, "value": {"#cloud-config\r\nruncmd:\r\n  - ls"}}, true)
+		url.Values{"key": {"user.user-data"}, "value": {"#cloud-config\r\nruncmd:\r\n  - ls"}, "version": {"0"}}, true)
 	assertStatus(t, res, http.StatusOK)
 	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
 	require.NoError(t, err)

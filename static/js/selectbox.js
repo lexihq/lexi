@@ -396,7 +396,9 @@
     
     // Handle typing on trigger to open and search
     if (activeElement?.matches('button.select-trigger')) {
-      if (e.key.length === 1 || e.key === 'Backspace') {
+      // Ignore browser/OS shortcuts (Ctrl/Cmd/Alt held) so type-to-search doesn't
+      // swallow Cmd+R, Ctrl+F, Ctrl+S, etc. while a trigger is focused.
+      if ((e.key.length === 1 || e.key === 'Backspace') && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         const content = getContentFromTrigger(activeElement);
         activeElement.click(); // Open popover

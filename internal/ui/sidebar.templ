@@ -113,9 +113,12 @@ templ Sidebar(caps backend.Capabilities, nav Nav) {
 // instance is highlighted from the active param the shell supplies.
 templ SidebarInstances(instances []backend.Instance, active string) {
 	for _, inst := range instances {
+		// data-status is the machine-readable state command-palette.js keys its
+		// lifecycle actions on — the human title must not double as an API.
 		<a
 			href={ templ.URL("/instances/" + url.PathEscape(inst.Name)) }
 			title={ inst.Name + " — " + string(inst.Status) }
+			data-status={ string(inst.Status) }
 			class={ "flex items-center gap-2 rounded-md px-3 py-1.5 text-sm",
 				templ.KV("bg-accent text-accent-foreground", inst.Name == active),
 				templ.KV("text-muted-foreground hover:text-foreground", inst.Name != active) }

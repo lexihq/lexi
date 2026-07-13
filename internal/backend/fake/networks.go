@@ -44,7 +44,7 @@ func (f *Fake) CreateNetwork(ctx context.Context, n backend.Network) error {
 		return conflict("network %q already exists", n.Name)
 	}
 	sp.networks[n.Name] = backend.Network{
-		Name: n.Name, Type: n.Type, Managed: true,
+		Name: n.Name, Type: n.Type, Managed: true, Status: "Created",
 		Description: n.Description, Config: maps.Clone(n.Config),
 	}
 	return nil

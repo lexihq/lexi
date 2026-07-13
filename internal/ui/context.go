@@ -65,7 +65,9 @@ func remoteSwitcherFrom(ctx context.Context) []backend.Remote {
 // scopeSuffix names the active project/remote for destructive confirm prompts,
 // e.g. " in project “staging” on “backup-host”". It stays empty for the common
 // single-scope setup (default project, one remote) so short prompts stay short;
-// it only speaks up when acting in the wrong scope is actually possible.
+// it only appears when the current scope is not the default one. Row-swap and
+// partial render paths must inject the project switcher (current name is
+// enough) or the clause silently disappears from re-rendered prompts.
 func scopeSuffix(ctx context.Context) string {
 	var s string
 	if ps := projectSwitcherFrom(ctx); ps.Current != "" && ps.Current != "default" {

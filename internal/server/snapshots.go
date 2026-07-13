@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -17,9 +18,11 @@ import (
 const snapshotExpiryLayout = "2006-01-02T15:04"
 
 // expiryDurationRe matches the duration shorthand operators think in ("2w",
-// "7d", "12h", "30m") — the same convention the snapshot schedule's expiry
-// field uses.
-var expiryDurationRe = regexp.MustCompile(`^(\d+)([mhdw])$`)
+// "7d", "12h", "30M"). Units follow the daemon's snapshots.expiry grammar —
+// M minutes, H hours, d days, w weeks, m MONTHS, y years — so the same string
+// means the same thing in both fields ("6m" is six months, not six minutes);
+// lowercase h is accepted as an unambiguous alias for hours.
+var expiryDurationRe = regexp.MustCompile(`^(\d+)([MHhdwmy])$`)
 
 func (h handlers) createSnapshot(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
@@ -127,7 +130,8 @@ func (h handlers) setSnapshotSchedule(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, ui.SnapshotScheduleForm(name, cur))
 }
 
-// parseSnapshotExpiry parses a datetime-local value as UTC; an empty value means
+// parseSnapshotExpiry parses a duration shorthand (expiryDurationRe) or an
+// absolute datetime-local value as UTC; an empty value means
 // "no expiry" (zero time). The <input type="datetime-local"> carries no timezone
 // offset, so we fix the interpretation to UTC (and label the field UTC) rather
 // than the server's local zone — otherwise the absolute expiry would shift with
@@ -141,15 +145,27 @@ func parseSnapshotExpiry(v string) (time.Time, error) {
 	// the primary form; an absolute UTC time still works for exact deadlines.
 	if m := expiryDurationRe.FindStringSubmatch(v); m != nil {
 		n, err := strconv.Atoi(m[1])
-		if err != nil {
+		if err != nil || n == 0 {
 			return time.Time{}, fmt.Errorf("invalid expiry %q: %w", v, backend.ErrInvalid)
 		}
-		unit := map[string]time.Duration{"m": time.Minute, "h": time.Hour, "d": 24 * time.Hour, "w": 7 * 24 * time.Hour}[m[2]]
-		return time.Now().UTC().Add(time.Duration(n) * unit), nil
+		now := time.Now().UTC()
+		switch m[2] {
+		case "m":
+			return now.AddDate(0, n, 0), nil
+		case "y":
+			return now.AddDate(n, 0, 0), nil
+		}
+		unit := map[string]time.Duration{"M": time.Minute, "H": time.Hour, "h": time.Hour, "d": 24 * time.Hour, "w": 7 * 24 * time.Hour}[m[2]]
+		if int64(n) > int64(math.MaxInt64)/int64(unit) {
+			// The multiplication would overflow into a negative duration and
+			// yield an expiry in the past — i.e. instant pruning.
+			return time.Time{}, fmt.Errorf("invalid expiry %q: %w", v, backend.ErrInvalid)
+		}
+		return now.Add(time.Duration(n) * unit), nil
 	}
 	t, err := time.Parse(snapshotExpiryLayout, v) // no zone in layout → parsed as UTC
 	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid expiry %q (use 2w/7d/12h or YYYY-MM-DDTHH:MM): %w", v, backend.ErrInvalid)
+		return time.Time{}, fmt.Errorf("invalid expiry %q (use 2w, 7d, 12h, 30M, 6m = months, or YYYY-MM-DDTHH:MM): %w", v, backend.ErrInvalid)
 	}
 	return t, nil
 }

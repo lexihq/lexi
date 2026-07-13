@@ -36,18 +36,13 @@
     if (gated) {
       nameEl.textContent = requireName;
       input.value = "";
-      accept.disabled = true;
-      accept.classList.add("opacity-50", "pointer-events-none");
-    } else {
-      accept.disabled = false;
-      accept.classList.remove("opacity-50", "pointer-events-none");
     }
+    // The dimmed/unclickable styling rides on the button's disabled: classes
+    // (confirm_dialog.templ), so only the property needs toggling here.
+    accept.disabled = gated;
 
     function syncGate() {
-      var ok = input.value === requireName;
-      accept.disabled = !ok;
-      accept.classList.toggle("opacity-50", !ok);
-      accept.classList.toggle("pointer-events-none", !ok);
+      accept.disabled = input.value !== requireName;
     }
     function onEnter(e) {
       if (e.key === "Enter") {

@@ -72,7 +72,7 @@ func TestDeleteHXRemovesRow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res := request(t, New(b), "POST", "/instances/demo/delete", "", true)
+	res := formRequest(t, New(b), "/instances/demo/delete", url.Values{"confirm": {"demo"}}, true)
 
 	assertStatus(t, res, http.StatusOK)
 	if body := strings.TrimSpace(res.Body.String()); body != "" {
@@ -84,6 +84,30 @@ func TestDeleteHXRemovesRow(t *testing.T) {
 	}
 	if len(instances) != 0 {
 		t.Fatalf("expected deleted instance, got %#v", instances)
+	}
+}
+
+// Delete is gated server-side like rebuild: a bare POST (or a mistyped
+// confirmation) must not destroy the instance.
+func TestDeleteWithoutTypedConfirmIs400(t *testing.T) {
+	b := fake.New()
+	if err := b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, form := range map[string]url.Values{
+		"missing":  {},
+		"mistyped": {"confirm": {"demo2"}},
+	} {
+		res := formRequest(t, New(b), "/instances/demo/delete", form, true)
+		assertStatus(t, res, http.StatusBadRequest)
+		instances, err := b.ListInstances(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(instances) != 1 {
+			t.Fatalf("%s: instance must survive an unconfirmed delete, got %#v", name, instances)
+		}
 	}
 }
 

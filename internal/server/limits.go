@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/lexihq/lexi/internal/backend"
-	"github.com/lexihq/lexi/internal/ui"
 )
 
 func (h handlers) updateLimits(w http.ResponseWriter, r *http.Request) {
@@ -21,14 +20,12 @@ func (h handlers) updateLimits(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	inst, err := h.backend.GetInstance(r.Context(), name)
-	if err != nil {
-		h.fail(w, r, err)
+	if !isHTMX(r) {
+		redirectToInstanceTab(w, name, "config")
 		return
 	}
-	if isHTMX(r) {
-		h.renderWithToast(w, r, http.StatusOK, ui.LimitsForm(inst), "Limits applied")
-		return
-	}
-	redirectToInstance(w, name)
+	// Re-render the whole Configuration panel: applying limits changes the
+	// instance's config version, so the sibling Options/raw forms' hidden
+	// tokens would otherwise go stale and 409 on their next save.
+	h.renderConfig(w, r, name, "Limits applied", false)
 }

@@ -78,6 +78,33 @@ func TestOperationsLogCapped(t *testing.T) {
 	}
 }
 
+// A still-running operation must survive the cap no matter how much newer
+// history piles on top — it has to stay visible (and cancelable), mirroring
+// Incus where running ops are always listed.
+func TestOperationsLogCapKeepsRunningOps(t *testing.T) {
+	b := New()
+	id := b.SeedRunningOperation("Migrating instance \"demo\"")
+	for i := range 60 {
+		mustCreate(t, b, fmt.Sprintf("i%d", i))
+	}
+	ops, err := b.ListOperations(ctx())
+	if err != nil {
+		t.Fatalf("list operations: %v", err)
+	}
+	found := false
+	for _, op := range ops {
+		if op.ID == id {
+			found = true
+			if op.Status != backend.OpRunning {
+				t.Fatalf("running op status changed: %q", op.Status)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("running op %s was evicted by the log cap (%d entries listed)", id, len(ops))
+	}
+}
+
 func TestCancelOperationMarksCancelled(t *testing.T) {
 	b := New()
 	id := b.SeedRunningOperation("Migrating instance \"demo\"")

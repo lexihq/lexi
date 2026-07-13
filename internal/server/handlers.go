@@ -52,13 +52,12 @@ func (h handlers) instanceAction(w http.ResponseWriter, r *http.Request, verb st
 // success toast.
 func (h handlers) renderInstanceRow(w http.ResponseWriter, r *http.Request, inst backend.Instance, msg string) {
 	ctx := ui.WithInstanceTrends(r.Context(), h.instanceTrends(r.Context(), []backend.Instance{inst}))
+	// The project scope must survive row swaps too: destructive confirm
+	// prompts name it via scopeSuffix (only the current name is needed here,
+	// not the full switcher list).
+	ctx = ui.WithProjectSwitcher(ctx, nil, backend.ProjectFromContext(r.Context()))
 	r = r.WithContext(h.withRemoteSwitcher(ctx))
-	row := ui.InstanceRow(h.backend.Capabilities(r.Context()), inst)
-	if msg == "" {
-		h.render(w, r, http.StatusOK, row)
-		return
-	}
-	h.renderWithToast(w, r, http.StatusOK, row, msg)
+	h.renderWithToast(w, r, http.StatusOK, ui.InstanceRow(h.backend.Capabilities(r.Context()), inst), msg)
 }
 
 func instanceURL(name string) string {
@@ -104,11 +103,13 @@ func (h handlers) renderError(w http.ResponseWriter, r *http.Request, code int, 
 // the thing that's failing.
 func (h handlers) renderErrorPage(w http.ResponseWriter, r *http.Request, code int, message string) {
 	page := ui.ErrorPage(h.backend.Capabilities(r.Context()), code, message)
-	if instances, err := h.backend.ListInstances(r.Context()); err == nil {
-		h.renderWithSidebar(w, r, code, instances, page)
+	instances, err := h.backend.ListInstances(r.Context())
+	if err != nil {
+		slog.Warn("error page sidebar", "err", err)
+		h.render(w, r, code, page)
 		return
 	}
-	h.render(w, r, code, page)
+	h.renderWithSidebar(w, r, code, instances, page)
 }
 
 // parseMultipartUpload bounds the request body to limit and parses it as a
@@ -159,8 +160,14 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, code int, compo
 
 // renderWithToast renders the success fragment and appends an out-of-band
 // success toast so the action is affirmed without disturbing the swapped target.
-// Callers gate this to HTMX requests (the non-HTMX path redirects instead).
+// An empty msg renders the fragment alone, so callers with an optional toast
+// don't each re-implement the branch. Callers gate this to HTMX requests (the
+// non-HTMX path redirects instead).
 func (h handlers) renderWithToast(w http.ResponseWriter, r *http.Request, code int, component templ.Component, msg string) {
+	if msg == "" {
+		h.render(w, r, code, component)
+		return
+	}
 	writeHTML(w, code)
 	if err := component.Render(r.Context(), w); err != nil {
 		slog.Warn("render after headers", "err", err)

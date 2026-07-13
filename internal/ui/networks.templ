@@ -125,17 +125,23 @@ templ NetworksTable(networks []backend.Network) {
 // ipv4.address (with ipv6.address appended when both are set), empty when the
 // network carries no addressing config (physical NICs, unmanaged).
 func networkSubnet(n backend.Network) string {
+	// "none" is a valid daemon value meaning "this family is disabled" — it is
+	// not addressing info, for either family.
 	v4 := n.Config["ipv4.address"]
+	if v4 == "none" {
+		v4 = ""
+	}
 	v6 := n.Config["ipv6.address"]
+	if v6 == "none" {
+		v6 = ""
+	}
 	switch {
-	case v4 != "" && v6 != "" && v6 != "none":
+	case v4 != "" && v6 != "":
 		return v4 + ", " + v6
 	case v4 != "":
 		return v4
-	case v6 != "" && v6 != "none":
-		return v6
 	}
-	return ""
+	return v6
 }
 
 // NetworkDetailPage shows a network's config and used-by, plus live state,

@@ -20,9 +20,7 @@ templ BackupsPanel(name string, backups []backend.InstanceBackup) {
 			<h2 class="text-lg font-medium">Backups</h2>
 			<form method="post" action={ templ.URL("/instances/" + en + "/backups") } hx-post={ "/instances/" + en + "/backups" } hx-target="#backups" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="name" placeholder="backup name (optional)"/>
-				<label class="flex items-center gap-1 text-sm text-muted-foreground">
-					<input type="datetime-local" name="expires_at" class="h-9 rounded-md border bg-background px-2 text-sm" title="Expiry in UTC (optional)"/> UTC
-				</label>
+				@expiryInput("", false)
 				<label class="flex items-center gap-1 text-sm text-muted-foreground">
 					<input type="checkbox" name="instance_only"/> instance only
 				</label>

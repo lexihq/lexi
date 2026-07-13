@@ -182,11 +182,13 @@ templ deviceList(devices map[string]map[string]string) {
 templ InstanceProfilesForm(inst backend.Instance, all []backend.Profile) {
 	<section id="profiles" class="mb-8 rounded-lg border bg-card p-4">
 		<h2 class="mb-3 text-lg font-medium">Profiles</h2>
+		// The form swaps the whole Configuration panel: applying profiles changes
+		// the config version the sibling forms carry as a hidden token.
 		<form
 			method="post"
 			action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/profiles") }
 			hx-post={ "/instances/" + url.PathEscape(inst.Name) + "/profiles" }
-			hx-target="#profiles"
+			hx-target="#config"
 			hx-swap="outerHTML"
 			class="space-y-2"
 		>

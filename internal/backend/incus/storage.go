@@ -14,6 +14,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -31,17 +32,25 @@ func (b *incusBackend) ListStoragePools(ctx context.Context) ([]backend.StorageP
 	}
 	out := make([]backend.StoragePool, 0, len(ps))
 	for i := range ps {
-		p := toPool(&ps[i])
-		// Capacity is best-effort: the list must render even when a pool's
-		// resources endpoint fails (e.g. an unavailable remote ceph pool).
-		if res, err := client.GetStoragePoolResources(p.Name); err == nil {
-			p.SpaceUsed = clampToInt64(res.Space.Used)
-			p.SpaceTotal = clampToInt64(res.Space.Total)
-		} else {
-			slog.Debug("storage pool resources", "pool", p.Name, "err", err)
-		}
-		out = append(out, p)
+		out = append(out, toPool(&ps[i]))
 	}
+	// Capacity is best-effort: the list must render even when a pool's
+	// resources endpoint fails (e.g. an unavailable remote ceph pool). Fetched
+	// concurrently — this list also feeds the instance page's create dialog,
+	// so N serial round trips would gate the most-visited page on the slowest
+	// pool.
+	var wg sync.WaitGroup
+	for i := range out {
+		wg.Go(func() {
+			if res, err := client.GetStoragePoolResources(out[i].Name); err == nil {
+				out[i].SpaceUsed = clampToInt64(res.Space.Used)
+				out[i].SpaceTotal = clampToInt64(res.Space.Total)
+			} else {
+				slog.Warn("storage pool resources", "pool", out[i].Name, "err", err)
+			}
+		})
+	}
+	wg.Wait()
 	return out, nil
 }
 
@@ -67,7 +76,7 @@ func (b *incusBackend) GetStoragePool(ctx context.Context, pool string) (backend
 		out.SpaceUsed = clampToInt64(res.Space.Used)
 		out.SpaceTotal = clampToInt64(res.Space.Total)
 	} else {
-		slog.Debug("storage pool resources", "pool", pool, "err", err)
+		slog.Warn("storage pool resources", "pool", pool, "err", err)
 	}
 	return out, nil
 }

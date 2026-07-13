@@ -32,6 +32,12 @@ func (h handlers) instanceTrends(ctx context.Context, instances []backend.Instan
 				trend.MemPercent = append(trend.MemPercent, float64(s.MemoryUsage)/float64(s.MemoryTotal)*100)
 			}
 		}
+		// The two sparklines render side by side over the same 80px; a memory
+		// series with holes (samples missing totals) would silently cover a
+		// different time window than the CPU one, so drop it instead.
+		if len(trend.MemPercent) != len(trend.CPU) {
+			trend.MemPercent = nil
+		}
 		last := samples[len(samples)-1]
 		trend.CPUNow = last.CPUPercent
 		trend.MemUsed = last.MemoryUsage
@@ -114,8 +120,10 @@ func (h handlers) instancesPartial(w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(ui.WithInstanceTrends(r.Context(), h.instanceTrends(r.Context(), instances)))
 	// The migrate menu reads the remote switcher context; inject it here too so
 	// the idle poll doesn't strip "Migrate…" from stopped rows (renderWithSidebar
-	// only adds it on the full page).
+	// only adds it on the full page). Likewise the project scope, which the
+	// destructive confirm prompts name via scopeSuffix.
 	r = r.WithContext(h.withRemoteSwitcher(r.Context()))
+	r = r.WithContext(ui.WithProjectSwitcher(r.Context(), nil, backend.ProjectFromContext(r.Context())))
 	h.render(w, r, http.StatusOK, ui.InstancesTable(h.backend.Capabilities(r.Context()), instances))
 }
 
@@ -179,7 +187,18 @@ func (h handlers) resume(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handlers) delete(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	name := r.PathValue("name")
+	// Same server-side typed-name gate as rebuild: the dialog's confirm input
+	// travels with the request (hx-include in deleteAttrs), so a bare POST
+	// can't fire the destructive path.
+	if strings.TrimSpace(r.Form.Get("confirm")) != name {
+		h.renderError(w, r, http.StatusBadRequest, "type the instance name to confirm the deletion")
+		return
+	}
 	if err := h.backend.DeleteInstance(r.Context(), name); err != nil {
 		h.fail(w, r, err)
 		return

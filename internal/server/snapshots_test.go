@@ -107,12 +107,14 @@ func TestSnapshotsTabIncludesScheduleLazyLoad(t *testing.T) {
 	assert.Contains(t, res.Body.String(), `/instances/demo/snapshots/schedule`)
 }
 
-// Expiry accepts operator-style durations ("2w", "7d", "12h") as well as the
-// absolute datetime-local form.
+// Expiry accepts operator-style durations as well as the absolute
+// datetime-local form. Units follow the daemon's snapshots.expiry grammar:
+// M is minutes, m is MONTHS.
 func TestParseSnapshotExpiryDurations(t *testing.T) {
 	for raw, want := range map[string]time.Duration{
-		"30m": 30 * time.Minute,
+		"30M": 30 * time.Minute,
 		"12h": 12 * time.Hour,
+		"12H": 12 * time.Hour,
 		"7d":  7 * 24 * time.Hour,
 		"2w":  14 * 24 * time.Hour,
 	} {
@@ -121,6 +123,25 @@ func TestParseSnapshotExpiryDurations(t *testing.T) {
 		assert.WithinDuration(t, time.Now().UTC().Add(want), got, time.Minute, raw)
 	}
 
-	_, err := parseSnapshotExpiry("2x")
-	require.ErrorIs(t, err, backend.ErrInvalid)
+	// Stray whitespace (mobile keyboards, paste) must not 400.
+	got, err := parseSnapshotExpiry(" 2w ")
+	require.NoError(t, err)
+	assert.WithinDuration(t, time.Now().UTC().Add(14*24*time.Hour), got, time.Minute)
+
+	// Months and years follow the calendar, not a fixed duration.
+	got, err = parseSnapshotExpiry("6m")
+	require.NoError(t, err)
+	assert.WithinDuration(t, time.Now().UTC().AddDate(0, 6, 0), got, time.Minute)
+	got, err = parseSnapshotExpiry("1y")
+	require.NoError(t, err)
+	assert.WithinDuration(t, time.Now().UTC().AddDate(1, 0, 0), got, time.Minute)
+
+	for _, raw := range []string{
+		"2x",                   // unknown unit
+		"0d",                   // zero duration = expiry now = instant pruning
+		"9223372036854775807M", // would overflow into a past timestamp
+	} {
+		_, err := parseSnapshotExpiry(raw)
+		require.ErrorIs(t, err, backend.ErrInvalid, raw)
+	}
 }

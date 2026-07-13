@@ -164,5 +164,8 @@ func (f *Fake) UpdateLimits(ctx context.Context, name string, l backend.Limits) 
 	}
 	in.LimitsCPU = l.CPU
 	in.LimitsMemory = l.Memory
+	// Incus PUTs the whole instance, changing its ETag; mirror that so stale
+	// config version tokens conflict here the same way they do in production.
+	in.configVersion++
 	return nil
 }

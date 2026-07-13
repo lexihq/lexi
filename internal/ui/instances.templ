@@ -31,20 +31,31 @@ type Overview struct {
 }
 
 // statusCounts tallies the list by lifecycle state for the overview band.
-func statusCounts(instances []backend.Instance) (running, stopped, frozen, broken int) {
+// Transient daemon states ("Starting", "Stopping", "Aborting", …) count as
+// busy, not stopped: a health band that reports a wedged instance as a calm
+// "stopped" would mislabel exactly the state it exists to surface.
+func statusCounts(instances []backend.Instance) (running, stopped, frozen, broken, busy int) {
 	for _, inst := range instances {
 		switch inst.Status {
 		case backend.StatusRunning:
 			running++
+		case backend.StatusStopped:
+			stopped++
 		case backend.StatusFrozen:
 			frozen++
 		case backend.StatusError:
 			broken++
 		default:
-			stopped++
+			busy++
 		}
 	}
-	return running, stopped, frozen, broken
+	return running, stopped, frozen, broken, busy
+}
+
+// statusCountChip is one dot+count entry in the band's Instances tile, colored
+// by the same mapping as the row badges and sidebar dots (statusDotClass).
+templ statusCountChip(status backend.InstanceStatus, n int, label string) {
+	<span class="flex items-center gap-1.5"><span class={ "size-2 rounded-full", statusDotClass(status) }></span>{ fmt.Sprint(n) } { label }</span>
 }
 
 // overviewTile is one card in the band: a muted label over a stat line.
@@ -61,17 +72,20 @@ templ overviewTile(label string) {
 // (they come from the list itself); the host/warnings/tasks tiles appear only
 // when their data was fetched.
 templ InstancesOverview(instances []backend.Instance, ov Overview) {
-	{{ running, stopped, frozen, broken := statusCounts(instances) }}
+	{{ running, stopped, frozen, broken, busy := statusCounts(instances) }}
 	<div class="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
 		@overviewTile("Instances") {
 			<div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-				<span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-green-500"></span>{ fmt.Sprint(running) } running</span>
-				<span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-gray-400"></span>{ fmt.Sprint(stopped) } stopped</span>
+				@statusCountChip(backend.StatusRunning, running, "running")
+				@statusCountChip(backend.StatusStopped, stopped, "stopped")
 				if frozen > 0 {
-					<span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-blue-500"></span>{ fmt.Sprint(frozen) } frozen</span>
+					@statusCountChip(backend.StatusFrozen, frozen, "frozen")
 				}
 				if broken > 0 {
-					<span class="flex items-center gap-1.5"><span class="size-2 rounded-full bg-red-500"></span>{ fmt.Sprint(broken) } error</span>
+					@statusCountChip(backend.StatusError, broken, "error")
+				}
+				if busy > 0 {
+					@statusCountChip("Starting", busy, "busy")
 				}
 			</div>
 		}
@@ -170,9 +184,10 @@ templ InstancesPage(caps backend.Capabilities, instances []backend.Instance, ima
 }
 
 // instancesToolbar is the filter row above the instance table: a text filter
-// (name/image/IP/profiles/tags) and a status select, both applied client-side
-// by list-filter.js. It lives outside #instances-table so typed state survives
-// the idle refresh swapping the table under it.
+// (substring match over each row's data cells — name, image, IP, profiles,
+// tags, status, dates; the actions cell is excluded) and a status select, both
+// applied client-side by list-filter.js. It lives outside #instances-table so
+// typed state survives the idle refresh swapping the table under it.
 templ instancesToolbar() {
 	<div class="mb-3 flex flex-wrap items-center gap-2">
 		<input
@@ -294,10 +309,8 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 		@table.Cell() {
 			<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/instances/" + url.PathEscape(inst.Name)) }>{ inst.Name }</a>
 			if len(inst.Tags) > 0 {
-				<div class="mt-1 flex flex-wrap gap-1">
-					for _, tag := range inst.Tags {
-						<span class="rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ tag }</span>
-					}
+				<div class="mt-1">
+					@tagChips(inst.Tags)
 				</div>
 			}
 		}
@@ -320,17 +333,12 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 		}
 		@table.Cell(table.CellProps{Class: "hidden lg:table-cell"}) {
 			{{ trend := instanceTrendFrom(ctx, inst.Name) }}
-			if len(trend.CPU) >= 2 {
+			// Gate on Running: the metrics store never evicts by age, so a
+			// stopped instance's last samples would otherwise keep rendering as
+			// if they were current.
+			if inst.Status == backend.StatusRunning && len(trend.CPU) >= 2 {
 				<div class="space-y-1" title={ "Limits: " + limitsSummary(inst) }>
-					<div class="text-xs">
-						CPU { fmt.Sprintf("%.0f%%", trend.CPUNow) }
-						if trend.MemUsed > 0 {
-							· { sizeLabel(trend.MemUsed) }
-							if trend.MemTotal > 0 {
-								/ { sizeLabel(trend.MemTotal) }
-							}
-						}
-					</div>
+					<div class="text-xs">{ usageNowLabel(trend) }</div>
 					<div class="flex items-center gap-2">
 						@usageSparkline(trend.CPU, fmt.Sprintf("CPU around %.0f%%", trend.CPUNow))
 						if len(trend.MemPercent) >= 2 {
@@ -339,8 +347,8 @@ templ InstanceRow(caps backend.Capabilities, inst backend.Instance) {
 					</div>
 				</div>
 			} else {
-				// No samples (stopped, or the store hasn't warmed): show the
-				// configured limits so the cell still says something useful.
+				// No live samples (stopped, or the store hasn't warmed): show
+				// the configured limits so the cell still says something useful.
 				<div title="CPU / memory limits">{ limitsSummary(inst) }</div>
 			}
 		}
@@ -598,6 +606,29 @@ templ instanceActionDialog(id, title, action, field, label, submit string, input
 	}
 }
 
+// tagChips renders the user.tags convention as small outlined chips, shared
+// by the list rows and the detail Summary so the styling can't drift.
+templ tagChips(tags []string) {
+	<span class="flex flex-wrap gap-1">
+		for _, tag := range tags {
+			<span class="rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ tag }</span>
+		}
+	</span>
+}
+
+// usageNowLabel formats the latest usage sample ("CPU 12% · 1.2 GiB / 4.0 GiB"),
+// shared by the list row and the detail Summary readouts.
+func usageNowLabel(t InstanceTrend) string {
+	s := fmt.Sprintf("CPU %.0f%%", t.CPUNow)
+	if t.MemUsed > 0 {
+		s += " · " + sizeLabel(t.MemUsed)
+		if t.MemTotal > 0 {
+			s += " / " + sizeLabel(t.MemTotal)
+		}
+	}
+	return s
+}
+
 // usageSparkline draws a tiny inline percent trend (0–100, oldest left) as an
 // SVG polyline so the list shows at-a-glance fleet load without opening each
 // instance. It uses currentColor (inherits the cell's text color, so it
@@ -654,11 +685,13 @@ func instanceActionAttrs(name, action string) templ.Attributes {
 
 // deleteAttrs arms the delete menu item: a scoped confirm prompt plus
 // data-confirm-name, which makes confirm-dialog.js require typing the instance
-// name before the destructive request fires.
+// name before the destructive request fires. hx-include ships the typed value
+// with the request so the server can enforce the same gate (see delete handler).
 func deleteAttrs(ctx context.Context, name string) templ.Attributes {
 	attrs := instanceActionAttrs(name, "delete")
 	attrs["hx-confirm"] = "Delete instance " + name + scopeSuffix(ctx) + "? This cannot be undone."
 	attrs["data-confirm-name"] = name
+	attrs["hx-include"] = "#confirm-dialog-input"
 	return attrs
 }
 
@@ -685,11 +718,15 @@ func statusDotClass(status backend.InstanceStatus) string {
 	switch status {
 	case backend.StatusRunning:
 		return "bg-green-500"
+	case backend.StatusStopped:
+		return "bg-gray-400"
 	case backend.StatusFrozen:
 		return "bg-blue-500"
 	case backend.StatusError:
 		return "bg-red-500"
 	default:
-		return "bg-gray-400"
+		// Transient/unknown daemon states ("Starting", "Aborting", …) deserve
+		// attention, not the calm stopped gray.
+		return "bg-amber-500"
 	}
 }

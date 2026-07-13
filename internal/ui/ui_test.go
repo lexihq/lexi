@@ -736,26 +736,41 @@ func TestDevicesSectionGatesEditingOnCapability(t *testing.T) {
 }
 
 func TestConfigPanelRendersRows(t *testing.T) {
-	html := render(t, ConfigPanel(testCaps(), backend.Instance{Name: "demo"}, nil, backend.InstanceConfig{
+	caps := testCaps()
+	caps.Config = true
+	html := render(t, ConfigPanel(caps, backend.Instance{Name: "demo"}, nil, backend.InstanceConfig{
 		Config: map[string]string{"security.nesting": "true"},
-	}))
+	}, false))
 	assertContains(t, html, `hx-post="/instances/demo/config"`)
 	assertContains(t, html, `value="security.nesting"`)
 	assertContains(t, html, `>true</textarea>`) // values render as textarea text
 	assertContains(t, html, `name="key"`)
+
+	// Without the raw-config capability the Options and raw editor stay
+	// hidden; the panel still hosts limits/profiles for tiers that have them.
+	bare := render(t, ConfigPanel(testCaps(), backend.Instance{Name: "demo"}, nil, backend.InstanceConfig{}, false))
+	if strings.Contains(bare, `hx-post="/instances/demo/config"`) || strings.Contains(bare, `hx-post="/instances/demo/options"`) {
+		t.Fatalf("config editors must be capability-gated, got %q", bare)
+	}
 }
 
-// The Options toggles reflect the current config: a set key checks its box,
-// and the form posts to the merge endpoint (not the whole-map replace).
+// The Options toggles reflect the current config — any daemon-truthy spelling
+// ("true", "1", "yes", "on") checks its box — and the form posts to the merge
+// endpoint (not the whole-map replace).
 func TestConfigPanelRendersOptionToggles(t *testing.T) {
-	html := render(t, ConfigPanel(testCaps(), backend.Instance{Name: "demo"}, nil, backend.InstanceConfig{
-		Config: map[string]string{"boot.autostart": "true"},
-	}))
+	caps := testCaps()
+	caps.Config = true
+	html := render(t, ConfigPanel(caps, backend.Instance{Name: "demo"}, nil, backend.InstanceConfig{
+		Config: map[string]string{"boot.autostart": "true", "security.nesting": "1"},
+	}, false))
 	assertContains(t, html, `hx-post="/instances/demo/options"`)
 	assertContains(t, html, "Start on boot")
 	assertContains(t, html, `name="boot.autostart" checked`)
-	assertContains(t, html, `name="security.nesting"`)
+	assertContains(t, html, `name="security.nesting" checked`)
 	assertContains(t, html, `name="security.privileged"`)
+	if strings.Contains(html, `name="security.privileged" checked`) {
+		t.Fatal("an unset key must render unchecked")
+	}
 }
 
 // Limits and profiles editors live on the Configuration tab now; the Summary
@@ -765,7 +780,7 @@ func TestConfigPanelHostsLimitsAndProfilesEditors(t *testing.T) {
 	caps.Limits = true
 	caps.Profiles = true
 	html := render(t, ConfigPanel(caps, backend.Instance{Name: "demo"},
-		[]backend.Profile{{Name: "default"}}, backend.InstanceConfig{}))
+		[]backend.Profile{{Name: "default"}}, backend.InstanceConfig{}, false))
 	assertContains(t, html, `hx-post="/instances/demo/limits"`)
 	assertContains(t, html, `hx-post="/instances/demo/profiles"`)
 
@@ -1210,4 +1225,53 @@ func TestImageRowLifecycleControls(t *testing.T) {
 	caps.ImageRefresh = false
 	html = render(t, ImagesTable(caps, withSource))
 	assertNotContains(t, html, "/refresh")
+}
+
+// scopeSuffix names non-default scopes in destructive confirm prompts and
+// stays silent for the common single-scope setup.
+func TestScopeSuffix(t *testing.T) {
+	base := context.Background()
+	if got := scopeSuffix(base); got != "" {
+		t.Fatalf("default scope must be empty, got %q", got)
+	}
+	ctx := WithProjectSwitcher(base, nil, "staging")
+	if got := scopeSuffix(ctx); got != " in project “staging”" {
+		t.Fatalf("project clause wrong: %q", got)
+	}
+	ctx = WithRemoteSwitcher(ctx, []backend.Remote{{Name: "local"}, {Name: "backup", Current: true}})
+	if got := scopeSuffix(ctx); got != " in project “staging” on “backup”" {
+		t.Fatalf("project+remote clause wrong: %q", got)
+	}
+	single := WithRemoteSwitcher(base, []backend.Remote{{Name: "local", Current: true}})
+	if got := scopeSuffix(single); got != "" {
+		t.Fatalf("single remote must stay silent, got %q", got)
+	}
+}
+
+// "none" is the daemon's "this family is disabled" value for either address
+// family; it is not addressing info.
+func TestNetworkSubnetTreatsNoneAsUnset(t *testing.T) {
+	n := backend.Network{Config: map[string]string{"ipv4.address": "none", "ipv6.address": "none"}}
+	if got := networkSubnet(n); got != "" {
+		t.Fatalf("none/none must render empty, got %q", got)
+	}
+	n.Config["ipv6.address"] = "fd42::1/64"
+	if got := networkSubnet(n); got != "fd42::1/64" {
+		t.Fatalf("v4=none must keep only v6, got %q", got)
+	}
+}
+
+// Transient daemon states count as busy, not stopped, so the health band
+// doesn't report a wedged instance as calm.
+func TestStatusCountsBucketsTransientAsBusy(t *testing.T) {
+	running, stopped, frozen, broken, busy := statusCounts([]backend.Instance{
+		{Status: backend.StatusRunning},
+		{Status: backend.StatusStopped},
+		{Status: "Starting"},
+		{Status: "Aborting"},
+		{Status: backend.StatusError},
+	})
+	if running != 1 || stopped != 1 || frozen != 0 || broken != 1 || busy != 2 {
+		t.Fatalf("got running=%d stopped=%d frozen=%d broken=%d busy=%d", running, stopped, frozen, broken, busy)
+	}
 }

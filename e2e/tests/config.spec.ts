@@ -8,9 +8,15 @@ test("edit instance config in the Configuration tab", async ({ page }) => {
   await page.goto("/instances/demo");
   await page.getByRole("link", { name: "Configuration" }).click();
   const config = page.locator("#config");
-  // The raw editor lives behind the Advanced disclosure; each panel re-render
-  // collapses it again, so reopen before touching the raw rows.
-  const openAdvanced = () => config.getByText("Advanced: raw configuration").click();
+  // The raw editor lives behind the Advanced disclosure. An options save
+  // re-renders it collapsed, but a raw-config save keeps it open — so only
+  // click the summary when it is actually closed, or the click closes it.
+  const advanced = config.locator("details").filter({ hasText: "Advanced: raw configuration" });
+  const openAdvanced = async () => {
+    if (!(await advanced.evaluate((d) => (d as HTMLDetailsElement).open))) {
+      await config.getByText("Advanced: raw configuration").click();
+    }
+  };
   await openAdvanced();
   await expect(config.getByRole("button", { name: "Apply config" })).toBeVisible();
 
@@ -75,7 +81,13 @@ test("config values support multiline (cloud-init)", async ({ page }) => {
   await page.goto("/instances/demo");
   await page.getByRole("link", { name: "Configuration" }).click();
   const config = page.locator("#config");
-  await config.getByText("Advanced: raw configuration").click();
+  const advanced = config.locator("details").filter({ hasText: "Advanced: raw configuration" });
+  const openAdvanced = async () => {
+    if (!(await advanced.evaluate((d) => (d as HTMLDetailsElement).open))) {
+      await config.getByText("Advanced: raw configuration").click();
+    }
+  };
+  await openAdvanced();
 
   await config.locator('input[name="key"]').last().fill("user.user-data");
   await config
@@ -90,7 +102,7 @@ test("config values support multiline (cloud-init)", async ({ page }) => {
   ]);
 
   // The re-rendered panel keeps all three lines in the value textarea.
-  await config.getByText("Advanced: raw configuration").click();
+  await openAdvanced();
   const row = page.locator('#config input[value="user.user-data"]');
   await expect(row).toBeVisible();
   await expect(

@@ -28,6 +28,13 @@
     const t = e.target;
     if (t.matches("[data-bulk-all]")) {
       document.querySelectorAll("[data-bulk-cb]").forEach((b) => {
+        // Never select rows hidden by the list filter: bulk actions post every
+        // checked box, visible or not, so select-all must not sweep up rows
+        // the user can't see. Unchecking still clears hidden rows.
+        if (t.checked) {
+          const tr = b.closest("tr");
+          if (tr && tr.style.display === "none") return;
+        }
         b.checked = t.checked;
       });
     }

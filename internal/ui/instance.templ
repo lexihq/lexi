@@ -209,11 +209,7 @@ templ SummaryPanel(inst backend.Instance, snapshots []backend.Snapshot) {
 					if len(inst.Tags) == 0 {
 						—
 					} else {
-						<span class="flex flex-wrap gap-1">
-							for _, tag := range inst.Tags {
-								<span class="rounded border px-1.5 py-0.5 text-xs text-muted-foreground">{ tag }</span>
-							}
-						</span>
+						@tagChips(inst.Tags)
 					}
 				</dd>
 			</div>
@@ -226,18 +222,12 @@ templ SummaryPanel(inst backend.Instance, snapshots []backend.Snapshot) {
 					}
 				</dd>
 			</div>
-			if len(trend.CPU) > 0 {
+			// Gate on Running: the metrics store never evicts by age, so "now"
+			// must not be a stopped instance's last retained sample.
+			if inst.Status == backend.StatusRunning && len(trend.CPU) > 0 {
 				<div>
 					<dt class="text-muted-foreground">Usage now</dt>
-					<dd>
-						CPU { fmt.Sprintf("%.0f%%", trend.CPUNow) }
-						if trend.MemUsed > 0 {
-							· { sizeLabel(trend.MemUsed) }
-							if trend.MemTotal > 0 {
-								/ { sizeLabel(trend.MemTotal) }
-							}
-						}
-					</dd>
+					<dd>{ usageNowLabel(trend) }</dd>
 				</div>
 			}
 		</dl>
@@ -302,7 +292,10 @@ func effectiveTab(caps backend.Capabilities, tab string) string {
 			return "logs"
 		}
 	case "config":
-		if caps.Config {
+		// The Configuration tab also hosts the limits and profiles editors, so
+		// a tier with either capability keeps an edit path even without the
+		// raw-config capability.
+		if caps.Config || caps.Limits || caps.Profiles {
 			return "config"
 		}
 	case "devices":
@@ -351,8 +344,12 @@ templ instanceTabs(caps backend.Capabilities, name, active string, swap bool) {
 		if caps.Console {
 			@tabLink(name, "logs", "Logs", "scroll-text", active, swap)
 		}
-		if caps.Config {
+		if caps.Config || caps.Limits || caps.Profiles {
+			// Configuration hosts the limits/profiles editors too, so it stays
+			// reachable for tiers with those capabilities but no raw config.
 			@tabLink(name, "config", "Configuration", "settings", active, swap)
+		}
+		if caps.Config {
 			@tabLink(name, "devices", "Devices", "hard-drive", active, swap)
 		}
 		if caps.Files {

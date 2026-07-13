@@ -16,9 +16,10 @@
 
   // buildItems reads the sidebar's nav links and instance links. Deduped by href
   // so the active page (rendered twice) doesn't double up. Each instance also
-  // contributes state-appropriate action entries (the sidebar link's title
-  // carries "name — Status"), so the keyboard can run "stop web-01" without a
-  // page visit.
+  // contributes state-appropriate action entries (from the sidebar link's
+  // data-status attribute), so the keyboard can run "stop web-01" without a
+  // page visit. Console entries respect the tier's capability via the aside's
+  // data-caps-console flag.
   function buildItems() {
     const items = [];
     const seen = new Set();
@@ -34,12 +35,14 @@
       const name = (a.querySelector(".truncate") || a).textContent.trim();
       const href = a.getAttribute("href");
       add(name, href, "Instance");
-      const title = a.getAttribute("title") || "";
-      if (/ — Running$/.test(title)) {
+      const status = a.getAttribute("data-status") || "";
+      if (status === "Running") {
         add("Stop " + name, href + "/stop", "Action", true);
         add("Restart " + name, href + "/restart", "Action", true);
-        add("Console " + name, href + "/console", "Action");
-      } else if (/ — Stopped$/.test(title)) {
+        if (a.closest("aside[data-caps-console]")) {
+          add("Console " + name, href + "/console", "Action");
+        }
+      } else if (status === "Stopped") {
         add("Start " + name, href + "/start", "Action", true);
       }
     });
@@ -97,8 +100,16 @@
     if (it.post) {
       // Lifecycle actions POST like their buttons do (same-origin keeps the
       // CSRF guard satisfied), then refresh so every view reflects the new
-      // state.
-      fetch(it.href, { method: "POST" }).finally(() => window.location.reload());
+      // state. Failures must not be silently reloaded over: surface them as
+      // the same error toast the htmx paths produce (errors.js).
+      fetch(it.href, { method: "POST" })
+        .then((res) => {
+          if (!res.ok) throw new Error("request failed (" + res.status + ")");
+          window.location.reload();
+        })
+        .catch((err) => {
+          document.body.appendChild(textErrorToast(err.message || "action failed"));
+        });
       return;
     }
     window.location.assign(it.href);

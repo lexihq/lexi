@@ -193,6 +193,18 @@ func ParseTags(raw string) []string {
 	return tags
 }
 
+// IsTrue reports whether a config value is truthy in the daemon's boolean
+// vocabulary: Incus accepts "true", "1", "yes", and "on" (case-insensitive)
+// for boolean keys, so UI state derived from config values must not compare
+// against the literal "true" alone.
+func IsTrue(v string) bool {
+	switch strings.ToLower(v) {
+	case "true", "1", "yes", "on":
+		return true
+	}
+	return false
+}
+
 // Limits caps an instance's CPU and memory. Empty strings mean "leave unset"
 // (and clear any existing limit on update).
 type Limits struct {
@@ -270,8 +282,9 @@ type StoragePool struct {
 	Description string
 	Config      map[string]string
 	UsedBy      []string
-	// SpaceUsed/SpaceTotal are the pool's disk usage in bytes, populated on
-	// list entries for the capacity column; 0 total = unknown.
+	// SpaceUsed/SpaceTotal are the pool's disk usage in bytes, populated
+	// best-effort (from the pool resources endpoint) by both ListStoragePools
+	// and GetStoragePool; 0 total = unknown.
 	SpaceUsed  int64
 	SpaceTotal int64
 	// Version is an opaque concurrency token for UpdateStoragePool, populated

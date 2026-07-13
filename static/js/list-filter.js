@@ -27,7 +27,7 @@
     dataRows(t).forEach(function (tr) {
       // Status matches its own column (cell 2), not the whole row: "Running"
       // as free text could sit in an image alias or tag.
-      var hit = (!q || tr.textContent.toLowerCase().indexOf(q) !== -1) &&
+      var hit = (!q || rowText(tr).indexOf(q) !== -1) &&
         (!st || cellText(tr, 2).indexOf(st) !== -1);
       tr.style.display = hit ? "" : "none";
       if (!hit) {
@@ -61,8 +61,8 @@
     rows.forEach(function (tr) {
       tbody.appendChild(tr);
     });
-    // Reflect the active sort on the fresh headers (the table body is swapped
-    // whole every 15s, wiping any previous aria-sort).
+    // Reflect the active sort on the fresh headers (the idle refresh replaces
+    // the whole table fragment, thead included, wiping any previous aria-sort).
     var heads = t.querySelectorAll("thead th");
     heads.forEach(function (th, i) {
       if (!th.hasAttribute("data-sort")) return;
@@ -77,6 +77,19 @@
   function cellText(tr, i) {
     var cell = tr.cells[i];
     return cell ? cell.textContent.trim() : "";
+  }
+
+  function rowText(tr) {
+    // Free-text matches the data cells only, excluding the trailing actions
+    // cell: its kebab menu and inline dialogs contain words like "Start",
+    // "Console", "Delete" that would otherwise match every row.
+    return Array.prototype.slice
+      .call(tr.cells, 0, -1)
+      .map(function (c) {
+        return c.textContent;
+      })
+      .join(" ")
+      .toLowerCase();
   }
 
   document.addEventListener("input", function (e) {
@@ -108,9 +121,21 @@
     }
   });
 
-  // The idle refresh (and bulk actions) replace #instances-table wholesale;
-  // re-apply the active filter and sort to the fresh rows.
-  document.body.addEventListener("htmx:afterSwap", function (e) {
-    if (e.target && (e.target.id === "instances-table" || e.target.querySelector("#instances-table"))) apply();
-  });
+  // The idle refresh (and bulk actions) replace #instances-table wholesale,
+  // and lifecycle actions swap a single <tr> inside it; re-apply the active
+  // filter and sort in every case so a row that just changed status honors
+  // the current view immediately, not at the next poll.
+  //
+  // Both afterSwap AND afterSettle: for an outerHTML swap htmx finalizes the
+  // swapped-in subtree during the settle phase, which lands after afterSwap and
+  // clears the inline display:none the afterSwap apply() just set — so a filter
+  // active across an idle refresh would flicker the hidden rows back on. Settle
+  // is the last word, so re-applying there makes the filter stick.
+  function reapplyOnSwap(e) {
+    var t = e.target;
+    if (!t || !t.querySelector) return;
+    if (t.id === "instances-table" || t.querySelector("#instances-table") || (t.closest && t.closest("#instances-table"))) apply();
+  }
+  document.body.addEventListener("htmx:afterSwap", reapplyOnSwap);
+  document.body.addEventListener("htmx:afterSettle", reapplyOnSwap);
 })();

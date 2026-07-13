@@ -7,15 +7,32 @@ import { test, expect } from "@playwright/test";
 test("detail header lifecycle controls update status in place", async ({ page }) => {
   await page.goto("/instances/demo");
   const header = page.locator("#instance-header");
+
+  // The header re-swaps itself on every action, so each freshly-swapped button
+  // can lose its first click to the settle race (suite-wide pattern). Retry the
+  // click until the lifecycle POST actually fires, then assert the new status.
+  const act = async (button: string) => {
+    await expect(async () => {
+      const [resp] = await Promise.all([
+        page.waitForResponse(
+          (r) => r.request().method() === "POST" && r.url().includes("/instances/demo/"),
+          { timeout: 2000 },
+        ),
+        header.getByRole("button", { name: button, exact: true }).click(),
+      ]);
+      expect(resp.ok()).toBeTruthy();
+    }).toPass({ timeout: 10000 });
+  };
+
   await expect(header.getByText("Stopped")).toBeVisible(); // seeded state
 
   // Start from the header: status flips without a navigation.
-  await header.getByRole("button", { name: "Start", exact: true }).click();
+  await act("Start");
   await expect(header.getByText("Running")).toBeVisible();
   await expect(page).toHaveURL(/\/instances\/demo$/);
 
   // Stop again so later tests see the seeded state.
-  await header.getByRole("button", { name: "Stop", exact: true }).click();
+  await act("Stop");
   await expect(header.getByText("Stopped")).toBeVisible();
 });
 

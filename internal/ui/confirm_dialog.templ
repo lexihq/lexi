@@ -23,16 +23,18 @@ templ ConfirmDialog() {
 				<p id="confirm-dialog-message" class="mt-1 break-words text-sm text-muted-foreground"></p>
 				// Typed-name gate for the most destructive actions: confirm-dialog.js
 				// unhides this when the trigger carries data-confirm-name and keeps
-				// Confirm disabled until the input matches.
+				// Confirm disabled until the input matches. The input is named so a
+				// trigger with hx-include can ship the typed value for the server's
+				// own gate (see the delete handler).
 				<label id="confirm-dialog-name-row" class="mt-3 hidden text-sm">
 					<span class="text-muted-foreground">Type <strong id="confirm-dialog-name" class="font-medium text-foreground"></strong> to confirm</span>
-					<input id="confirm-dialog-input" type="text" autocomplete="off" spellcheck="false" class="mt-1.5 h-9 w-full rounded-md border bg-background px-3 font-mono text-sm"/>
+					<input id="confirm-dialog-input" name="confirm" type="text" autocomplete="off" spellcheck="false" class="mt-1.5 h-9 w-full rounded-md border bg-background px-3 font-mono text-sm"/>
 				</label>
 			</div>
 		</div>
 		<div class="mt-5 flex justify-end gap-2">
 			<button type="button" id="confirm-dialog-cancel" class="inline-flex h-9 cursor-pointer items-center rounded-md border px-4 text-sm font-medium transition-colors hover:bg-accent focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none">Cancel</button>
-			<button type="button" id="confirm-dialog-accept" class="inline-flex h-9 cursor-pointer items-center rounded-md bg-destructive px-4 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none">Confirm</button>
+			<button type="button" id="confirm-dialog-accept" class="inline-flex h-9 cursor-pointer items-center rounded-md bg-destructive px-4 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50">Confirm</button>
 		</div>
 	</dialog>
 }

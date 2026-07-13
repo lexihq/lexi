@@ -187,17 +187,14 @@ func (h handlers) setInstanceProfiles(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	all, err := h.backend.ListProfiles(r.Context())
-	if err != nil {
-		h.fail(w, r, err)
+	if !isHTMX(r) {
+		redirectToInstanceTab(w, name, "config")
 		return
 	}
-	inst.Profiles = ordered
-	if isHTMX(r) {
-		h.renderWithToast(w, r, http.StatusOK, ui.InstanceProfilesForm(inst, all), "Profiles applied")
-		return
-	}
-	redirectToInstance(w, name)
+	// Re-render the whole Configuration panel: applying profiles changes the
+	// instance's config version, so the sibling Options/raw forms' hidden
+	// tokens would otherwise go stale and 409 on their next save.
+	h.renderConfig(w, r, name, "Profiles applied", false)
 }
 
 // mergeProfileOrder keeps currently-assigned profiles that are still checked in

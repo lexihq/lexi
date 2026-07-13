@@ -206,7 +206,9 @@ func TestUpdateDeviceMissingVersionIs400(t *testing.T) {
 }
 
 // updateOptions merges only the toggle keys: other config keys survive, a
-// checked box sets "true", an unchecked one removes the key.
+// checked box sets "true", and unchecking a truthy key writes an explicit
+// "false" (never a delete, which would let a profile-provided "true" silently
+// take its place).
 func TestUpdateOptionsMergesToggleKeys(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
@@ -223,8 +225,45 @@ func TestUpdateOptionsMergesToggleKeys(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "true", cfg.Config["boot.autostart"])
 	assert.Equal(t, "keep me", cfg.Config["user.note"])
-	// security.nesting was set but its box came back unchecked → removed.
-	assert.NotContains(t, cfg.Config, "security.nesting")
+	// security.nesting was on but its box came back unchecked → explicit off.
+	assert.Equal(t, "false", cfg.Config["security.nesting"])
+	// security.privileged was never set and stayed unchecked → still absent
+	// (no local override is minted for an untouched toggle).
+	assert.NotContains(t, cfg.Config, "security.privileged")
+}
+
+// A save must round-trip the daemon's whole boolean vocabulary: a key set to
+// "1" (checked in the UI) is not rewritten or deleted by an unrelated apply,
+// and an explicit "false" override survives untouched.
+func TestUpdateOptionsPreservesTruthySpellingsAndFalseOverrides(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo"}))
+	require.NoError(t, b.UpdateInstanceConfig(t.Context(), "demo",
+		map[string]string{"boot.autostart": "1", "security.nesting": "false"}, ""))
+	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+
+	// The browser resubmits autostart checked (it renders checked for "1");
+	// nesting stays unchecked. Nothing was actually changed by the operator.
+	res := formRequest(t, New(b), "/instances/demo/options",
+		url.Values{"version": {cfg.Version}, "boot.autostart": {"on"}}, true)
+	assertStatus(t, res, http.StatusOK)
+
+	cfg, err = b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "1", cfg.Config["boot.autostart"], "truthy spelling must not be rewritten")
+	assert.Equal(t, "false", cfg.Config["security.nesting"], "explicit false override must survive")
+
+	// A programmatic POST sending an explicit falsy value must not enable the
+	// option (presence alone is not consent).
+	cfg, err = b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	res = formRequest(t, New(b), "/instances/demo/options",
+		url.Values{"version": {cfg.Version}, "security.privileged": {"false"}, "boot.autostart": {"on"}}, true)
+	assertStatus(t, res, http.StatusOK)
+	cfg, err = b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.NotContains(t, cfg.Config, "security.privileged")
 }
 
 func TestUpdateOptionsRequiresVersionToken(t *testing.T) {

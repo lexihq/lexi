@@ -15,23 +15,27 @@ import (
 // limits/profiles editors, and the raw key/value editor. Devices live on their
 // own tab (devicesPanel).
 func (h handlers) config(w http.ResponseWriter, r *http.Request) {
-	h.renderConfig(w, r, r.PathValue("name"), "")
+	h.renderConfig(w, r, r.PathValue("name"), "", false)
 }
 
 // renderConfig gathers the Configuration tab's data and renders it, with an
-// optional out-of-band success toast for the mutating callers.
-func (h handlers) renderConfig(w http.ResponseWriter, r *http.Request, name, msg string) {
+// optional out-of-band success toast for the mutating callers. advancedOpen
+// keeps the raw editor's disclosure open across the re-render so a multi-key
+// editing session isn't snapped shut by its own save.
+func (h handlers) renderConfig(w http.ResponseWriter, r *http.Request, name, msg string, advancedOpen bool) {
 	inst, err := h.backend.GetInstance(r.Context(), name)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
 	caps := h.backend.Capabilities(r.Context())
+	var cfg backend.InstanceConfig
+	if caps.Config {
+		if cfg, err = h.backend.GetInstanceConfig(r.Context(), name); err != nil {
+			h.fail(w, r, err)
+			return
+		}
+	}
 	var profiles []backend.Profile
 	if caps.Profiles {
 		if profiles, err = h.backend.ListProfiles(r.Context()); err != nil {
@@ -39,18 +43,17 @@ func (h handlers) renderConfig(w http.ResponseWriter, r *http.Request, name, msg
 			return
 		}
 	}
-	panel := ui.ConfigPanel(caps, inst, profiles, cfg)
-	if msg == "" {
-		h.render(w, r, http.StatusOK, panel)
-		return
-	}
-	h.renderWithToast(w, r, http.StatusOK, panel, msg)
+	h.renderWithToast(w, r, http.StatusOK, ui.ConfigPanel(caps, inst, profiles, cfg, advancedOpen), msg)
 }
 
 // updateOptions applies the friendly Options toggles: it merges just the
-// ui.InstanceOptions keys into the current editable config (checked = "true",
-// unchecked = key removed) so the raw editor's other keys are untouched. The
-// version token makes the read-merge-write conditional, same as updateConfig.
+// ui.InstanceOptions keys into the current editable config so the raw editor's
+// other keys are untouched. Checking a toggle writes "true" (an existing
+// truthy spelling like "1" is left alone); unchecking a truthy key writes an
+// explicit "false" rather than deleting it, so a value inherited from a
+// profile can't silently take its place; absent or already-falsy keys are not
+// touched. The version token makes the read-merge-write conditional, same as
+// updateConfig.
 func (h handlers) updateOptions(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -71,10 +74,12 @@ func (h handlers) updateOptions(w http.ResponseWriter, r *http.Request) {
 		next = map[string]string{}
 	}
 	for _, opt := range ui.InstanceOptions {
-		if r.Form.Get(opt.Key) != "" {
+		checked := backend.IsTrue(r.Form.Get(opt.Key))
+		switch on := backend.IsTrue(next[opt.Key]); {
+		case checked && !on:
 			next[opt.Key] = "true"
-		} else {
-			delete(next, opt.Key)
+		case !checked && on:
+			next[opt.Key] = "false"
 		}
 	}
 	if err := h.backend.UpdateInstanceConfig(r.Context(), name, next, r.Form.Get("version")); err != nil {
@@ -85,7 +90,7 @@ func (h handlers) updateOptions(w http.ResponseWriter, r *http.Request) {
 		redirectToInstanceTab(w, name, "config")
 		return
 	}
-	h.renderConfig(w, r, name, "Options saved")
+	h.renderConfig(w, r, name, "Options saved", false)
 }
 
 // devicesPanel renders the lazy-loaded Devices tab: local devices (editable),
@@ -119,7 +124,7 @@ func (h handlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		redirectToInstanceTab(w, name, "config")
 		return
 	}
-	h.renderConfig(w, r, name, "Configuration saved")
+	h.renderConfig(w, r, name, "Configuration saved", true)
 }
 
 // addDevice attaches a local device built from the typed form (type + device
@@ -201,12 +206,7 @@ func (h handlers) renderDevices(w http.ResponseWriter, r *http.Request, name, ms
 		redirectToInstance(w, name)
 		return
 	}
-	section := ui.DevicesSection(h.backend.Capabilities(r.Context()), name, cfg)
-	if msg == "" {
-		h.render(w, r, http.StatusOK, section)
-		return
-	}
-	h.renderWithToast(w, r, http.StatusOK, section, msg)
+	h.renderWithToast(w, r, http.StatusOK, ui.DevicesSection(h.backend.Capabilities(r.Context()), name, cfg), msg)
 }
 
 // mergeDeviceFields applies a device-edit form onto the device's current config:

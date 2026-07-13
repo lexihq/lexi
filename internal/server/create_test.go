@@ -126,3 +126,34 @@ func TestImagesFilter(t *testing.T) {
 		assert.NotContains(t, body, "debian/12")
 	})
 }
+
+// The create dialog's Tags/CPU/Memory quick fields are sugar over their config
+// keys, and an explicit advanced-config entry for the same key wins over the
+// sugar field.
+func TestCreateQuickFieldsMapToConfigKeys(t *testing.T) {
+	b := fake.New()
+	form := url.Values{
+		"name":   {"demo"},
+		"image":  {"fake-debian-12-aarch64"},
+		"tags":   {"web, prod"},
+		"cpu":    {"2"},
+		"memory": {"2GiB"},
+		// Advanced config sets limits.cpu explicitly: it must win over cpu=2.
+		"key":   {"limits.cpu"},
+		"value": {"4"},
+	}
+
+	res := formRequest(t, New(b), "/instances", form, true)
+	assertStatus(t, res, http.StatusOK)
+
+	// limits.* are managed keys surfaced on the Instance view; tags stay in
+	// the editable config.
+	inst, err := b.GetInstance(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"web", "prod"}, inst.Tags)
+	assert.Equal(t, "4", inst.LimitsCPU, "advanced entry must win over the sugar field")
+	assert.Equal(t, "2GiB", inst.LimitsMemory)
+	cfg, err := b.GetInstanceConfig(t.Context(), "demo")
+	require.NoError(t, err)
+	assert.Equal(t, "web, prod", cfg.Config["user.tags"])
+}

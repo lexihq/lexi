@@ -11,30 +11,33 @@ test("console terminal round-trips typed input over the websocket", async ({ pag
 
   // The console only mounts a terminal for a running instance (a stopped one
   // gets an explanation card instead); start the seeded demo for the session
-  // and stop it again so later specs still see the seeded stopped state.
+  // and stop it again so later specs still see the seeded stopped state. The
+  // stop lives in finally so one flaky assertion can't leak a Running demo
+  // into every later spec.
   await page.request.post("/instances/demo/start");
+  try {
+    await page.goto("/instances/demo/console");
+    await expect(page).toHaveTitle(/demo · console/);
 
-  await page.goto("/instances/demo/console");
-  await expect(page).toHaveTitle(/demo · console/);
+    // xterm has mounted once it renders its row container.
+    const terminal = page.locator("#terminal");
+    await expect(terminal.locator(".xterm-rows")).toBeVisible();
 
-  // xterm has mounted once it renders its row container.
-  const terminal = page.locator("#terminal");
-  await expect(terminal.locator(".xterm-rows")).toBeVisible();
+    // Type a unique command into xterm's hidden input; each keystroke flows
+    // through term.onData -> ws.send(binary).
+    const marker = "lexi-e2e-ping";
+    const input = page.locator("textarea.xterm-helper-textarea");
+    await input.focus();
+    await input.pressSequentially(marker);
+    await input.press("Enter");
 
-  // Type a unique command into xterm's hidden input; each keystroke flows
-  // through term.onData -> ws.send(binary).
-  const marker = "lexi-e2e-ping";
-  const input = page.locator("textarea.xterm-helper-textarea");
-  await input.focus();
-  await input.pressSequentially(marker);
-  await input.press("Enter");
+    // The fake echoes the bytes back as binary stdout frames, which xterm renders.
+    await expect(terminal).toContainText(marker, { timeout: 5_000 });
 
-  // The fake echoes the bytes back as binary stdout frames, which xterm renders.
-  await expect(terminal).toContainText(marker, { timeout: 5_000 });
-
-  expect(errors, "no uncaught page errors").toEqual([]);
-
-  await page.request.post("/instances/demo/stop");
+    expect(errors, "no uncaught page errors").toEqual([]);
+  } finally {
+    await page.request.post("/instances/demo/stop");
+  }
 });
 
 test("console page keeps the instance tab bar for navigation", async ({ page }) => {

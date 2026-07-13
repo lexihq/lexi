@@ -473,9 +473,7 @@ templ VolumeBackupsTable(caps backend.Capabilities, pool, volume string, backups
 			<h2 class="text-lg font-medium">Backups</h2>
 			<form method="post" action={ templ.URL(base) } hx-post={ base } hx-target="#volume-backups" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="name" placeholder="backup name (optional)"/>
-				<label class="flex items-center gap-1 text-sm text-muted-foreground">
-					<input type="datetime-local" name="expires_at" class="h-9 rounded-md border bg-background px-2 text-sm" title="Expiry in UTC (optional)"/> UTC
-				</label>
+				@expiryInput("", false)
 				<label class="flex items-center gap-1 text-sm text-muted-foreground">
 					<input type="checkbox" name="volume_only"/> volume only
 				</label>
@@ -657,7 +655,7 @@ templ StorageVolumeSnapshotsTable(pool, volume string, snapshots []backend.Stora
 									}
 								</form>
 								<form method="post" action={ templ.URL("/storage/" + ep + "/volumes/" + ev + "/snapshots/" + es + "/expiry") } hx-post={ "/storage/" + ep + "/volumes/" + ev + "/snapshots/" + es + "/expiry" } hx-target="#volume-snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
-									<input name="expires_at" placeholder="2w, 7d…" class="h-8 w-24 rounded-md border bg-background px-2 text-sm" title="Duration like 2w/7d/12h or UTC time (YYYY-MM-DDTHH:MM); empty clears"/>
+									@expiryInput("", true)
 									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
 										Set expiry
 									}

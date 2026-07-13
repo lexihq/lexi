@@ -243,9 +243,7 @@ templ ImagesTable(caps backend.Capabilities, images []backend.LocalImage) {
 											Auto-update
 										</label>
 									}
-									<label class="flex items-center gap-1 text-xs text-muted-foreground">
-										<input type="datetime-local" name="expires_at" value={ imageExpiryValue(img.ExpiresAt) } class="h-7 rounded border bg-background px-1 text-xs" title="Expiry in UTC (empty clears)"/> UTC
-									</label>
+									@expiryInput(imageExpiryValue(img.ExpiresAt), true)
 									@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
 										Save
 									}

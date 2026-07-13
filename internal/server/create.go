@@ -130,9 +130,6 @@ func (h handlers) create(w http.ResponseWriter, r *http.Request) {
 	// advanced-config entry for the same key wins over the sugar field.
 	for field, key := range map[string]string{"tags": "user.tags", "cpu": "limits.cpu", "memory": "limits.memory"} {
 		if v := strings.TrimSpace(r.Form.Get(field)); v != "" && config[key] == "" {
-			if config == nil {
-				config = map[string]string{}
-			}
 			config[key] = v
 		}
 	}

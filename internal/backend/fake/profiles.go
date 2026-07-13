@@ -226,6 +226,9 @@ func (f *Fake) SetInstanceProfiles(ctx context.Context, name string, profiles []
 		}
 	}
 	in.Profiles = append([]string(nil), profiles...)
+	// Incus PUTs the whole instance, changing its ETag; mirror that so stale
+	// config version tokens conflict here the same way they do in production.
+	in.configVersion++
 	return nil
 }
 

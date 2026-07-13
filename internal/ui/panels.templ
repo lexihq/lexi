@@ -10,6 +10,19 @@ import (
 	"github.com/lexihq/lexi/internal/components/table"
 )
 
+// expiryInput is the shared free-text expiry field used by every form whose
+// handler parses expires_at via parseSnapshotExpiry: durations ("2w", "7d",
+// "12h", "30M"; lowercase m is months, matching the daemon's expiry grammar)
+// or an absolute UTC time. value pre-fills the field (image expiry edit);
+// compact is the smaller in-table variant.
+templ expiryInput(value string, compact bool) {
+	if compact {
+		<input name="expires_at" value={ value } placeholder="2w, 7d…" class="h-8 w-24 rounded-md border bg-background px-2 text-sm" title="Duration like 2w/7d/12h (m = months) or UTC time (YYYY-MM-DDTHH:MM); empty clears"/>
+	} else {
+		<input name="expires_at" value={ value } placeholder="expiry: 2w, 7d…" class="h-9 w-36 rounded-md border bg-background px-3 text-sm" title="Optional expiry: a duration like 2w, 7d, 12h (m = months) — or a UTC time (YYYY-MM-DDTHH:MM)"/>
+	}
+}
+
 // This file holds the per-tab content panels for the instance detail page. The
 // tab bar and shell live in instance.templ; each panel is rendered by its tab
 // case (snapshots/limits inline, metrics/logs/config lazily via hx-get).
@@ -20,7 +33,7 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 			<h2 class="text-lg font-medium">Snapshots</h2>
 			<form method="post" action={ templ.URL("/instances/" + en + "/snapshots") } hx-post={ "/instances/" + en + "/snapshots" } hx-target="#snapshots" hx-swap="outerHTML" class="flex flex-wrap items-center gap-2">
 				<input class="h-9 rounded-md border bg-background px-3 text-sm" name="snapshot" placeholder="snapshot name"/>
-				<input name="expires_at" placeholder="expiry: 2w, 7d…" class="h-9 w-36 rounded-md border bg-background px-3 text-sm" title="Optional expiry: a duration like 2w, 7d, 12h — or a UTC time (YYYY-MM-DDTHH:MM)"/>
+				@expiryInput("", false)
 				<label class="flex items-center gap-1 text-sm text-muted-foreground">
 					<input type="checkbox" name="stateful"/> stateful
 				</label>
@@ -101,7 +114,7 @@ templ SnapshotTable(name string, snapshots []backend.Snapshot) {
 											}
 										</form>
 										<form method="post" action={ templ.URL("/instances/" + en + "/snapshots/" + es + "/expiry") } hx-post={ "/instances/" + en + "/snapshots/" + es + "/expiry" } hx-target="#snapshots" hx-swap="outerHTML" class="flex items-center gap-1">
-											<input name="expires_at" placeholder="2w, 7d…" class="h-8 w-24 rounded-md border bg-background px-2 text-sm" title="Duration like 2w/7d/12h or UTC time (YYYY-MM-DDTHH:MM); empty clears"/>
+											@expiryInput("", true)
 											@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
 												Set expiry
 											}
@@ -150,8 +163,10 @@ templ SnapshotScheduleForm(name string, schedule backend.SnapshotSchedule) {
 	</section>
 }
 
-// LimitsForm renders the resource-limits editor; it re-renders itself in place
-// after an HTMX submit so the inputs reflect the applied values.
+// LimitsForm renders the resource-limits editor. A save swaps the whole
+// Configuration panel (not just this section): applying limits changes the
+// instance's config version, and the sibling Options/raw forms carry that
+// version as a hidden token which would otherwise go stale and 409.
 templ LimitsForm(inst backend.Instance) {
 	<section id="limits" class="mb-8 rounded-lg border bg-card p-4">
 		<h2 class="mb-3 text-lg font-medium">Resource limits</h2>
@@ -159,7 +174,7 @@ templ LimitsForm(inst backend.Instance) {
 			method="post"
 			action={ templ.URL("/instances/" + url.PathEscape(inst.Name) + "/limits") }
 			hx-post={ "/instances/" + url.PathEscape(inst.Name) + "/limits" }
-			hx-target="#limits"
+			hx-target="#config"
 			hx-swap="outerHTML"
 			class="grid items-end gap-3 sm:grid-cols-3"
 		>
@@ -193,46 +208,52 @@ var InstanceOptions = []struct {
 
 // ConfigPanel is the lazy-loaded Configuration tab body: friendly Options
 // toggles and the limits/profiles editors up front, with the whole-map raw
-// key/value editor demoted to an "Advanced" disclosure. Submitting the raw
-// editor replaces the editable config (blank-key rows are dropped, so clearing
-// a key removes it); the trailing blank row adds one.
-templ ConfigPanel(caps backend.Capabilities, inst backend.Instance, profiles []backend.Profile, cfg backend.InstanceConfig) {
+// key/value editor demoted to an "Advanced" disclosure (advancedOpen keeps it
+// open across the re-render a raw save triggers). Submitting the raw editor
+// replaces the editable config (blank-key rows are dropped, so clearing a key
+// removes it); the trailing blank row adds one. The toggles show the local
+// config only: an option enabled by a profile with no local override renders
+// unchecked, and saving leaves it untouched.
+templ ConfigPanel(caps backend.Capabilities, inst backend.Instance, profiles []backend.Profile, cfg backend.InstanceConfig, advancedOpen bool) {
 	{{ name := inst.Name }}
 	<section id="config" class="space-y-6">
-		<div class="rounded-lg border bg-card p-4">
-			<h2 class="mb-3 text-lg font-medium">Options</h2>
-			<form
-				method="post"
-				action={ templ.URL("/instances/" + url.PathEscape(name) + "/options") }
-				hx-post={ "/instances/" + url.PathEscape(name) + "/options" }
-				hx-target="#config"
-				hx-swap="outerHTML"
-				class="space-y-3"
-			>
-				<input type="hidden" name="version" value={ cfg.Version }/>
-				for _, opt := range InstanceOptions {
-					<label class="flex items-start gap-2 text-sm">
-						<input type="checkbox" name={ opt.Key } checked?={ cfg.Config[opt.Key] == "true" } class="mt-0.5"/>
-						<span>
-							<span class="font-medium">{ opt.Label }</span>
-							<span class="block text-xs text-muted-foreground">{ opt.Help }</span>
-						</span>
-					</label>
-				}
-				@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline}) {
-					@icon.Icon("save")(icon.Props{Class: "size-4"})
-					Apply options
-				}
-			</form>
-		</div>
+		if caps.Config {
+			<div class="rounded-lg border bg-card p-4">
+				<h2 class="mb-3 text-lg font-medium">Options</h2>
+				<form
+					method="post"
+					action={ templ.URL("/instances/" + url.PathEscape(name) + "/options") }
+					hx-post={ "/instances/" + url.PathEscape(name) + "/options" }
+					hx-target="#config"
+					hx-swap="outerHTML"
+					class="space-y-3"
+				>
+					<input type="hidden" name="version" value={ cfg.Version }/>
+					for _, opt := range InstanceOptions {
+						<label class="flex items-start gap-2 text-sm">
+							<input type="checkbox" name={ opt.Key } checked?={ backend.IsTrue(cfg.Config[opt.Key]) } class="mt-0.5"/>
+							<span>
+								<span class="font-medium">{ opt.Label }</span>
+								<span class="block text-xs text-muted-foreground">{ opt.Help }</span>
+							</span>
+						</label>
+					}
+					@button.Button(button.Props{Type: button.TypeSubmit, Variant: button.VariantOutline}) {
+						@icon.Icon("save")(icon.Props{Class: "size-4"})
+						Apply options
+					}
+				</form>
+			</div>
+		}
 		if caps.Limits {
 			@LimitsForm(inst)
 		}
 		if caps.Profiles {
 			@InstanceProfilesForm(inst, profiles)
 		}
-		<details class="rounded-lg border bg-card p-4">
-			<summary class="cursor-pointer text-lg font-medium">Advanced: raw configuration</summary>
+		if caps.Config {
+			<details class="rounded-lg border bg-card p-4" open?={ advancedOpen }>
+				<summary class="cursor-pointer text-lg font-medium">Advanced: raw configuration</summary>
 			<form
 				method="post"
 				action={ templ.URL("/instances/" + url.PathEscape(name) + "/config") }
@@ -259,8 +280,9 @@ templ ConfigPanel(caps backend.Capabilities, inst backend.Instance, profiles []b
 					@icon.Icon("save")(icon.Props{Class: "size-4"})
 					Apply config
 				}
-			</form>
-		</details>
+				</form>
+			</details>
+		}
 	</section>
 }
 

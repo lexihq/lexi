@@ -1,18 +1,26 @@
 # Build the single self-contained lexi binary and ship it on a minimal base.
 # The stylesheet (static/css/app.css) is committed, so the build stage only
 # regenerates the templ Go sources; no tailwind/node toolchain is needed.
-FROM golang:1.26 AS build
+# Build on the native runner arch and cross-compile to the target arch via
+# GOARCH — a static Go binary needs no emulation, so this stays fast for arm64
+# even on an amd64 runner (no QEMU).
+FROM --platform=$BUILDPLATFORM golang:1.26 AS build
 WORKDIR /src
 
 # Cache module downloads separately from the source tree.
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
 COPY . .
-# Pin templ to the go.mod version; the @version form resolves its own deps
-# without needing entries in this module's go.sum.
-RUN go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate \
- && CGO_ENABLED=0 GOOS=linux go build -o /lexi ./cmd/lexi
+# TARGETARCH is supplied by buildx per requested platform. templ generate is
+# arch-independent (runs at native speed); go build cross-compiles. Pin templ
+# to the go.mod version; the @version form resolves its own deps without needing
+# entries in this module's go.sum.
+ARG TARGETARCH
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go run github.com/a-h/templ/cmd/templ@v0.3.1020 generate \
+ && CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -o /lexi ./cmd/lexi
 
 # distroless/static carries CA certificates (needed for TLS Incus remotes and
 # images.linuxcontainers.org) and runs as an unprivileged user by default.

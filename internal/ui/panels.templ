@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"github.com/lexihq/lexi/internal/backend"
+	"github.com/lexihq/lexi/internal/components/badge"
 	"github.com/lexihq/lexi/internal/components/button"
 	"github.com/lexihq/lexi/internal/components/icon"
 	"github.com/lexihq/lexi/internal/components/table"
@@ -265,10 +266,16 @@ templ ConfigPanel(caps backend.Capabilities, inst backend.Instance, profiles []b
 				// Conditional-write token: a concurrent config change conflicts
 				// (409) instead of being silently overwritten (see updateDevice).
 				<input type="hidden" name="version" value={ string(cfg.Version) }/>
+				{{ overrides := profileOverrides(inst, profiles, cfg) }}
 				for _, k := range sortedKeys(cfg.Config) {
-					<div class="flex gap-2">
+					<div class="flex flex-wrap items-center gap-2">
 						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
 						<textarea name="value" rows="1" class="min-h-9 w-1/2 resize-y rounded-md border bg-background px-3 py-1.5 text-sm">{ cfg.Config[k] }</textarea>
+						if from, ok := overrides[k]; ok {
+							@badge.Badge(badge.Props{Variant: badge.VariantSecondary, Attributes: templ.Attributes{"title": "Diverges from profile " + from + "; the local value takes precedence."}}) {
+								Overrides { from }
+							}
+						}
 					</div>
 				}
 				<div class="flex gap-2">
@@ -298,6 +305,36 @@ var DeviceTypes = []struct {
 	{"gpu", []string{"gputype", "id", "pci"}},
 	{"proxy", []string{"listen", "connect", "bind"}},
 	{"tpm", []string{"path"}},
+}
+
+// profileOverrides maps each local config key whose value diverges from the
+// value an attached profile would set to the name of the profile it overrides
+// (config drift). Profiles are layered in inst.Profiles order — later profiles
+// win, matching Incus expansion — so the reported name is the last attached
+// profile that sets the key. Keys not set by any attached profile, or set to
+// the same value, are absent (local-only or in agreement, no drift badge). This
+// is the config analogue of the devices Local/Inherited split, computed purely
+// from data already at the render site (no ExpandedConfig needed).
+func profileOverrides(inst backend.Instance, profiles []backend.Profile, cfg backend.InstanceConfig) map[string]string {
+	byName := make(map[string]backend.Profile, len(profiles))
+	for _, p := range profiles {
+		byName[p.Name] = p
+	}
+	out := map[string]string{}
+	for key, local := range cfg.Config {
+		val, from, found := "", "", false
+		for _, name := range inst.Profiles {
+			if p, ok := byName[name]; ok {
+				if v, ok := p.Config[key]; ok {
+					val, from, found = v, name, true
+				}
+			}
+		}
+		if found && val != local {
+			out[key] = from
+		}
+	}
+	return out
 }
 
 // inheritedDevices returns the expanded devices not present in LocalDevices

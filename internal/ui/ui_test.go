@@ -790,6 +790,34 @@ func TestConfigPanelHostsLimitsAndProfilesEditors(t *testing.T) {
 	}
 }
 
+// The raw config editor badges a local key whose value diverges from the value
+// an attached profile would set (config drift), and leaves alone keys that are
+// local-only or that match the profile value.
+func TestConfigPanelBadgesProfileOverrides(t *testing.T) {
+	caps := testCaps()
+	caps.Config = true
+	caps.Profiles = true
+	inst := backend.Instance{Name: "demo", Profiles: []string{"default"}}
+	profiles := []backend.Profile{{Name: "default", Config: map[string]string{
+		"security.nesting": "false", // instance overrides this -> drift
+		"boot.autostart":   "true",  // instance matches this   -> no drift
+	}}}
+	cfg := backend.InstanceConfig{Config: map[string]string{
+		"security.nesting": "true", // diverges from profile "false"
+		"boot.autostart":   "true", // same as profile
+		"raw.idmap":        "both", // local-only, no profile
+	}}
+	html := render(t, ConfigPanel(caps, inst, profiles, cfg, true))
+
+	if !strings.Contains(html, "Overrides default") {
+		t.Fatalf("diverging key must be badged as overriding its profile: %q", html)
+	}
+	// The badge appears exactly once: only the drifting key gets it.
+	if n := strings.Count(html, "Overrides default"); n != 1 {
+		t.Fatalf("expected exactly one override badge, got %d: %q", n, html)
+	}
+}
+
 func TestInstanceBodyGatesConfigAndDevicesTabs(t *testing.T) {
 	on := render(t, InstanceBody(backend.Capabilities{Config: true},
 		backend.Instance{Name: "demo", Status: "Running"}, nil, "devices"))

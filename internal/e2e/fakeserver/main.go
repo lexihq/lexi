@@ -44,6 +44,18 @@ func main() {
 	// A VM (split) image so the e2e suite can exercise the zip export/import
 	// round-trip (PublishImage only makes container images).
 	b.SeedSplitImage("fake-vm-noble-aarch64", "Ubuntu Noble VM image")
+	// Config drift: the default profile sets a key the instance overrides
+	// locally, so the Configuration tab shows the "overrides profile" badge.
+	if err := b.UpdateProfile(context.Background(), "default", "Default Incus profile",
+		map[string]string{"user.tier": "standard"}, ""); err != nil {
+		slog.Error("seed profile config", "err", err)
+		os.Exit(1)
+	}
+	if err := b.UpdateInstanceConfig(context.Background(), *instance,
+		map[string]string{"user.tier": "gold"}, ""); err != nil {
+		slog.Error("seed instance config drift", "err", err)
+		os.Exit(1)
+	}
 
 	srv := server.New(b, server.WithMetricsSampler(context.Background()))
 	srv.Addr = *addr

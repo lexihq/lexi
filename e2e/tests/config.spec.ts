@@ -77,6 +77,21 @@ test("options toggles merge without touching other keys", async ({ page }) => {
   await expect(config.locator('input[name="boot.autostart"]')).not.toBeChecked();
 });
 
+test("raw editor badges config keys that override an attached profile", async ({ page }) => {
+  await page.goto("/instances/demo");
+  await page.getByRole("link", { name: "Configuration" }).click();
+  const config = page.locator("#config");
+  const advanced = config.locator("details").filter({ hasText: "Advanced: raw configuration" });
+  if (!(await advanced.evaluate((d) => (d as HTMLDetailsElement).open))) {
+    await config.getByText("Advanced: raw configuration").click();
+  }
+
+  // demo seeds user.tier=gold locally over the default profile's "standard":
+  // the drifting row is badged, and the badge sits on that row (near its key).
+  const row = config.locator("div").filter({ has: page.locator('input[value="user.tier"]') });
+  await expect(row.getByText("Overrides default")).toBeVisible();
+});
+
 test("config values support multiline (cloud-init)", async ({ page }) => {
   await page.goto("/instances/demo");
   await page.getByRole("link", { name: "Configuration" }).click();

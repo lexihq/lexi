@@ -40,6 +40,33 @@ func tierCapabilities(caps backend.Capabilities) []string {
 	return on
 }
 
+// themeOption is one entry in the header palette picker. value is the
+// data-theme name ("" = the default palette); theme.js reads data-theme-option
+// to set aria-checked on the active entry after load and on every change, since
+// the server render can't know the client's stored choice. The check icon is
+// revealed purely by that aria-checked state.
+templ themeOption(value, label string) {
+	<button
+		type="button"
+		role="menuitemradio"
+		aria-checked="false"
+		data-theme-option={ value }
+		onclick={ setColorThemeScript(value) }
+		class="flex cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-sm text-foreground transition-colors hover:bg-accent aria-checked:[&_[data-check]]:opacity-100"
+	>
+		{ label }
+		<span data-check class="opacity-0">
+			@icon.Icon("check")(icon.Props{Class: "size-4 text-primary"})
+		</span>
+	</button>
+}
+
+// setColorThemeScript is the inline click handler for a palette option; templ
+// JSON-encodes value into the call, so it is escaped safely.
+script setColorThemeScript(value string) {
+	setColorTheme(value)
+}
+
 // NavInstances is the active-section key for the Instances nav entry.
 const NavInstances = "instances"
 
@@ -155,6 +182,23 @@ templ Layout(title string, caps backend.Capabilities, nav Nav) {
 											</li>
 										}
 									</ul>
+								</div>
+							}
+						}
+						@popover.Root() {
+							@popover.Trigger() {
+								<button
+									type="button"
+									class="cursor-pointer rounded-md border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] focus-visible:outline-none"
+									aria-label="Theme palette"
+								>
+									@icon.Icon("palette")(icon.Props{Class: "size-4"})
+								</button>
+							}
+							@popover.Content(popover.ContentProps{Placement: popover.PlacementBottomEnd, ShowArrow: true, Class: "p-1"}) {
+								<div role="menu" class="flex min-w-40 flex-col">
+									@themeOption("", "Default")
+									@themeOption("ocean", "Ocean")
 								</div>
 							}
 						}

@@ -94,6 +94,49 @@
   --selection-foreground: oklch(0.205 0 0);
 }
 
+/* Ocean palette (opt-in via data-theme="ocean" on <html>). Cool blue-tinted
+   neutrals (hue ~264) with a blue primary; only the tokens that differ from the
+   default neutral theme are overridden — charts/selection are shared.
+   Specificity: [data-theme] equals :root, and .dark[data-theme] beats .dark, so
+   the dark block must set the full token set to win in dark mode. */
+[data-theme="ocean"] {
+  --background: oklch(0.982 0.002 248);
+  --foreground: oklch(0.205 0.012 264);
+  --card-foreground: oklch(0.205 0.012 264);
+  --popover-foreground: oklch(0.205 0.012 264);
+  --primary: oklch(0.543 0.149 252);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.968 0.004 248);
+  --secondary-foreground: oklch(0.205 0.012 264);
+  --muted: oklch(0.968 0.004 248);
+  --muted-foreground: oklch(0.556 0.012 264);
+  --accent: oklch(0.968 0.004 248);
+  --accent-foreground: oklch(0.205 0.012 264);
+  --border: oklch(0.922 0.005 264);
+  --input: oklch(0.922 0.005 264);
+  --ring: oklch(0.586 0.159 251);
+}
+
+.dark[data-theme="ocean"] {
+  --background: oklch(0.177 0.009 264);
+  --foreground: oklch(0.985 0.002 248);
+  --card: oklch(0.230 0.012 264);
+  --card-foreground: oklch(0.985 0.002 248);
+  --popover: oklch(0.230 0.012 264);
+  --popover-foreground: oklch(0.985 0.002 248);
+  --primary: oklch(0.543 0.149 252);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.269 0.010 264);
+  --secondary-foreground: oklch(0.985 0.002 248);
+  --muted: oklch(0.269 0.010 264);
+  --muted-foreground: oklch(0.708 0.012 264);
+  --accent: oklch(0.269 0.010 264);
+  --accent-foreground: oklch(0.985 0.002 248);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.586 0.159 251);
+}
+
 @layer base {
   * {
     @apply border-border;

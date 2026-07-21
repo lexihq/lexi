@@ -67,3 +67,44 @@ test("tier badge popover lists the active tier's capabilities", async ({
   await page.keyboard.press("Escape");
   await expect(popover).toBeHidden();
 });
+
+// The header palette picker: a separate axis from light/dark. Selecting a
+// palette sets data-theme on <html>, persists it, reapplies it on the next
+// load, and marks the active entry with a check (aria-checked).
+test("palette picker switches, persists, and marks the active theme", async ({
+  page,
+}) => {
+  await page.goto("/");
+
+  // Start from the built-in default palette regardless of any stored choice.
+  await page.evaluate(() => {
+    localStorage.removeItem("color-theme");
+    document.documentElement.removeAttribute("data-theme");
+  });
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
+
+  // Selecting Ocean sets the attribute and records the choice.
+  await page.getByRole("button", { name: "Theme palette" }).click();
+  await page.getByRole("menuitemradio", { name: "Ocean" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "ocean");
+  expect(await page.evaluate(() => localStorage.getItem("color-theme"))).toBe(
+    "ocean",
+  );
+
+  // A full navigation keeps the palette (applied by the head script).
+  await page.goto("/storage");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "ocean");
+
+  // Reopening the picker shows Ocean as the active (checked) entry.
+  await page.getByRole("button", { name: "Theme palette" }).click();
+  await expect(
+    page.getByRole("menuitemradio", { name: "Ocean" }),
+  ).toHaveAttribute("aria-checked", "true");
+
+  // Switching back to Default removes the attribute and clears the choice.
+  await page.getByRole("menuitemradio", { name: "Default" }).click();
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
+  expect(await page.evaluate(() => localStorage.getItem("color-theme"))).toBe(
+    "",
+  );
+});

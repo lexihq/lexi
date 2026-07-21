@@ -1,0 +1,13 @@
+# Keep the build context small: the vendored tailwind binary (~75MB) and node
+# modules are not needed to build the Go binary (app.css is committed).
+.git
+bin/
+lexi
+fakeserver
+node_modules
+e2e/node_modules
+e2e/test-results
+e2e/playwright-report
+docs/
+plans/
+*_templ.go

@@ -80,6 +80,48 @@ Set `LEXI_VERSION=vX.Y.Z` to install a specific tag. The installer places
 ./lexi                 # serves http://localhost:8080
 ```
 
+## Docker
+
+lexi is a static binary that only needs to reach the Incus API — no host
+devices, no privileged container. Multi-arch (amd64/arm64) images are published
+to GHCR:
+
+```bash
+docker pull ghcr.io/lexihq/lexi:latest   # or build locally: docker build -t ghcr.io/lexihq/lexi:latest .
+```
+
+Two ways to connect:
+
+**Socket mode** (host-local). Bind-mount the Incus unix socket:
+
+```bash
+docker run -d -p 8080:8080 \
+  -v /var/lib/incus/unix.socket:/var/lib/incus/unix.socket \
+  --user "65532:$(getent group incus-admin | cut -d: -f3)" \
+  ghcr.io/lexihq/lexi:latest
+```
+
+The image runs unprivileged, so it must join the socket's `incus-admin` group
+to read it (the `--user` line above). `docker-compose.yml` wires this up; set
+the group's GID there.
+
+**TLS-remote mode** (host-agnostic). Enable HTTPS on the daemon and trust a
+client cert, then hand lexi a CLI config instead of the socket:
+
+```bash
+# on the Incus host:
+incus config set core.https_address :8443
+incus config trust add lexi        # prints a one-time join token
+
+docker run -d -p 8080:8080 \
+  -v "$HOME/.config/incus:/home/nonroot/.config/incus:ro" \
+  -e LEXI_INCUS_REMOTE=myserver \
+  ghcr.io/lexihq/lexi:latest
+```
+
+Mounting the socket (or trusting a cert) grants full control of Incus — treat
+lexi as root on the host and keep it behind an authenticating proxy.
+
 ## Release
 
 ```bash

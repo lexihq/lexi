@@ -1,0 +1,25 @@
+# Socket mode: the container talks to the host's Incus over its unix socket.
+# Simplest for a host-local deploy. The container needs no privileges and no
+# host devices — only the Incus API socket.
+#
+# SECURITY: mounting the Incus socket grants this container full control of
+# Incus (create/delete any instance, run commands in them) — treat it as root
+# on the host. Put lexi behind an authenticating reverse proxy; do not expose
+# port 8080 to untrusted networks.
+#
+# For a host-agnostic deploy, prefer TLS-remote mode instead (see README):
+# enable `incus config set core.https_address`, trust a client cert, mount a
+# CLI config dir, and set LEXI_INCUS_REMOTE — no socket mount needed.
+services:
+  lexi:
+    image: ghcr.io/lexihq/lexi:latest
+    # build: .   # build locally instead of pulling
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/lib/incus/unix.socket:/var/lib/incus/unix.socket
+    # The socket is owned by root:incus-admin on the host. distroless runs as an
+    # unprivileged user that can't read it, so run as a user in that group.
+    # Replace GID with the host's: `getent group incus-admin | cut -d: -f3`.
+    user: "65532:GID"
+    restart: unless-stopped

@@ -286,7 +286,7 @@ func New() *Fake {
 		serverConfig:        map[string]string{"core.https_address": ":8443"},
 		serverConfigVersion: 1,
 		certificates: []backend.Certificate{
-			{Name: "admin-laptop", Type: "client", Fingerprint: "fake-cert-fingerprint-1234", Restricted: false},
+			{Name: "admin-laptop", Type: "client", Fingerprint: "fake-cert-fingerprint-1234"},
 		},
 		warnings: []backend.Warning{
 			{

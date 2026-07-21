@@ -64,24 +64,12 @@ func (b *incusBackend) CreateVolumeBackup(ctx context.Context, pool, volume, nam
 		VolumeOnly:           volumeOnly,
 		CompressionAlgorithm: "gzip",
 	})
-	if err != nil {
-		return fmt.Errorf("create backup %q of %q/%q: %w", name, pool, volume, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("create backup %q of %q/%q: %w", name, pool, volume, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "create backup %q of %q/%q", name, pool, volume)
 }
 
 func (b *incusBackend) DeleteVolumeBackup(ctx context.Context, pool, volume, backup string) error {
 	op, err := b.project(ctx).DeleteStorageVolumeBackup(pool, volume, backup)
-	if err != nil {
-		return fmt.Errorf("delete backup %q of %q/%q: %w", backup, pool, volume, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("delete backup %q of %q/%q: %w", backup, pool, volume, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "delete backup %q of %q/%q", backup, pool, volume)
 }
 
 // ExportVolumeBackup spools the stored backup to a temp file (the client needs
@@ -113,13 +101,7 @@ func (b *incusBackend) RestoreVolumeBackup(ctx context.Context, pool, volume, ba
 		BackupFile: contextReader{ctx: ctx, Reader: tmp},
 		Name:       newName,
 	})
-	if err != nil {
-		return fmt.Errorf("restore backup %q as %q/%q: %w", backup, targetPool, newName, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("restore backup %q as %q/%q: %w", backup, targetPool, newName, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "restore backup %q as %q/%q", backup, targetPool, newName)
 }
 
 // spoolVolumeBackup downloads a stored backup into a rewound temp file. The

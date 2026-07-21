@@ -3,7 +3,6 @@ package incus
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
@@ -21,23 +20,12 @@ func (b *incusBackend) UpdateLimits(ctx context.Context, name string, l backend.
 	}, "update limits on %q", name)
 }
 
-// managedConfigKey reports whether a config key is managed outside the config
-// editor: volatile.* (internal/auto-managed), limits.cpu/limits.memory (owned by
-// the Limits form), and snapshots.schedule/expiry/pattern (owned by the
-// snapshot-schedule form). These are hidden from the editor and preserved on
-// update.
-func managedConfigKey(k string) bool {
-	return strings.HasPrefix(k, "volatile.") ||
-		k == "limits.cpu" || k == "limits.memory" ||
-		k == "snapshots.schedule" || k == "snapshots.expiry" || k == "snapshots.pattern"
-}
-
 // editableConfig returns the user-editable subset of an instance's local config
-// (a copy), excluding the managed keys.
+// (a copy), excluding the managed keys (backend.ManagedConfigKey).
 func editableConfig(local map[string]string) map[string]string {
 	out := make(map[string]string, len(local))
 	for k, v := range local {
-		if managedConfigKey(k) {
+		if backend.ManagedConfigKey(k) {
 			continue
 		}
 		out[k] = v
@@ -54,7 +42,7 @@ func (b *incusBackend) GetInstanceConfig(ctx context.Context, name string) (back
 		Config:       editableConfig(inst.Config),
 		Devices:      inst.ExpandedDevices,
 		LocalDevices: inst.Devices,
-		Version:      etag,
+		Version:      backend.Version(etag),
 	}, nil
 }
 
@@ -62,7 +50,7 @@ func (b *incusBackend) GetInstanceConfig(ctx context.Context, name string) (back
 // UpdateLimits), preserving the managed keys and ignoring any a client tries to
 // set through the editor. A non-empty version makes the PUT conditional on the
 // etag from GetInstanceConfig (→ ErrConflict when stale), like UpdateDevice.
-func (b *incusBackend) UpdateInstanceConfig(ctx context.Context, name string, config map[string]string, version string) error {
+func (b *incusBackend) UpdateInstanceConfig(ctx context.Context, name string, config map[string]string, version backend.Version) error {
 	inst, etag, err := b.project(ctx).GetInstance(name)
 	if err != nil {
 		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
@@ -70,21 +58,21 @@ func (b *incusBackend) UpdateInstanceConfig(ctx context.Context, name string, co
 	put := inst.Writable()
 	next := map[string]string{}
 	for k, v := range put.Config {
-		if managedConfigKey(k) {
+		if backend.ManagedConfigKey(k) {
 			next[k] = v
 		}
 	}
 	for k, v := range config {
-		if managedConfigKey(k) {
+		if backend.ManagedConfigKey(k) {
 			continue
 		}
 		next[k] = v
 	}
 	put.Config = next
 	if version == "" {
-		version = etag
+		version = backend.Version(etag)
 	}
-	op, err := b.project(ctx).UpdateInstance(name, put, version)
+	op, err := b.project(ctx).UpdateInstance(name, put, string(version))
 	return waitOp(ctx, op, err, "update config on %q", name)
 }
 
@@ -102,7 +90,7 @@ func (b *incusBackend) AddDevice(ctx context.Context, name, device string, confi
 // the etag from GetInstanceConfig: the daemon rejects the PUT with 412 (mapped
 // to ErrConflict) when the instance changed since that read. An empty version
 // sends the fresh GET's etag, updating unconditionally in practice.
-func (b *incusBackend) UpdateDevice(ctx context.Context, name, device string, config map[string]string, version string) error {
+func (b *incusBackend) UpdateDevice(ctx context.Context, name, device string, config map[string]string, version backend.Version) error {
 	inst, etag, err := b.project(ctx).GetInstance(name)
 	if err != nil {
 		return fmt.Errorf("get instance %q: %w", name, mapErr(err))
@@ -113,9 +101,9 @@ func (b *incusBackend) UpdateDevice(ctx context.Context, name, device string, co
 	}
 	put.Devices[device] = config
 	if version == "" {
-		version = etag
+		version = backend.Version(etag)
 	}
-	op, err := b.project(ctx).UpdateInstance(name, put, version)
+	op, err := b.project(ctx).UpdateInstance(name, put, string(version))
 	return waitOp(ctx, op, err, "update device %q on %q", device, name)
 }
 

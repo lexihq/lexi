@@ -14,7 +14,7 @@ import (
 
 // ServerPage is the Server section: host overview, hardware inventory, server
 // config editor, certificate trust list, and the swappable warnings table.
-templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, hardware backend.ServerHardware, config map[string]string, configVersion string, certs []backend.Certificate, warnings []backend.Warning) {
+templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, hardware backend.ServerHardware, config map[string]string, configVersion backend.Version, certs []backend.Certificate, warnings []backend.Warning) {
 	@Layout("Server", caps, Nav{Section: NavServer}) {
 		<div class="mb-6">
 			<h1 class="text-2xl font-semibold">Server</h1>
@@ -185,7 +185,7 @@ templ ServerPage(caps backend.Capabilities, overview backend.ServerOverview, har
 				Careful with <span class="font-mono">core.https_address</span>: pointing it elsewhere can cut lexi off from the daemon.
 			</p>
 			<form method="post" action="/server/config" class="max-w-xl space-y-2">
-				<input type="hidden" name="version" value={ configVersion }/>
+				<input type="hidden" name="version" value={ string(configVersion) }/>
 				for _, k := range sortedKeys(config) {
 					<div class="flex gap-2">
 						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 font-mono text-sm"/>
@@ -303,10 +303,10 @@ templ CertificatesTable(caps backend.Capabilities, certs []backend.Certificate) 
 										<form hx-post={ "/server/certificates/" + url.PathEscape(c.Fingerprint) + "/update" } hx-target="#certificates" hx-swap="outerHTML" class="mt-1 space-y-1">
 											<input name="name" required value={ c.Name } placeholder="name" class="h-7 w-full rounded border bg-background px-2 text-xs"/>
 											<label class="flex items-center gap-1.5 text-xs" title="Limit this certificate to the listed projects">
-												<input type="checkbox" name="restricted" checked?={ c.Restricted }/>
+												<input type="checkbox" name="restricted" checked?={ c.Restricted() }/>
 												Restrict to projects
 											</label>
-											<input name="projects" value={ strings.Join(c.Projects, ", ") } placeholder="default, dev" class="h-7 w-full rounded border bg-background px-2 text-xs" title="Comma-separated project names; only used when restricted"/>
+											<input name="projects" value={ strings.Join(c.ProjectList(), ", ") } placeholder="default, dev" class="h-7 w-full rounded border bg-background px-2 text-xs" title="Comma-separated project names; only used when restricted"/>
 											@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Type: button.TypeSubmit}) {
 												Save
 											}
@@ -321,8 +321,8 @@ templ CertificatesTable(caps backend.Capabilities, certs []backend.Certificate) 
 								<span class="font-mono text-xs" title={ c.Fingerprint }>{ shortFingerprint(c.Fingerprint) }</span>
 							}
 							@table.Cell() {
-								if c.Restricted {
-									<span class="rounded bg-accent px-1.5 py-0.5 text-xs" title={ "Projects: " + strings.Join(c.Projects, ", ") }>restricted</span>
+								if c.Restricted() {
+									<span class="rounded bg-accent px-1.5 py-0.5 text-xs" title={ "Projects: " + strings.Join(c.ProjectList(), ", ") }>restricted</span>
 								} else {
 									<span class="text-xs text-muted-foreground">full</span>
 								}
@@ -373,7 +373,7 @@ templ WarningsTable(warnings []backend.Warning) {
 					for _, w := range warnings {
 						@table.Row() {
 							@table.Cell() {
-								<span class={ "rounded border px-1.5 py-0.5 text-xs", severityClass(w.Severity) }>{ w.Severity }</span>
+								<span class={ "rounded border px-1.5 py-0.5 text-xs", severityClass(w.Severity) }>{ string(w.Severity) }</span>
 							}
 							@table.Cell() {
 								<span title={ w.Type }>{ w.LastMessage }</span>
@@ -423,11 +423,11 @@ func portsLabel(ports []backend.NetworkPort) string {
 }
 
 // severityClass colors the warning severity badge.
-func severityClass(severity string) string {
+func severityClass(severity backend.WarningSeverity) string {
 	switch severity {
-	case "high":
+	case backend.WarningSeverityHigh:
 		return "text-red-500"
-	case "moderate":
+	case backend.WarningSeverityModerate:
 		return "text-yellow-500"
 	default:
 		return "text-muted-foreground"

@@ -21,13 +21,21 @@ import (
 func (h handlers) instanceTrends(ctx context.Context, instances []backend.Instance) map[string]ui.InstanceTrend {
 	out := make(map[string]ui.InstanceTrend, len(instances))
 	for _, inst := range instances {
-		samples := h.samples.Series(metrics.Key(ctx, inst.Name))
+		all := h.samples.Series(metrics.Key(ctx, inst.Name))
+		// Unknown-CPU samples (the driver's first reading) carry no percentage
+		// to draw; drop them so the sparkline plots measurements only.
+		samples := make([]backend.MetricSample, 0, len(all))
+		for _, s := range all {
+			if s.CPUPercent != nil {
+				samples = append(samples, s)
+			}
+		}
 		if len(samples) < 2 {
 			continue
 		}
 		trend := ui.InstanceTrend{CPU: make([]float64, len(samples))}
 		for i, s := range samples {
-			trend.CPU[i] = s.CPUPercent
+			trend.CPU[i] = *s.CPUPercent
 			if s.MemoryTotal > 0 {
 				trend.MemPercent = append(trend.MemPercent, float64(s.MemoryUsage)/float64(s.MemoryTotal)*100)
 			}
@@ -39,7 +47,7 @@ func (h handlers) instanceTrends(ctx context.Context, instances []backend.Instan
 			trend.MemPercent = nil
 		}
 		last := samples[len(samples)-1]
-		trend.CPUNow = last.CPUPercent
+		trend.CPUNow = *last.CPUPercent
 		trend.MemUsed = last.MemoryUsage
 		trend.MemTotal = last.MemoryTotal
 		out[inst.Name] = trend

@@ -51,9 +51,9 @@ func (b *incusBackend) CreateNetworkZone(ctx context.Context, zone backend.Netwo
 // is the GetNetworkZone etag (412 → ErrConflict); an empty version updates
 // unconditionally. NetworkZonePut has no other fields, so there is nothing
 // to GET-preserve.
-func (b *incusBackend) UpdateNetworkZone(ctx context.Context, name, description string, config map[string]string, version string) error {
+func (b *incusBackend) UpdateNetworkZone(ctx context.Context, name, description string, config map[string]string, version backend.Version) error {
 	put := api.NetworkZonePut{Description: description, Config: config}
-	if err := b.project(ctx).UpdateNetworkZone(name, put, version); err != nil {
+	if err := b.project(ctx).UpdateNetworkZone(name, put, string(version)); err != nil {
 		return fmt.Errorf("update network zone %q: %w", name, mapErr(err))
 	}
 	return nil
@@ -89,7 +89,7 @@ func (b *incusBackend) ListZoneRecords(ctx context.Context, zone string) ([]back
 	for _, r := range records {
 		rec := backend.ZoneRecord{Name: r.Name, Description: r.Description}
 		for _, e := range r.Entries {
-			rec.Entries = append(rec.Entries, backend.ZoneEntry{Type: e.Type, TTL: e.TTL, Value: e.Value})
+			rec.Entries = append(rec.Entries, backend.ZoneEntry{Type: backend.ZoneEntryType(e.Type), TTL: e.TTL, Value: e.Value})
 		}
 		out = append(out, rec)
 	}
@@ -102,7 +102,7 @@ func (b *incusBackend) CreateZoneRecord(ctx context.Context, zone string, r back
 	post.Name = r.Name
 	post.Description = r.Description
 	for _, e := range r.Entries {
-		post.Entries = append(post.Entries, api.NetworkZoneRecordEntry{Type: e.Type, TTL: e.TTL, Value: e.Value})
+		post.Entries = append(post.Entries, api.NetworkZoneRecordEntry{Type: string(e.Type), TTL: e.TTL, Value: e.Value})
 	}
 	if err := b.project(ctx).CreateNetworkZoneRecord(zone, post); err != nil {
 		if strings.Contains(err.Error(), "already exists") {
@@ -126,6 +126,6 @@ func toNetworkZone(z *api.NetworkZone, etag string) backend.NetworkZone {
 		Description: z.Description,
 		Config:      z.Config,
 		UsedBy:      z.UsedBy,
-		Version:     etag,
+		Version:     backend.Version(etag),
 	}
 }

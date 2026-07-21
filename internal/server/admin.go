@@ -55,7 +55,7 @@ func (h handlers) updateServerConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
-	if err := h.backend.UpdateServerConfig(r.Context(), config, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateServerConfig(r.Context(), config, backend.Version(r.Form.Get("version"))); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -80,13 +80,13 @@ func (h handlers) addCertificate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := strings.TrimSpace(r.Form.Get("name"))
-	certType := r.Form.Get("type")
+	certType := backend.CertificateType(r.Form.Get("type"))
 	pemData := strings.TrimSpace(r.Form.Get("certificate"))
 	if name == "" || pemData == "" {
 		h.fail(w, r, fmt.Errorf("certificate name and PEM data are required: %w", backend.ErrInvalid))
 		return
 	}
-	if certType != "client" && certType != "metrics" {
+	if certType != backend.CertificateClient && certType != backend.CertificateMetrics {
 		h.fail(w, r, fmt.Errorf("certificate type %q must be client or metrics: %w", certType, backend.ErrInvalid))
 		return
 	}
@@ -120,14 +120,17 @@ func (h handlers) updateCertificate(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, fmt.Errorf("certificate name is required: %w", backend.ErrInvalid))
 		return
 	}
-	restricted := r.Form.Get("restricted") == "on"
-	var projects []string
-	for p := range strings.SplitSeq(r.Form.Get("projects"), ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			projects = append(projects, p)
+	var projects *[]string
+	if r.Form.Get("restricted") == "on" {
+		list := []string{}
+		for p := range strings.SplitSeq(r.Form.Get("projects"), ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				list = append(list, p)
+			}
 		}
+		projects = &list
 	}
-	if err := h.backend.UpdateCertificate(r.Context(), r.PathValue("fingerprint"), name, restricted, projects); err != nil {
+	if err := h.backend.UpdateCertificate(r.Context(), r.PathValue("fingerprint"), name, projects); err != nil {
 		h.fail(w, r, err)
 		return
 	}

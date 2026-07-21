@@ -424,7 +424,7 @@ func TestServerPageRendersSections(t *testing.T) {
 		backend.ServerOverview{ServerVersion: "6.23", Kernel: "Linux", KernelVersion: "6.8", Driver: "lxc", DriverVersion: "6.0", CPUThreads: 16, MemoryUsed: 1 << 30, MemoryTotal: 8 << 30},
 		backend.ServerHardware{},
 		map[string]string{"core.https_address": ":8443"}, "etag-1",
-		[]backend.Certificate{{Name: "laptop", Type: "client", Fingerprint: "abcdef0123456789", Restricted: true}},
+		[]backend.Certificate{{Name: "laptop", Type: "client", Fingerprint: "abcdef0123456789", Projects: &[]string{}}},
 		[]backend.Warning{{UUID: "w-1", Severity: "high", Status: "new", Count: 2, LastMessage: "boom"}}))
 
 	assertContains(t, html, "6.23")

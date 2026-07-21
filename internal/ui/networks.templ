@@ -77,7 +77,7 @@ templ NetworksTable(networks []backend.Network) {
 				for _, n := range networks {
 					@table.Row() {
 						@table.Cell() {
-							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/networks/" + n.Name) }>{ n.Name }</a>
+							<a class="font-medium underline-offset-4 hover:underline" href={ templ.URL("/networks/" + url.PathEscape(n.Name)) }>{ n.Name }</a>
 						}
 						@table.Cell() {
 							{ n.Type }
@@ -108,7 +108,7 @@ templ NetworksTable(networks []backend.Network) {
 						}
 						@table.Cell() {
 							if n.Managed && len(n.UsedBy) == 0 {
-								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Attributes: templ.Attributes{"hx-post": "/networks/" + n.Name + "/delete", "hx-target": "#networks-table", "hx-swap": "outerHTML", "hx-confirm": "Delete network " + n.Name + "?"}}) {
+								@button.Button(button.Props{Size: button.SizeSm, Variant: button.VariantOutline, Class: "text-destructive", Attributes: templ.Attributes{"hx-post": "/networks/" + url.PathEscape(n.Name) + "/delete", "hx-target": "#networks-table", "hx-swap": "outerHTML", "hx-confirm": "Delete network " + n.Name + "?"}}) {
 									@icon.Icon("trash-2")(icon.Props{Class: "size-4"})
 									Delete
 								}
@@ -168,7 +168,7 @@ templ NetworkDetailPage(caps backend.Capabilities, n backend.Network, st backend
 				<h2 class="mb-1 text-lg font-medium">Config</h2>
 				<p class="mb-3 text-sm text-muted-foreground">Clearing a key's name removes it on apply.</p>
 				<form method="post" action={ templ.SafeURL(fmt.Sprintf("/networks/%s/config", url.PathEscape(n.Name))) } class="max-w-xl space-y-2">
-					<input type="hidden" name="version" value={ n.Version }/>
+					<input type="hidden" name="version" value={ string(n.Version) }/>
 					<div>
 						<label class="mb-1 block text-sm font-medium">Description</label>
 						<input name="description" value={ n.Description } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>

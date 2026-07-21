@@ -31,7 +31,7 @@ func (f *Fake) GetProject(ctx context.Context, name string) (backend.Project, er
 		return backend.Project{}, notFoundf("project %q", name)
 	}
 	p := f.projectView(f.remote(ctx), name)
-	p.Version = strconv.Itoa(f.remote(ctx).projectVersions[name])
+	p.Version = backend.Version(strconv.Itoa(f.remote(ctx).projectVersions[name]))
 	return p, nil
 }
 
@@ -151,7 +151,7 @@ func (f *Fake) CreateProject(ctx context.Context, project backend.Project) error
 	return nil
 }
 
-func (f *Fake) UpdateProject(ctx context.Context, name, description string, config map[string]string, version string) error {
+func (f *Fake) UpdateProject(ctx context.Context, name, description string, config map[string]string, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -161,7 +161,7 @@ func (f *Fake) UpdateProject(ctx context.Context, name, description string, conf
 	}
 	// Empty version = unconditional, mirroring the Incus client's If-Match
 	// semantics; a stale version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(f.remote(ctx).projectVersions[name]) {
+	if version != "" && string(version) != strconv.Itoa(f.remote(ctx).projectVersions[name]) {
 		return conflict("project %q version %s", name, version)
 	}
 	// Incus parity: features cannot change once the project holds resources

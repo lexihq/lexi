@@ -24,6 +24,19 @@ const metricsHistory = 100
 // cadences line up and the chart spacing stays even.
 const metricsInterval = 3 * time.Second
 
+// metricsMinGap is the shortest interval between two retained samples of one
+// instance. The background sampler and a viewer's chart poll both append at
+// the metricsInterval cadence; without a floor between them the ring fills at
+// ~2× the intended rate and the chart window halves. Two thirds of the
+// interval admits every single-poller sample (3s apart) while collapsing
+// interleaved pollers to roughly the intended cadence.
+const metricsMinGap = metricsInterval * 2 / 3
+
+// metricsMaxAge evicts an instance's history once nothing has sampled it for
+// this long — deleted or renamed instances (e.g. churny CI runners) would
+// otherwise leave their buffers in the store for the process lifetime.
+const metricsMaxAge = time.Hour
+
 // Option customizes the server built by New.
 type Option func(*handlers)
 
@@ -39,7 +52,7 @@ func WithMetricsSampler(ctx context.Context) Option {
 // New builds an HTTP server with all lexi routes registered. The backend is
 // injected here so handlers stay driver-agnostic as the UI grows.
 func New(b backend.Backend, opts ...Option) *http.Server {
-	h := handlers{backend: b, samples: metrics.NewStore(metricsHistory)}
+	h := handlers{backend: b, samples: metrics.NewStore(metricsHistory, metricsMinGap, metricsMaxAge)}
 	for _, opt := range opts {
 		opt(&h)
 	}

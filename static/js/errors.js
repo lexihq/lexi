@@ -7,17 +7,33 @@
 // run its normal history update, corrupting the URL (e.g. a failed create on
 // /networks/new would push /networks while the form stays). Instead we render the
 // toast ourselves by appending it to <body>, where toast.js's MutationObserver
-// initializes it. Responses that are already toast markup are inserted as-is;
-// anything else (the plain-text http.Error paths — daemon down, middleware
-// failures) is wrapped in a text-only toast via textContent, so the failure is
-// never silently invisible and non-HTML bodies can't inject markup.
+// initializes it. Only declared-HTML responses that parse to toast elements are
+// lifted in as markup — provenance (Content-Type set by the server's templ
+// renderer) plus structure, not a substring match on the body. Anything else
+// (the plain-text http.Error paths — daemon down, middleware failures) is
+// wrapped in a text-only toast via textContent, so the failure is never
+// silently invisible and non-HTML bodies can't inject markup. Parsing via
+// DOMParser keeps any embedded <script> inert even in the lifted case.
 document.body.addEventListener("htmx:beforeSwap", function (evt) {
   const xhr = evt.detail.xhr;
   if (!xhr || xhr.status < 400) return;
+  const cfg = evt.detail.requestConfig;
+  // The background table poll (bulk-actions.js) retries every 15s: a backend
+  // outage would otherwise re-toast the same error on every tick. Fail quiet;
+  // any user-initiated request still surfaces the failure.
+  if (cfg && cfg.verb === "get" && cfg.path === "/partials/instances") return;
   const body = xhr.responseText;
-  if (body && body.indexOf("data-tui-toast") !== -1) {
-    document.body.insertAdjacentHTML("beforeend", body);
-    return;
+  const type = xhr.getResponseHeader("Content-Type") || "";
+  if (body && type.indexOf("text/html") !== -1 && body.indexOf("data-tui-toast") !== -1) {
+    const toasts = new DOMParser()
+      .parseFromString(body, "text/html")
+      .querySelectorAll("[data-tui-toast]");
+    if (toasts.length > 0) {
+      toasts.forEach(function (toast) {
+        document.body.appendChild(document.adoptNode(toast));
+      });
+      return;
+    }
   }
   const message =
     (body || "").trim().slice(0, 300) || "request failed (" + xhr.status + ")";

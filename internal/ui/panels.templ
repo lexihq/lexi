@@ -228,7 +228,7 @@ templ ConfigPanel(caps backend.Capabilities, inst backend.Instance, profiles []b
 					hx-swap="outerHTML"
 					class="space-y-3"
 				>
-					<input type="hidden" name="version" value={ cfg.Version }/>
+					<input type="hidden" name="version" value={ string(cfg.Version) }/>
 					for _, opt := range InstanceOptions {
 						<label class="flex items-start gap-2 text-sm">
 							<input type="checkbox" name={ opt.Key } checked?={ backend.IsTrue(cfg.Config[opt.Key]) } class="mt-0.5"/>
@@ -264,7 +264,7 @@ templ ConfigPanel(caps backend.Capabilities, inst backend.Instance, profiles []b
 			>
 				// Conditional-write token: a concurrent config change conflicts
 				// (409) instead of being silently overwritten (see updateDevice).
-				<input type="hidden" name="version" value={ cfg.Version }/>
+				<input type="hidden" name="version" value={ string(cfg.Version) }/>
 				for _, k := range sortedKeys(cfg.Config) {
 					<div class="flex gap-2">
 						<input name="key" value={ k } class="h-9 w-1/2 rounded-md border bg-background px-3 text-sm"/>
@@ -411,7 +411,7 @@ templ ProfileDevicesSection(caps backend.Capabilities, p backend.Profile) {
 // makes the save conditional on the state the panel was rendered from. base is
 // the devices endpoint (e.g. "/instances/x/devices" or "/profiles/y/devices")
 // and target is the htmx swap container (e.g. "#devices").
-templ editDeviceForm(base, device string, dev map[string]string, version, target string) {
+templ editDeviceForm(base, device string, dev map[string]string, version backend.Version, target string) {
 	for _, dt := range DeviceTypes {
 		if dt.Type == dev["type"] {
 			<details class="ml-3 mt-1 max-w-md rounded-md border p-2">
@@ -424,7 +424,7 @@ templ editDeviceForm(base, device string, dev map[string]string, version, target
 					hx-swap="outerHTML"
 					class="mt-2 space-y-2"
 				>
-					<input type="hidden" name="version" value={ version }/>
+					<input type="hidden" name="version" value={ string(version) }/>
 					for _, f := range dt.Fields {
 						<input name={ f } placeholder={ f } value={ dev[f] } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
 					}
@@ -550,6 +550,11 @@ func humanBytes(n int64) string {
 	return fmt.Sprintf("%.1f %ciB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-func formatPercent(p float64) string {
-	return fmt.Sprintf("%.1f%%", p)
+// formatPercent renders a CPU percentage; nil (no measurement window yet)
+// reads as an em dash rather than a misleading 0%.
+func formatPercent(p *float64) string {
+	if p == nil {
+		return "—"
+	}
+	return fmt.Sprintf("%.1f%%", *p)
 }

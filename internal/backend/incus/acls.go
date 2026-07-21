@@ -29,7 +29,7 @@ func (b *incusBackend) GetNetworkACL(ctx context.Context, name string) (backend.
 		return backend.NetworkACL{}, fmt.Errorf("get network ACL %q: %w", name, mapErr(err))
 	}
 	out := toNetworkACL(acl)
-	out.Version = etag
+	out.Version = backend.Version(etag)
 	return out, nil
 }
 
@@ -53,7 +53,7 @@ func (b *incusBackend) CreateNetworkACL(ctx context.Context, acl backend.Network
 // GET-preserve-PUT, so the ACL's Config map is never dropped. The version is
 // the GetNetworkACL etag (412 → ErrConflict); an empty version updates
 // unconditionally. UpdateNetworkACL is synchronous.
-func (b *incusBackend) UpdateNetworkACL(ctx context.Context, name, description string, ingress, egress []backend.NetworkACLRule, version string) error {
+func (b *incusBackend) UpdateNetworkACL(ctx context.Context, name, description string, ingress, egress []backend.NetworkACLRule, version backend.Version) error {
 	acl, _, err := b.project(ctx).GetNetworkACL(name)
 	if err != nil {
 		return fmt.Errorf("get network ACL %q: %w", name, mapErr(err))
@@ -62,7 +62,7 @@ func (b *incusBackend) UpdateNetworkACL(ctx context.Context, name, description s
 	put.Description = description
 	put.Ingress = toAPIRules(ingress)
 	put.Egress = toAPIRules(egress)
-	if err := b.project(ctx).UpdateNetworkACL(name, put, version); err != nil {
+	if err := b.project(ctx).UpdateNetworkACL(name, put, string(version)); err != nil {
 		return fmt.Errorf("update network ACL %q: %w", name, mapErr(err))
 	}
 	return nil
@@ -130,15 +130,15 @@ func toRules(rules []api.NetworkACLRule) []backend.NetworkACLRule {
 	out := make([]backend.NetworkACLRule, 0, len(rules))
 	for _, r := range rules {
 		out = append(out, backend.NetworkACLRule{
-			Action:          r.Action,
+			Action:          backend.ACLRuleAction(r.Action),
 			Source:          r.Source,
 			Destination:     r.Destination,
-			Protocol:        r.Protocol,
+			Protocol:        backend.ACLProtocol(r.Protocol),
 			SourcePort:      r.SourcePort,
 			DestinationPort: r.DestinationPort,
 			ICMPType:        r.ICMPType,
 			ICMPCode:        r.ICMPCode,
-			State:           r.State,
+			State:           backend.ACLRuleState(r.State),
 			Description:     r.Description,
 		})
 	}
@@ -149,15 +149,15 @@ func toAPIRules(rules []backend.NetworkACLRule) []api.NetworkACLRule {
 	out := make([]api.NetworkACLRule, 0, len(rules))
 	for _, r := range rules {
 		out = append(out, api.NetworkACLRule{
-			Action:          r.Action,
+			Action:          string(r.Action),
 			Source:          r.Source,
 			Destination:     r.Destination,
-			Protocol:        r.Protocol,
+			Protocol:        string(r.Protocol),
 			SourcePort:      r.SourcePort,
 			DestinationPort: r.DestinationPort,
 			ICMPType:        r.ICMPType,
 			ICMPCode:        r.ICMPCode,
-			State:           r.State,
+			State:           string(r.State),
 			Description:     r.Description,
 		})
 	}

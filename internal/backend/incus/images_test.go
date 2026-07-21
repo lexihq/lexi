@@ -79,6 +79,7 @@ func TestListLocalImagesMapsFields(t *testing.T) {
 
 func TestPublishImageSendsSourceAndAlias(t *testing.T) {
 	srv := &instanceServerStub{
+		instance:      &api.Instance{StatusCode: api.Stopped},
 		createImageOp: &operationStub{get: api.Operation{Metadata: map[string]any{"fingerprint": "pubfp"}}},
 	}
 	b := &incusBackend{srv: srv}
@@ -94,8 +95,75 @@ func TestPublishImageSendsSourceAndAlias(t *testing.T) {
 	assert.Equal(t, "pubfp", srv.createdAlias.Target)
 }
 
+// buildZip assembles an in-memory zip whose entries use the given method
+// (zip.Store or zip.Deflate), for exercising the split-image import guards.
+func buildZip(t *testing.T, method uint16, entries map[string]string) *bytes.Reader {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, content := range entries {
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: name, Method: method})
+		require.NoError(t, err)
+		_, err = w.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+	return bytes.NewReader(buf.Bytes())
+}
+
+func TestSplitImageArgsRejectsCompressedEntries(t *testing.T) {
+	// Deflated entries could expand far past the upload cap (zip bomb); only
+	// stored entries are accepted.
+	b := &incusBackend{}
+	_, _, err := b.splitImageArgs(t.Context(), buildZip(t, zip.Deflate, map[string]string{
+		"metadata": "meta", "rootfs": "root",
+	}))
+	require.ErrorIs(t, err, backend.ErrInvalid)
+	assert.Contains(t, err.Error(), "compressed")
+}
+
+func TestSplitImageArgsRejectsMissingEntries(t *testing.T) {
+	for name, entries := range map[string]map[string]string{
+		"no rootfs":   {"metadata": "meta"},
+		"no metadata": {"rootfs": "root"},
+	} {
+		_, _, err := (&incusBackend{}).splitImageArgs(t.Context(), buildZip(t, zip.Store, entries))
+		require.ErrorIs(t, err, backend.ErrInvalid, name)
+	}
+}
+
+func TestSplitImageArgsRejectsUnexpectedEntry(t *testing.T) {
+	_, _, err := (&incusBackend{}).splitImageArgs(t.Context(), buildZip(t, zip.Store, map[string]string{
+		"metadata": "meta", "rootfs": "root", "extra": "nope",
+	}))
+	require.ErrorIs(t, err, backend.ErrInvalid)
+}
+
+func TestSplitImageArgsAcceptsStoredSplitImage(t *testing.T) {
+	b := &incusBackend{}
+	args, release, err := b.splitImageArgs(t.Context(), buildZip(t, zip.Store, map[string]string{
+		"metadata": "meta", "rootfs.img": "root",
+	}))
+	require.NoError(t, err)
+	defer release()
+	assert.Equal(t, "virtual-machine", args.Type, "rootfs.img names a VM image")
+	meta, err := io.ReadAll(args.MetaFile)
+	require.NoError(t, err)
+	assert.Equal(t, "meta", string(meta))
+}
+
+func TestPublishImageRunningInstanceIsInvalid(t *testing.T) {
+	srv := &instanceServerStub{instance: &api.Instance{StatusCode: api.Running}}
+	b := &incusBackend{srv: srv}
+
+	err := b.PublishImage(context.Background(), "demo", "live")
+
+	require.ErrorIs(t, err, backend.ErrInvalid)
+	assert.Nil(t, srv.createdImage, "a running instance must not be published")
+}
+
 func TestPublishImageWithoutAliasSkipsAliasCreation(t *testing.T) {
-	srv := &instanceServerStub{}
+	srv := &instanceServerStub{instance: &api.Instance{StatusCode: api.Stopped}}
 	b := &incusBackend{srv: srv}
 
 	require.NoError(t, b.PublishImage(context.Background(), "demo", ""))
@@ -105,7 +173,7 @@ func TestPublishImageWithoutAliasSkipsAliasCreation(t *testing.T) {
 }
 
 func TestPublishImageMissingFingerprintFails(t *testing.T) {
-	srv := &instanceServerStub{createImageOp: &operationStub{}}
+	srv := &instanceServerStub{instance: &api.Instance{StatusCode: api.Stopped}, createImageOp: &operationStub{}}
 	b := &incusBackend{srv: srv}
 
 	err := b.PublishImage(context.Background(), "demo", "my-alias")
@@ -116,6 +184,7 @@ func TestPublishImageMissingFingerprintFails(t *testing.T) {
 
 func TestPublishImageRollsBackOnAliasFailure(t *testing.T) {
 	srv := &instanceServerStub{
+		instance:      &api.Instance{StatusCode: api.Stopped},
 		createImageOp: &operationStub{get: api.Operation{Metadata: map[string]any{"fingerprint": "pubfp"}}},
 		aliasErr:      errors.New("already exists"),
 	}

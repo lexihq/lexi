@@ -93,7 +93,7 @@ func (h handlers) updatePool(w http.ResponseWriter, r *http.Request) {
 	}
 	pool := r.PathValue("pool")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
-	if err := h.backend.UpdateStoragePool(r.Context(), pool, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateStoragePool(r.Context(), pool, r.Form.Get("description"), config, backend.Version(r.Form.Get("version"))); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -244,7 +244,7 @@ func (h handlers) updateVolume(w http.ResponseWriter, r *http.Request) {
 	pool := r.PathValue("pool")
 	volume := r.PathValue("volume")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
-	if err := h.backend.UpdateVolume(r.Context(), pool, volume, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateVolume(r.Context(), pool, volume, r.Form.Get("description"), config, backend.Version(r.Form.Get("version"))); err != nil {
 		h.fail(w, r, err)
 		return
 	}

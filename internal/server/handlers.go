@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -82,6 +83,20 @@ func redirectToInstanceTab(w http.ResponseWriter, name, tab string) {
 // It's the common error path for handlers that act on a named instance.
 func (h handlers) fail(w http.ResponseWriter, r *http.Request, err error) {
 	h.renderError(w, r, statusFor(err), err.Error())
+}
+
+// requireVersion returns the optimistic-concurrency token from the parsed
+// form's hidden "version" field. A blank token would make the backend write
+// unconditional — silently degrading to last-write-wins — so it fails the
+// request with ErrInvalid instead; noun names the resource in the error. The
+// bool reports whether the handler may proceed.
+func (h handlers) requireVersion(w http.ResponseWriter, r *http.Request, noun string) (backend.Version, bool) {
+	version := backend.Version(r.Form.Get("version"))
+	if version == "" {
+		h.fail(w, r, fmt.Errorf("missing %s version token: %w", noun, backend.ErrInvalid))
+		return "", false
+	}
+	return version, true
 }
 
 func (h handlers) renderError(w http.ResponseWriter, r *http.Request, code int, message string) {

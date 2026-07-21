@@ -105,8 +105,8 @@ func TestSetSnapshotScheduleInitsNilConfig(t *testing.T) {
 }
 
 func TestManagedConfigKeyExcludesSnapshotSchedule(t *testing.T) {
-	assert.True(t, managedConfigKey("snapshots.schedule"))
-	assert.True(t, managedConfigKey("snapshots.expiry"))
-	assert.True(t, managedConfigKey("snapshots.pattern"))
-	assert.False(t, managedConfigKey("boot.autostart"))
+	assert.True(t, backend.ManagedConfigKey("snapshots.schedule"))
+	assert.True(t, backend.ManagedConfigKey("snapshots.expiry"))
+	assert.True(t, backend.ManagedConfigKey("snapshots.pattern"))
+	assert.False(t, backend.ManagedConfigKey("boot.autostart"))
 }

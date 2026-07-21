@@ -58,7 +58,7 @@ func (h handlers) updateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
-	if err := h.backend.UpdateProfile(r.Context(), name, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateProfile(r.Context(), name, r.Form.Get("description"), config, backend.Version(r.Form.Get("version"))); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -124,8 +124,8 @@ func (h handlers) updateProfileDevice(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	device := r.PathValue("device")
-	if r.Form.Get("version") == "" {
-		h.fail(w, r, fmt.Errorf("missing profile version token: %w", backend.ErrInvalid))
+	version, ok := h.requireVersion(w, r, "profile")
+	if !ok {
 		return
 	}
 	p, err := h.backend.GetProfile(r.Context(), name)
@@ -138,7 +138,7 @@ func (h handlers) updateProfileDevice(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, fmt.Errorf("device %q on profile %q: %w", device, name, backend.ErrNotFound))
 		return
 	}
-	if err := h.backend.UpdateProfileDevice(r.Context(), name, device, mergeDeviceFields(current, r.Form), r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateProfileDevice(r.Context(), name, device, mergeDeviceFields(current, r.Form), version); err != nil {
 		h.fail(w, r, err)
 		return
 	}

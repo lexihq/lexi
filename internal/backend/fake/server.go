@@ -43,20 +43,20 @@ func (f *Fake) GetServerHardware(ctx context.Context) (backend.ServerHardware, e
 	}, nil
 }
 
-func (f *Fake) GetServerConfig(ctx context.Context) (map[string]string, string, error) {
+func (f *Fake) GetServerConfig(ctx context.Context) (map[string]string, backend.Version, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	return maps.Clone(f.remote(ctx).serverConfig), strconv.Itoa(f.remote(ctx).serverConfigVersion), nil
+	return maps.Clone(f.remote(ctx).serverConfig), backend.Version(strconv.Itoa(f.remote(ctx).serverConfigVersion)), nil
 }
 
-func (f *Fake) UpdateServerConfig(ctx context.Context, config map[string]string, version string) error {
+func (f *Fake) UpdateServerConfig(ctx context.Context, config map[string]string, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	// Empty version = unconditional, mirroring the Incus client's If-Match
 	// semantics; a stale version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(f.remote(ctx).serverConfigVersion) {
+	if version != "" && string(version) != strconv.Itoa(f.remote(ctx).serverConfigVersion) {
 		return conflict("server config version %s", version)
 	}
 	f.remote(ctx).serverConfig = maps.Clone(config)
@@ -74,7 +74,7 @@ func (f *Fake) ListCertificates(ctx context.Context) ([]backend.Certificate, err
 	return append([]backend.Certificate(nil), f.remote(ctx).certificates...), nil
 }
 
-func (f *Fake) AddCertificate(ctx context.Context, name, certType, pemData string) error {
+func (f *Fake) AddCertificate(ctx context.Context, name string, certType backend.CertificateType, pemData string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -108,7 +108,7 @@ func (f *Fake) DeleteCertificate(ctx context.Context, fingerprint string) error 
 	return notFoundf("certificate %q", fingerprint)
 }
 
-func (f *Fake) UpdateCertificate(ctx context.Context, fingerprint, name string, restricted bool, projects []string) error {
+func (f *Fake) UpdateCertificate(ctx context.Context, fingerprint, name string, projects *[]string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -118,11 +118,12 @@ func (f *Fake) UpdateCertificate(ctx context.Context, fingerprint, name string, 
 	for i, c := range f.remote(ctx).certificates {
 		if c.Fingerprint == fingerprint {
 			f.remote(ctx).certificates[i].Name = name
-			f.remote(ctx).certificates[i].Restricted = restricted
-			if !restricted {
-				projects = nil
+			if projects == nil {
+				f.remote(ctx).certificates[i].Projects = nil
+			} else {
+				cloned := append([]string(nil), *projects...)
+				f.remote(ctx).certificates[i].Projects = &cloned
 			}
-			f.remote(ctx).certificates[i].Projects = append([]string(nil), projects...)
 			return nil
 		}
 	}

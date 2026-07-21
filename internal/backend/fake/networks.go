@@ -31,7 +31,7 @@ func (f *Fake) GetNetwork(ctx context.Context, name string) (backend.Network, er
 		return backend.Network{}, notFoundf("network %q", name)
 	}
 	n := f.networkView(ctx, sp, name)
-	n.Version = strconv.Itoa(sp.networkVersions[name])
+	n.Version = backend.Version(strconv.Itoa(sp.networkVersions[name]))
 	return n, nil
 }
 
@@ -50,7 +50,7 @@ func (f *Fake) CreateNetwork(ctx context.Context, n backend.Network) error {
 	return nil
 }
 
-func (f *Fake) UpdateNetwork(ctx context.Context, name, description string, config map[string]string, version string) error {
+func (f *Fake) UpdateNetwork(ctx context.Context, name, description string, config map[string]string, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.networkSpace(ctx)
@@ -64,7 +64,7 @@ func (f *Fake) UpdateNetwork(ctx context.Context, name, description string, conf
 	}
 	// Empty version = unconditional, mirroring UpdateServerConfig; a stale
 	// version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(sp.networkVersions[name]) {
+	if version != "" && string(version) != strconv.Itoa(sp.networkVersions[name]) {
 		return conflict("network %q version %s", name, version)
 	}
 	net.Description = description

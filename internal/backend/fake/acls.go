@@ -33,7 +33,7 @@ func (f *Fake) GetNetworkACL(ctx context.Context, name string) (backend.NetworkA
 		return backend.NetworkACL{}, notFoundf("network ACL %q", name)
 	}
 	acl := f.aclView(ctx, sp, name)
-	acl.Version = strconv.Itoa(sp.aclVersions[name])
+	acl.Version = backend.Version(strconv.Itoa(sp.aclVersions[name]))
 	return acl, nil
 }
 
@@ -52,7 +52,7 @@ func (f *Fake) CreateNetworkACL(ctx context.Context, acl backend.NetworkACL) err
 	return nil
 }
 
-func (f *Fake) UpdateNetworkACL(ctx context.Context, name, description string, ingress, egress []backend.NetworkACLRule, version string) error {
+func (f *Fake) UpdateNetworkACL(ctx context.Context, name, description string, ingress, egress []backend.NetworkACLRule, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.networkSpace(ctx)
@@ -63,7 +63,7 @@ func (f *Fake) UpdateNetworkACL(ctx context.Context, name, description string, i
 	}
 	// Empty version = unconditional, mirroring the Incus client's If-Match
 	// semantics; a stale version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(sp.aclVersions[name]) {
+	if version != "" && string(version) != strconv.Itoa(sp.aclVersions[name]) {
 		return conflict("network ACL %q version %s", name, version)
 	}
 	acl.Description = description

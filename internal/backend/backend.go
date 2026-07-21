@@ -20,6 +20,14 @@ var (
 	ErrUnsupported = errors.New("unsupported")
 )
 
+// Version is an opaque optimistic-concurrency token: Get* calls populate it
+// (List entries leave it empty) and Update* calls accept it to make the write
+// conditional — a concurrent change since the Get fails with ErrConflict.
+// An empty token is accepted but means "write unconditionally": the update
+// silently degrades to last-write-wins, which is why the HTTP layer requires
+// the token on every form that was rendered from a Get (requireVersion).
+type Version string
+
 // Tier identifies which driver is serving requests.
 type Tier string
 
@@ -222,7 +230,7 @@ type Profile struct {
 	UsedBy      []string                     // instance names using it
 	// Version is an opaque concurrency token for UpdateProfile, populated by
 	// GetProfile (empty on list entries).
-	Version string
+	Version Version
 }
 
 // Network is an Incus network. Managed networks (bridges, OVN, ...) are
@@ -239,22 +247,52 @@ type Network struct {
 	UsedBy      []string
 	// Version is an opaque concurrency token for UpdateNetwork, populated by
 	// GetNetwork (empty on list entries).
-	Version string
+	Version Version
 }
+
+// ACLRuleAction is what a matching ACL rule does with the traffic.
+type ACLRuleAction string
+
+const (
+	ACLActionAllow          ACLRuleAction = "allow"
+	ACLActionAllowStateless ACLRuleAction = "allow-stateless"
+	ACLActionReject         ACLRuleAction = "reject"
+	ACLActionDrop           ACLRuleAction = "drop"
+)
+
+// ACLProtocol is the protocol an ACL rule matches; empty matches any.
+type ACLProtocol string
+
+const (
+	ACLProtocolAny   ACLProtocol = ""
+	ACLProtocolTCP   ACLProtocol = "tcp"
+	ACLProtocolUDP   ACLProtocol = "udp"
+	ACLProtocolICMP4 ACLProtocol = "icmp4"
+	ACLProtocolICMP6 ACLProtocol = "icmp6"
+)
+
+// ACLRuleState is whether an ACL rule is applied, and whether it logs.
+type ACLRuleState string
+
+const (
+	ACLStateEnabled  ACLRuleState = "enabled"
+	ACLStateDisabled ACLRuleState = "disabled"
+	ACLStateLogged   ACLRuleState = "logged"
+)
 
 // NetworkACLRule is one rule of a network ACL. Direction is carried by
 // membership in NetworkACL.Ingress vs NetworkACL.Egress (the Incus API has no
 // direction field). Rules are order-independent.
 type NetworkACLRule struct {
-	Action          string // allow | allow-stateless | reject | drop
+	Action          ACLRuleAction
 	Source          string
 	Destination     string
-	Protocol        string // tcp | udp | icmp4 | icmp6 | "" (any)
+	Protocol        ACLProtocol
 	SourcePort      string
 	DestinationPort string
 	ICMPType        string
 	ICMPCode        string
-	State           string // enabled | disabled | logged
+	State           ACLRuleState
 	Description     string
 }
 
@@ -269,7 +307,7 @@ type NetworkACL struct {
 	UsedBy      []string
 	// Version is an opaque concurrency token for UpdateNetworkACL, populated
 	// by GetNetworkACL (empty on list entries).
-	Version string
+	Version Version
 }
 
 // StoragePool is an Incus storage pool: driver-specific infra
@@ -289,7 +327,7 @@ type StoragePool struct {
 	SpaceTotal int64
 	// Version is an opaque concurrency token for UpdateStoragePool, populated
 	// by GetStoragePool (empty on list entries).
-	Version string
+	Version Version
 }
 
 // StorageVolume is a custom storage volume within a pool. lexi manages only the
@@ -305,7 +343,7 @@ type StorageVolume struct {
 	UsedBy      []string
 	// Version is an opaque concurrency token for UpdateVolume, populated by
 	// GetVolume (empty on list entries).
-	Version string
+	Version Version
 }
 
 // StorageVolumeSnapshot is a point-in-time snapshot of a custom volume.
@@ -326,14 +364,27 @@ type InstanceConfig struct {
 	LocalDevices map[string]map[string]string
 	// Version is an opaque concurrency token for UpdateInstanceConfig and
 	// UpdateDevice, populated by GetInstanceConfig.
-	Version string
+	Version Version
+}
+
+// ManagedConfigKey reports whether a config key is managed outside the config
+// editor: volatile.* (internal/auto-managed), limits.cpu/limits.memory (owned
+// by the Limits form), and snapshots.schedule/expiry/pattern (owned by the
+// snapshot-schedule form). Every driver hides these from the editable subset
+// and preserves them on update, so the predicate lives on the seam rather
+// than being copied per driver.
+func ManagedConfigKey(k string) bool {
+	return strings.HasPrefix(k, "volatile.") ||
+		k == "limits.cpu" || k == "limits.memory" ||
+		k == "snapshots.schedule" || k == "snapshots.expiry" || k == "snapshots.pattern"
 }
 
 // Metrics is a point-in-time resource snapshot. The incus driver derives
-// CPUPercent from the delta between two CPU-time samples, so it reads 0 until
-// a prior sample exists (the fake returns canned values from the first call).
+// CPUPercent from the delta between two CPU-time samples, so it is nil until
+// a prior sample exists — nil means "unknown", distinct from a real idle 0%
+// (the fake returns canned values from the first call).
 type Metrics struct {
-	CPUPercent  float64
+	CPUPercent  *float64 // nil = unknown (no measurement window yet)
 	MemoryUsage int64
 	MemoryTotal int64
 	DiskUsage   int64
@@ -461,20 +512,51 @@ type HostDisk struct {
 	Removable bool
 }
 
-// Certificate is one entry of the daemon's trust store.
+// CertificateType is a trust-store entry's kind. The daemon may grow new
+// kinds, so the constants below are the known ones, not a closed set.
+type CertificateType string
+
+const (
+	CertificateClient  CertificateType = "client"
+	CertificateMetrics CertificateType = "metrics"
+)
+
+// Certificate is one entry of the daemon's trust store. Projects being nil
+// means unrestricted; non-nil means restricted to exactly those projects
+// (possibly none) — the two states cannot contradict the way a separate
+// Restricted flag could.
 type Certificate struct {
 	Name        string
-	Type        string // client | metrics | ...
+	Type        CertificateType
 	Fingerprint string
-	Restricted  bool
-	Projects    []string // projects the cert is limited to when Restricted
+	Projects    *[]string
 }
+
+// Restricted reports whether the certificate is project-restricted.
+func (c Certificate) Restricted() bool { return c.Projects != nil }
+
+// ProjectList is the restriction list ([] when unrestricted), for display.
+func (c Certificate) ProjectList() []string {
+	if c.Projects == nil {
+		return nil
+	}
+	return *c.Projects
+}
+
+// WarningSeverity grades a daemon warning.
+type WarningSeverity string
+
+const (
+	WarningSeverityLow      WarningSeverity = "low"
+	WarningSeverityModerate WarningSeverity = "moderate"
+	WarningSeverityHigh     WarningSeverity = "high"
+)
 
 // Warning is a daemon warning (e.g. a config problem Incus noticed).
 type Warning struct {
 	UUID        string
 	Type        string
-	Severity    string        // low | moderate | high
+	Severity    WarningSeverity
 	Status      WarningStatus // new | acknowledged | resolved
 	Count       int
 	LastMessage string
@@ -526,7 +608,7 @@ type Project struct {
 	UsedBy      []string
 	// Version is an opaque concurrency token for UpdateProject, populated
 	// by GetProject (empty on list entries).
-	Version string
+	Version Version
 }
 
 // StorageBucket is an S3-compatible object-store bucket on a storage pool
@@ -538,11 +620,19 @@ type StorageBucket struct {
 	Size        string // the "size" config key; empty = no quota
 }
 
+// BucketKeyRole is a bucket credential's permission level.
+type BucketKeyRole string
+
+const (
+	BucketKeyAdmin    BucketKeyRole = "admin" // read-write
+	BucketKeyReadOnly BucketKeyRole = "read-only"
+)
+
 // BucketKey is an access credential of a storage bucket.
 type BucketKey struct {
 	Name        string
 	Description string
-	Role        string // "admin" (read-write) or "read-only"
+	Role        BucketKeyRole
 	AccessKey   string
 	SecretKey   string
 }
@@ -557,7 +647,7 @@ type NetworkZone struct {
 	UsedBy      []string
 	// Version is an opaque concurrency token for UpdateNetworkZone,
 	// populated by GetNetworkZone (empty on list entries).
-	Version string
+	Version Version
 }
 
 // ZoneRecord is one record set in a network zone.
@@ -567,9 +657,13 @@ type ZoneRecord struct {
 	Entries     []ZoneEntry
 }
 
+// ZoneEntryType is a DNS record type ("A", "AAAA", "CNAME", "TXT", ...) — an
+// open set; the named type only keeps it from mixing with other strings.
+type ZoneEntryType string
+
 // ZoneEntry is one DNS entry of a ZoneRecord.
 type ZoneEntry struct {
-	Type  string // e.g. "A", "AAAA", "CNAME", "TXT"
+	Type  ZoneEntryType
 	TTL   uint64 // seconds; 0 uses the zone default
 	Value string
 }
@@ -612,11 +706,19 @@ type NetworkForward struct {
 	Ports         []ForwardPort
 }
 
+// ForwardProtocol is the transport protocol of a forward's port mapping.
+type ForwardProtocol string
+
+const (
+	ForwardTCP ForwardProtocol = "tcp"
+	ForwardUDP ForwardProtocol = "udp"
+)
+
 // ForwardPort is one port mapping in a forward. Port fields carry the
 // daemon's comma-and-range syntax (e.g. "80,8080-8090") verbatim.
 type ForwardPort struct {
 	Description   string
-	Protocol      string // "tcp" or "udp"
+	Protocol      ForwardProtocol
 	ListenPort    string
 	TargetAddress string
 	TargetPort    string // empty means same as ListenPort
@@ -781,7 +883,7 @@ type Backend interface {
 	// map, preserving its devices untouched. A non-empty version (from
 	// GetProfile) makes the update conditional: ErrConflict if the profile
 	// changed since that read.
-	UpdateProfile(ctx context.Context, name, description string, config map[string]string, version string) error
+	UpdateProfile(ctx context.Context, name, description string, config map[string]string, version Version) error
 	// DeleteProfile removes an unused profile. "default" is undeletable
 	// (ErrInvalid); a profile still used by instances is ErrConflict.
 	DeleteProfile(ctx context.Context, name string) error
@@ -793,7 +895,7 @@ type Backend interface {
 	// UpdateProfileDevice replaces the named device's config map. The device
 	// must exist (ErrNotFound). A non-empty version (from GetProfile) makes the
 	// update conditional: ErrConflict if the profile changed since that read.
-	UpdateProfileDevice(ctx context.Context, profile, device string, config map[string]string, version string) error
+	UpdateProfileDevice(ctx context.Context, profile, device string, config map[string]string, version Version) error
 	// RemoveProfileDevice detaches a device. The device must exist (ErrNotFound).
 	RemoveProfileDevice(ctx context.Context, profile, device string) error
 	// SetInstanceProfiles replaces the instance's profile list (ordered; later
@@ -805,14 +907,14 @@ type Backend interface {
 	// version (from GetInstanceConfig) makes the update conditional:
 	// ErrConflict if the instance changed since that read, so two editors
 	// can't silently clobber each other (same contract as UpdateDevice).
-	UpdateInstanceConfig(ctx context.Context, name string, config map[string]string, version string) error
+	UpdateInstanceConfig(ctx context.Context, name string, config map[string]string, version Version) error
 	// AddDevice attaches (or overwrites) a local device on the instance.
 	AddDevice(ctx context.Context, name, device string, config map[string]string) error
 	// UpdateDevice replaces the named local device's config map. The device
 	// must exist (ErrNotFound). A non-empty version (from GetInstanceConfig)
 	// makes the update conditional: ErrConflict if the instance changed since
 	// that read.
-	UpdateDevice(ctx context.Context, name, device string, config map[string]string, version string) error
+	UpdateDevice(ctx context.Context, name, device string, config map[string]string, version Version) error
 	// RemoveDevice detaches a local device. The device must exist (ErrNotFound).
 	RemoveDevice(ctx context.Context, name, device string) error
 
@@ -823,7 +925,7 @@ type Backend interface {
 	// config map. A non-empty version (from GetNetwork) makes the update
 	// conditional: ErrConflict if the network changed since that read; empty
 	// updates unconditionally.
-	UpdateNetwork(ctx context.Context, name, description string, config map[string]string, version string) error
+	UpdateNetwork(ctx context.Context, name, description string, config map[string]string, version Version) error
 	DeleteNetwork(ctx context.Context, name string) error
 
 	ListNetworkACLs(ctx context.Context) ([]NetworkACL, error)
@@ -836,7 +938,7 @@ type Backend interface {
 	// UpdateNetworkACL replaces the ACL's description and both rule lists. A
 	// non-empty version (from GetNetworkACL) makes the update conditional:
 	// ErrConflict if the ACL changed since that read.
-	UpdateNetworkACL(ctx context.Context, name, description string, ingress, egress []NetworkACLRule, version string) error
+	UpdateNetworkACL(ctx context.Context, name, description string, ingress, egress []NetworkACLRule, version Version) error
 	// RenameNetworkACL renames an ACL; the target name must be free
 	// (ErrConflict).
 	RenameNetworkACL(ctx context.Context, name, newName string) error
@@ -869,7 +971,7 @@ type Backend interface {
 	// UpdateNetworkZone replaces the zone's description and config,
 	// conditionally on version (ErrConflict when stale; empty version is
 	// unconditional).
-	UpdateNetworkZone(ctx context.Context, name, description string, config map[string]string, version string) error
+	UpdateNetworkZone(ctx context.Context, name, description string, config map[string]string, version Version) error
 	// DeleteNetworkZone refuses zones referenced by a network (ErrConflict).
 	DeleteNetworkZone(ctx context.Context, name string) error
 	// ListZoneRecords lists the zone's record sets, sorted by name.
@@ -905,7 +1007,7 @@ type Backend interface {
 	// UpdateProject replaces the project's description and config,
 	// conditionally on version (ErrConflict when stale; empty version is
 	// unconditional).
-	UpdateProject(ctx context.Context, name, description string, config map[string]string, version string) error
+	UpdateProject(ctx context.Context, name, description string, config map[string]string, version Version) error
 	// RenameProject renames a project; the default project is refused
 	// (ErrInvalid) and the target name must be free (ErrConflict).
 	RenameProject(ctx context.Context, name, newName string) error
@@ -923,7 +1025,7 @@ type Backend interface {
 	// conditional: ErrConflict if the pool changed since that read. Some pool
 	// config keys are immutable post-create; the daemon rejects those with
 	// ErrInvalid.
-	UpdateStoragePool(ctx context.Context, name, description string, config map[string]string, version string) error
+	UpdateStoragePool(ctx context.Context, name, description string, config map[string]string, version Version) error
 	// DeleteStoragePool refuses pools with UsedBy references (ErrConflict).
 	DeleteStoragePool(ctx context.Context, name string) error
 	ListVolumes(ctx context.Context, pool string) ([]StorageVolume, error)
@@ -934,7 +1036,7 @@ type Backend interface {
 	// the update conditional: ErrConflict if the volume's config changed since
 	// that read. Caveat: the Incus volume etag covers name/type/config but not
 	// description, so concurrent description-only edits are last-write-wins.
-	UpdateVolume(ctx context.Context, pool, name, description string, config map[string]string, version string) error
+	UpdateVolume(ctx context.Context, pool, name, description string, config map[string]string, version Version) error
 	// RenameVolume renames a custom volume. The target name must be free
 	// (ErrConflict); a volume in use by an instance is refused by the daemon.
 	RenameVolume(ctx context.Context, pool, name, newName string) error
@@ -971,7 +1073,7 @@ type Backend interface {
 	// CreateBucketKey adds a credential and returns it with the generated
 	// access/secret keys. Role must be "admin" or "read-only"; empty
 	// defaults to read-only.
-	CreateBucketKey(ctx context.Context, pool, bucket, name, description, role string) (BucketKey, error)
+	CreateBucketKey(ctx context.Context, pool, bucket, name, description string, role BucketKeyRole) (BucketKey, error)
 	// DeleteBucketKey revokes the named credential.
 	DeleteBucketKey(ctx context.Context, pool, bucket, name string) error
 
@@ -1032,9 +1134,9 @@ type Backend interface {
 
 	ListLocalImages(ctx context.Context) ([]LocalImage, error)
 	// PublishImage creates a local image from the instance, tagged with alias
-	// when non-empty. Best done while the instance is stopped — publishing a
-	// running one captures a live, possibly-inconsistent rootfs — but neither
-	// lexi nor the daemon's image handler enforces that.
+	// when non-empty. Publishing a running instance would capture a live,
+	// possibly-inconsistent rootfs, so a running instance is rejected with
+	// ErrInvalid (the daemon's image handler itself does not enforce this).
 	PublishImage(ctx context.Context, instance, alias string) error
 	// CopyImage pulls the image behind alias from the images remote into the
 	// local store, copying its aliases.
@@ -1074,8 +1176,10 @@ type Backend interface {
 	// ErrNotFound; an operation the daemon won't cancel is ErrInvalid.
 	CancelOperation(ctx context.Context, id string) error
 	// WatchOperations reports daemon operation changes as coalesced ticks.
-	// The channel is closed when ctx ends. Callers re-list on each tick; no
-	// event payload crosses the seam.
+	// The channel is closed when ctx ends or the driver loses its event
+	// source (e.g. a daemon restart drops the stream) — a closed channel
+	// means "this watch is over, reconnect if still interested". Callers
+	// re-list on each tick; no event payload crosses the seam.
 	WatchOperations(ctx context.Context) (<-chan struct{}, error)
 
 	// ListFiles lists the instance directory at path (absolute), directories
@@ -1085,9 +1189,9 @@ type Backend interface {
 	// ErrInvalid.
 	PullFile(ctx context.Context, instance, path string, w io.Writer) error
 	// PushFile creates (or overwrites) the instance file at path from r. The
-	// ownership and mode options are always applied — on create and on
-	// overwrite — so the zero value (root:root, 0644) resets an overwritten
-	// file's owner and mode to those defaults rather than preserving them.
+	// ownership and mode options apply only when the file is created (zero
+	// value: root:root 0644); overwriting keeps the existing file's metadata —
+	// the Incus daemon ignores the ownership/mode headers for existing files.
 	PushFile(ctx context.Context, instance, path string, r io.Reader, opts FileWriteOptions) error
 	// PullFileInfo streams the file at path to w like PullFile but also
 	// returns its metadata. A limit > 0 caps the read: larger files fail with
@@ -1112,25 +1216,26 @@ type Backend interface {
 	GetServerHardware(ctx context.Context) (ServerHardware, error)
 	// GetServerConfig returns the server config map plus an opaque version
 	// token for optimistic concurrency on update.
-	GetServerConfig(ctx context.Context) (map[string]string, string, error)
+	GetServerConfig(ctx context.Context) (map[string]string, Version, error)
 	// UpdateServerConfig replaces the server's config map. A non-empty version
 	// (from GetServerConfig) makes the replace conditional: if the config
 	// changed since that read, the update fails with ErrConflict instead of
 	// silently overwriting the concurrent change. An empty version updates
 	// unconditionally.
-	UpdateServerConfig(ctx context.Context, config map[string]string, version string) error
+	UpdateServerConfig(ctx context.Context, config map[string]string, version Version) error
 	ListCertificates(ctx context.Context) ([]Certificate, error)
 	// AddCertificate adds a PEM-encoded certificate to the daemon's trust
 	// store. Data that isn't a PEM CERTIFICATE block is ErrInvalid; the daemon
 	// is authoritative for X.509 validity and the certificate type.
-	AddCertificate(ctx context.Context, name, certType, pemData string) error
+	AddCertificate(ctx context.Context, name string, certType CertificateType, pemData string) error
 	// DeleteCertificate removes a certificate from the trust store by its
 	// fingerprint. An unknown fingerprint is ErrNotFound.
 	DeleteCertificate(ctx context.Context, fingerprint string) error
 	// UpdateCertificate renames a trusted certificate and sets its project
-	// restriction. When restricted, the cert is limited to the given projects.
-	// An empty name is ErrInvalid; an unknown fingerprint is ErrNotFound.
-	UpdateCertificate(ctx context.Context, fingerprint, name string, restricted bool, projects []string) error
+	// restriction: nil projects lifts the restriction, non-nil restricts the
+	// cert to exactly those projects. An empty name is ErrInvalid; an unknown
+	// fingerprint is ErrNotFound.
+	UpdateCertificate(ctx context.Context, fingerprint, name string, projects *[]string) error
 	// ListWarnings returns daemon warnings, newest last-seen first.
 	ListWarnings(ctx context.Context) ([]Warning, error)
 	DeleteWarning(ctx context.Context, uuid string) error

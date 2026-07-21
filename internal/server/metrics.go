@@ -25,7 +25,9 @@ func (h handlers) metrics(w http.ResponseWriter, r *http.Request) {
 // metricsSeries returns the retained metrics history for an instance as JSON
 // for the charts. Each request also appends the current live sample, so the
 // history of the active scope accumulates (and survives page reloads) even
-// when the background sampler is sampling a different remote/project.
+// when the background sampler is sampling a different remote/project. In the
+// scope the sampler does cover, the store's minimum sample gap drops this
+// handler's interleaved appends, so double-polling cannot halve the window.
 func (h handlers) metricsSeries(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	m, err := h.backend.Metrics(r.Context(), name)
@@ -54,20 +56,22 @@ func writeJSON(w http.ResponseWriter, v any) {
 }
 
 // metricsSeriesData is the column-oriented shape uPlot consumes: parallel
-// arrays indexed by sample, x-axis (t) in unix seconds.
+// arrays indexed by sample, x-axis (t) in unix seconds. CPU entries are null
+// when the sample's CPU% was unknown (the driver's first reading of an
+// instance) — uPlot renders null as a gap, not a fake 0%.
 type metricsSeriesData struct {
-	T        []int64   `json:"t"`
-	CPU      []float64 `json:"cpu"`
-	MemUsed  []int64   `json:"memUsed"`
-	MemTotal []int64   `json:"memTotal"`
-	Rx       []int64   `json:"rx"`
-	Tx       []int64   `json:"tx"`
+	T        []int64    `json:"t"`
+	CPU      []*float64 `json:"cpu"`
+	MemUsed  []int64    `json:"memUsed"`
+	MemTotal []int64    `json:"memTotal"`
+	Rx       []int64    `json:"rx"`
+	Tx       []int64    `json:"tx"`
 }
 
 func seriesJSON(samples []backend.MetricSample) metricsSeriesData {
 	d := metricsSeriesData{
 		T:        make([]int64, len(samples)),
-		CPU:      make([]float64, len(samples)),
+		CPU:      make([]*float64, len(samples)),
 		MemUsed:  make([]int64, len(samples)),
 		MemTotal: make([]int64, len(samples)),
 		Rx:       make([]int64, len(samples)),

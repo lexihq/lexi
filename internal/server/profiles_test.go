@@ -76,7 +76,7 @@ func TestUpdateProfileAppliesAndRedirects(t *testing.T) {
 	require.NoError(t, err)
 
 	res := formRequest(t, New(b), "/profiles/default/config",
-		url.Values{"description": {"edited"}, "version": {p.Version},
+		url.Values{"description": {"edited"}, "version": {string(p.Version)},
 			"key": {"limits.cpu", ""}, "value": {"2", ""}}, false)
 	assertStatus(t, res, http.StatusSeeOther)
 
@@ -94,7 +94,7 @@ func TestUpdateProfileStaleVersionIs409(t *testing.T) {
 	require.NoError(t, b.UpdateProfile(t.Context(), "default", "racer", nil, p.Version))
 
 	res := formRequest(t, New(b), "/profiles/default/config",
-		url.Values{"description": {"stale"}, "version": {p.Version}}, true)
+		url.Values{"description": {"stale"}, "version": {string(p.Version)}}, true)
 	assertStatus(t, res, http.StatusConflict)
 }
 
@@ -144,7 +144,7 @@ func TestUpdateProfileDeviceMergesAndPreservesUnknownKeys(t *testing.T) {
 	require.NoError(t, err)
 
 	res := formRequest(t, New(b), "/profiles/web/devices/eth0",
-		url.Values{"version": {p.Version}, "network": {"br1"}}, true)
+		url.Values{"version": {string(p.Version)}, "network": {"br1"}}, true)
 	assertStatus(t, res, http.StatusOK)
 
 	got, err := b.GetProfile(t.Context(), "web")

@@ -78,12 +78,12 @@ func (b *incusBackend) GetServerHardware(ctx context.Context) (backend.ServerHar
 
 // GetServerConfig returns the config map plus the server etag as the opaque
 // version token callers thread back into UpdateServerConfig.
-func (b *incusBackend) GetServerConfig(ctx context.Context) (map[string]string, string, error) {
+func (b *incusBackend) GetServerConfig(ctx context.Context) (map[string]string, backend.Version, error) {
 	srv, etag, err := b.server(ctx).GetServer()
 	if err != nil {
 		return nil, "", fmt.Errorf("get server config: %w", mapErr(err))
 	}
-	return maps.Clone(map[string]string(srv.Config)), etag, nil
+	return maps.Clone(map[string]string(srv.Config)), backend.Version(etag), nil
 }
 
 // UpdateServerConfig replaces the server config map. The version is the etag
@@ -95,7 +95,7 @@ func (b *incusBackend) GetServerConfig(ctx context.Context) (map[string]string, 
 // means "explicitly set to empty" (what `incus config unset` sends) — so keys
 // present on the server but absent from config are added with empty values to
 // make this a true replace.
-func (b *incusBackend) UpdateServerConfig(ctx context.Context, config map[string]string, version string) error {
+func (b *incusBackend) UpdateServerConfig(ctx context.Context, config map[string]string, version backend.Version) error {
 	srv, _, err := b.server(ctx).GetServer()
 	if err != nil {
 		return fmt.Errorf("get server: %w", mapErr(err))
@@ -107,7 +107,7 @@ func (b *incusBackend) UpdateServerConfig(ctx context.Context, config map[string
 		}
 	}
 	maps.Copy(put, api.ConfigMap(config))
-	if err := b.server(ctx).UpdateServer(api.ServerPut{Config: put}, version); err != nil {
+	if err := b.server(ctx).UpdateServer(api.ServerPut{Config: put}, string(version)); err != nil {
 		return fmt.Errorf("update server config: %w", mapErr(err))
 	}
 	return nil
@@ -120,20 +120,23 @@ func (b *incusBackend) ListCertificates(ctx context.Context) ([]backend.Certific
 	}
 	out := make([]backend.Certificate, 0, len(certs))
 	for _, c := range certs {
-		out = append(out, backend.Certificate{
+		cert := backend.Certificate{
 			Name:        c.Name,
-			Type:        c.Type,
+			Type:        backend.CertificateType(c.Type),
 			Fingerprint: c.Fingerprint,
-			Restricted:  c.Restricted,
-			Projects:    c.Projects,
-		})
+		}
+		if c.Restricted {
+			projects := append([]string(nil), c.Projects...)
+			cert.Projects = &projects
+		}
+		out = append(out, cert)
 	}
 	return out, nil
 }
 
 // AddCertificate decodes the pasted PEM and hands the daemon the base64 DER;
 // the daemon is authoritative for X.509 validity and the certificate type.
-func (b *incusBackend) AddCertificate(ctx context.Context, name, certType, pemData string) error {
+func (b *incusBackend) AddCertificate(ctx context.Context, name string, certType backend.CertificateType, pemData string) error {
 	block, _ := pem.Decode([]byte(pemData))
 	if block == nil || block.Type != "CERTIFICATE" {
 		return fmt.Errorf("add certificate %q: not a PEM certificate: %w", name, backend.ErrInvalid)
@@ -141,7 +144,7 @@ func (b *incusBackend) AddCertificate(ctx context.Context, name, certType, pemDa
 	post := api.CertificatesPost{
 		CertificatePut: api.CertificatePut{
 			Name:        name,
-			Type:        certType,
+			Type:        string(certType),
 			Certificate: base64.StdEncoding.EncodeToString(block.Bytes),
 		},
 	}
@@ -162,7 +165,7 @@ func (b *incusBackend) DeleteCertificate(ctx context.Context, fingerprint string
 // UpdateCertificate renames a trusted certificate and sets its project
 // restriction via read-modify-write: the cert body and type are preserved and
 // the read etag makes the update conditional on no concurrent change.
-func (b *incusBackend) UpdateCertificate(ctx context.Context, fingerprint, name string, restricted bool, projects []string) error {
+func (b *incusBackend) UpdateCertificate(ctx context.Context, fingerprint, name string, projects *[]string) error {
 	if name == "" {
 		return fmt.Errorf("certificate name is required: %w", backend.ErrInvalid)
 	}
@@ -172,9 +175,9 @@ func (b *incusBackend) UpdateCertificate(ctx context.Context, fingerprint, name 
 	}
 	put := cert.Writable()
 	put.Name = name
-	put.Restricted = restricted
-	if restricted {
-		put.Projects = projects
+	put.Restricted = projects != nil
+	if projects != nil {
+		put.Projects = *projects
 	} else {
 		put.Projects = nil
 	}
@@ -195,7 +198,7 @@ func (b *incusBackend) ListWarnings(ctx context.Context) ([]backend.Warning, err
 		out = append(out, backend.Warning{
 			UUID:        w.UUID,
 			Type:        w.Type,
-			Severity:    w.Severity,
+			Severity:    backend.WarningSeverity(w.Severity),
 			Status:      backend.WarningStatus(w.Status),
 			Count:       w.Count,
 			LastMessage: w.LastMessage,

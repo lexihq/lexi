@@ -35,11 +35,11 @@ func (f *Fake) GetStoragePool(ctx context.Context, pool string) (backend.Storage
 		return backend.StoragePool{}, notFoundf("storage pool %q", pool)
 	}
 	out := f.poolView(f.remote(ctx), p)
-	out.Version = strconv.Itoa(p.version)
+	out.Version = backend.Version(strconv.Itoa(p.version))
 	return out, nil
 }
 
-func (f *Fake) UpdateStoragePool(ctx context.Context, name, description string, config map[string]string, version string) error {
+func (f *Fake) UpdateStoragePool(ctx context.Context, name, description string, config map[string]string, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -49,7 +49,7 @@ func (f *Fake) UpdateStoragePool(ctx context.Context, name, description string, 
 	}
 	// Empty version = unconditional, mirroring the Incus client's If-Match
 	// semantics; a stale version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(p.version) {
+	if version != "" && string(version) != strconv.Itoa(p.version) {
 		return conflict("storage pool %q version %s", name, version)
 	}
 	p.Description = description
@@ -160,11 +160,11 @@ func (f *Fake) GetVolume(ctx context.Context, pool, name string) (backend.Storag
 		return backend.StorageVolume{}, err
 	}
 	out := volumeView(v)
-	out.Version = strconv.Itoa(v.version)
+	out.Version = backend.Version(strconv.Itoa(v.version))
 	return out, nil
 }
 
-func (f *Fake) UpdateVolume(ctx context.Context, pool, name, description string, config map[string]string, version string) error {
+func (f *Fake) UpdateVolume(ctx context.Context, pool, name, description string, config map[string]string, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -174,15 +174,22 @@ func (f *Fake) UpdateVolume(ctx context.Context, pool, name, description string,
 	}
 	// Empty version = unconditional, mirroring the Incus client's If-Match
 	// semantics; a stale version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(v.version) {
+	if version != "" && string(version) != strconv.Itoa(v.version) {
 		return conflict("volume %q version %s", name, version)
 	}
 	v.Description = description
-	v.Config = maps.Clone(config)
-	if v.Config == nil {
-		v.Config = map[string]string{}
+	next := maps.Clone(config)
+	if next == nil {
+		next = map[string]string{}
 	}
-	v.version++
+	// The daemon computes the volume etag from name/type/config only —
+	// description is excluded — so only a config change invalidates
+	// outstanding version tokens; description-only edits are last-write-wins
+	// (see the UpdateVolume contract).
+	if !maps.Equal(v.Config, next) {
+		v.version++
+	}
+	v.Config = next
 	return nil
 }
 

@@ -153,7 +153,7 @@ func (h handlers) updateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
-	if err := h.backend.UpdateProject(r.Context(), name, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateProject(r.Context(), name, r.Form.Get("description"), config, backend.Version(r.Form.Get("version"))); err != nil {
 		h.fail(w, r, err)
 		return
 	}

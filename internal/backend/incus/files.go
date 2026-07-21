@@ -75,8 +75,11 @@ func (b *incusBackend) PullFile(ctx context.Context, instance, path string, w io
 }
 
 // PushFile creates (or overwrites) the instance file at path from r with the
-// given ownership and mode (zero opts: root:root 0644). The file API needs a
-// ReadSeeker, so the content is buffered; the HTTP handler caps the upload size.
+// given ownership and mode (zero opts: root:root 0644). The options only take
+// effect on create: the daemon applies the ownership/mode headers only to files
+// that did not already exist, so an overwrite keeps the target's metadata. The
+// file API needs a ReadSeeker, so the content is buffered; the HTTP handler
+// caps the upload size.
 func (b *incusBackend) PushFile(ctx context.Context, instance, path string, r io.Reader, opts backend.FileWriteOptions) error {
 	mode := 0o644
 	if opts.Mode != "" {

@@ -62,7 +62,7 @@ func (h handlers) updateNetworkACL(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	if err := h.backend.UpdateNetworkACL(r.Context(), name, r.Form.Get("description"), acl.Ingress, acl.Egress, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateNetworkACL(r.Context(), name, r.Form.Get("description"), acl.Ingress, acl.Egress, backend.Version(r.Form.Get("version"))); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -109,18 +109,18 @@ func (h handlers) addNetworkACLRule(w http.ResponseWriter, r *http.Request) {
 	}
 	// The rule forms always carry the token; a request without one would write
 	// unconditionally, letting a stale form clobber concurrent rule changes.
-	if r.Form.Get("version") == "" {
-		h.fail(w, r, fmt.Errorf("missing ACL version token: %w", backend.ErrInvalid))
+	version, ok := h.requireVersion(w, r, "ACL")
+	if !ok {
 		return
 	}
 	rule := backend.NetworkACLRule{
-		Action:          r.Form.Get("action"),
+		Action:          backend.ACLRuleAction(r.Form.Get("action")),
 		Source:          strings.TrimSpace(r.Form.Get("source")),
 		Destination:     strings.TrimSpace(r.Form.Get("destination")),
-		Protocol:        r.Form.Get("protocol"),
+		Protocol:        backend.ACLProtocol(r.Form.Get("protocol")),
 		SourcePort:      strings.TrimSpace(r.Form.Get("source_port")),
 		DestinationPort: strings.TrimSpace(r.Form.Get("destination_port")),
-		State:           r.Form.Get("state"),
+		State:           backend.ACLRuleState(r.Form.Get("state")),
 	}
 	acl, err := h.backend.GetNetworkACL(r.Context(), name)
 	if err != nil {
@@ -133,7 +133,7 @@ func (h handlers) addNetworkACLRule(w http.ResponseWriter, r *http.Request) {
 	} else {
 		egress = append(egress, rule)
 	}
-	if err := h.backend.UpdateNetworkACL(r.Context(), name, acl.Description, ingress, egress, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateNetworkACL(r.Context(), name, acl.Description, ingress, egress, version); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -153,8 +153,8 @@ func (h handlers) deleteNetworkACLRule(w http.ResponseWriter, r *http.Request) {
 	// Index-based removal is only safe under the optimistic lock: without the
 	// token a concurrent rule change could shift indices between render and
 	// write.
-	if r.Form.Get("version") == "" {
-		h.fail(w, r, fmt.Errorf("missing ACL version token: %w", backend.ErrInvalid))
+	version, ok := h.requireVersion(w, r, "ACL")
+	if !ok {
 		return
 	}
 	index, err := strconv.Atoi(r.Form.Get("index"))
@@ -185,7 +185,7 @@ func (h handlers) deleteNetworkACLRule(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, fmt.Errorf("direction %q must be ingress or egress: %w", direction, backend.ErrInvalid))
 		return
 	}
-	if err := h.backend.UpdateNetworkACL(r.Context(), name, acl.Description, ingress, egress, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateNetworkACL(r.Context(), name, acl.Description, ingress, egress, version); err != nil {
 		h.fail(w, r, err)
 		return
 	}

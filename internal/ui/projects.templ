@@ -247,7 +247,7 @@ templ ProjectDetailPage(caps backend.Capabilities, p backend.Project, usage []ba
 			<h2 class="mb-1 text-lg font-medium">Config</h2>
 			<p class="mb-3 text-sm text-muted-foreground">Clearing a key's name removes it on apply. Feature flags cannot change once the project holds resources.</p>
 			<form method="post" action={ templ.URL(base + "/config") } class="max-w-xl space-y-2">
-				<input type="hidden" name="version" value={ p.Version }/>
+				<input type="hidden" name="version" value={ string(p.Version) }/>
 				<div>
 					<label class="mb-1 block text-sm font-medium">Description</label>
 					<input name="description" value={ p.Description } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>

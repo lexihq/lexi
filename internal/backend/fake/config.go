@@ -4,7 +4,6 @@ import (
 	"context"
 	"maps"
 	"strconv"
-	"strings"
 
 	"github.com/lexihq/lexi/internal/backend"
 )
@@ -36,19 +35,8 @@ func (f *Fake) GetInstanceConfig(ctx context.Context, name string) (backend.Inst
 		Config:       editableConfig(in.config),
 		Devices:      expanded,
 		LocalDevices: cloneDevices(in.devices),
-		Version:      strconv.Itoa(in.configVersion),
+		Version:      backend.Version(strconv.Itoa(in.configVersion)),
 	}, nil
-}
-
-// managedConfigKey mirrors the incus driver's rule: volatile.* (internal),
-// limits.cpu/limits.memory (owned by the Limits form), and
-// snapshots.schedule/expiry/pattern (owned by the snapshot-schedule form) are
-// hidden from the config editor and preserved on update — so both drivers expose
-// the same editable subset.
-func managedConfigKey(k string) bool {
-	return strings.HasPrefix(k, "volatile.") ||
-		k == "limits.cpu" || k == "limits.memory" ||
-		k == "snapshots.schedule" || k == "snapshots.expiry" || k == "snapshots.pattern"
 }
 
 // editableConfig returns the user-editable subset of the stored config (a
@@ -56,7 +44,7 @@ func managedConfigKey(k string) bool {
 func editableConfig(local map[string]string) map[string]string {
 	out := make(map[string]string, len(local))
 	for k, v := range local {
-		if managedConfigKey(k) {
+		if backend.ManagedConfigKey(k) {
 			continue
 		}
 		out[k] = v
@@ -68,7 +56,7 @@ func editableConfig(local map[string]string) map[string]string {
 // limits, snapshots.*) are preserved from the stored config and ignored on
 // input, so saving the editor can't wipe a snapshot schedule. A non-empty
 // stale version conflicts, same as UpdateDevice.
-func (f *Fake) UpdateInstanceConfig(ctx context.Context, name string, config map[string]string, version string) error {
+func (f *Fake) UpdateInstanceConfig(ctx context.Context, name string, config map[string]string, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.space(ctx)
@@ -77,17 +65,17 @@ func (f *Fake) UpdateInstanceConfig(ctx context.Context, name string, config map
 	if !ok {
 		return notFound(name)
 	}
-	if version != "" && version != strconv.Itoa(in.configVersion) {
+	if version != "" && string(version) != strconv.Itoa(in.configVersion) {
 		return conflict("instance %q config version %s", name, version)
 	}
 	next := map[string]string{}
 	for k, v := range in.config {
-		if managedConfigKey(k) {
+		if backend.ManagedConfigKey(k) {
 			next[k] = v
 		}
 	}
 	for k, v := range config {
-		if managedConfigKey(k) {
+		if backend.ManagedConfigKey(k) {
 			continue
 		}
 		next[k] = v
@@ -114,7 +102,7 @@ func (f *Fake) AddDevice(ctx context.Context, name, device string, config map[st
 	return nil
 }
 
-func (f *Fake) UpdateDevice(ctx context.Context, name, device string, config map[string]string, version string) error {
+func (f *Fake) UpdateDevice(ctx context.Context, name, device string, config map[string]string, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.space(ctx)
@@ -128,7 +116,7 @@ func (f *Fake) UpdateDevice(ctx context.Context, name, device string, config map
 	}
 	// Empty version = unconditional, mirroring UpdateServerConfig; a stale
 	// version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(in.configVersion) {
+	if version != "" && string(version) != strconv.Itoa(in.configVersion) {
 		return conflict("instance %q config version %s", name, version)
 	}
 	in.devices[device] = maps.Clone(config)

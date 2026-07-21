@@ -29,7 +29,7 @@ func TestMetricsUnknownInstanceIs404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, res.Code)
 }
 
-func TestMetricsSeriesAccumulatesAcrossRequests(t *testing.T) {
+func TestMetricsSeriesCoalescesRapidPolls(t *testing.T) {
 	b := fake.New()
 	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
 	srv := New(b) // one server, so successive requests share the sample store
@@ -37,22 +37,26 @@ func TestMetricsSeriesAccumulatesAcrossRequests(t *testing.T) {
 	var first metricsSeriesData
 	require.NoError(t, json.Unmarshal(request(t, srv, "GET", "/instances/demo/metrics/series", "", false).Body.Bytes(), &first))
 	require.Len(t, first.T, 1)
-	assert.InDelta(t, 12.5, first.CPU[0], 0.001, "first sample is the canonical value")
+	require.NotNil(t, first.CPU[0])
+	assert.InDelta(t, 12.5, *first.CPU[0], 0.001, "first sample is the canonical value")
 
+	// A second poll lands within the store's minimum sample gap (e.g. the
+	// background sampler and the chart poll interleaving): it must read the
+	// history without inflating it, or the chart window halves.
 	var second metricsSeriesData
 	res := request(t, srv, "GET", "/instances/demo/metrics/series", "", false)
 	assert.Equal(t, "application/json", res.Header().Get("Content-Type"))
 	require.NoError(t, json.Unmarshal(res.Body.Bytes(), &second))
-	require.Len(t, second.T, 2, "each request appends the live sample")
-	assert.NotEqual(t, second.CPU[0], second.CPU[1], "the canned sample varies over time")
+	require.Len(t, second.T, 1, "a poll inside the minimum sample gap must not add a sample")
 
 	// Every series is mapped, not just CPU: a transposed/mislabeled field would
-	// otherwise only surface visually in the chart.
-	require.Len(t, second.MemUsed, 2)
-	require.Len(t, second.Rx, 2)
-	assert.Greater(t, second.Rx[1], second.Rx[0], "network counters climb")
+	// otherwise only surface visually in the chart. (Accumulation over spaced
+	// samples is covered by the metrics package's store tests.)
+	require.Len(t, second.MemUsed, 1)
+	require.Len(t, second.Rx, 1)
 	assert.Equal(t, int64(1024<<20), second.MemTotal[0], "memory total is reported")
-	assert.NotEqual(t, second.Rx[1], second.Tx[1], "rx and tx are distinct fields")
+	assert.Positive(t, second.Rx[0], "network counters are reported")
+	assert.NotEqual(t, second.Rx[0], second.Tx[0], "rx and tx are distinct fields")
 }
 
 func TestMetricsSeriesUnknownInstanceIs404(t *testing.T) {

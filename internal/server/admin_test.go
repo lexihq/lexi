@@ -175,8 +175,8 @@ func TestUpdateCertificateRenamesAndReturnsTable(t *testing.T) {
 		if c.Fingerprint == fingerprint {
 			found = true
 			assert.Equal(t, "renamed", c.Name)
-			assert.True(t, c.Restricted)
-			assert.Equal(t, []string{"default", "dev"}, c.Projects)
+			assert.True(t, c.Restricted())
+			assert.Equal(t, []string{"default", "dev"}, c.ProjectList())
 		}
 	}
 	require.True(t, found, "certificate missing after update: %+v", after)
@@ -197,8 +197,8 @@ func TestUpdateCertificateUnrestrictedIgnoresProjects(t *testing.T) {
 	require.NoError(t, err)
 	for _, c := range after {
 		if c.Fingerprint == fingerprint {
-			assert.False(t, c.Restricted)
-			assert.Empty(t, c.Projects)
+			assert.False(t, c.Restricted())
+			assert.Empty(t, c.ProjectList())
 		}
 	}
 }

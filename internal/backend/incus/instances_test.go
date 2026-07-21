@@ -181,7 +181,7 @@ func TestDeleteInstanceRemovesCPUSampleAfterSuccessfulDelete(t *testing.T) {
 	}
 
 	require.NoError(t, b.DeleteInstance(t.Context(), "demo"))
-	assert.NotContains(t, b.cpuSamples, "//demo")
+	assert.False(t, b.cpuSamples["//demo"].clearedAt.IsZero(), "delete should tombstone the sample, not keep it live")
 }
 
 func TestDeleteInstanceRetainsCPUSampleWhenDeleteFails(t *testing.T) {
@@ -195,4 +195,5 @@ func TestDeleteInstanceRetainsCPUSampleWhenDeleteFails(t *testing.T) {
 
 	require.Error(t, b.DeleteInstance(t.Context(), "demo"))
 	assert.Contains(t, b.cpuSamples, "/demo")
+	assert.True(t, b.cpuSamples["/demo"].clearedAt.IsZero(), "failed delete must not tombstone the sample")
 }

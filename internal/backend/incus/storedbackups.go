@@ -64,24 +64,12 @@ func (b *incusBackend) CreateInstanceBackup(ctx context.Context, instance, name 
 		InstanceOnly:         instanceOnly,
 		CompressionAlgorithm: "gzip",
 	})
-	if err != nil {
-		return fmt.Errorf("create backup %q of %q: %w", name, instance, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("create backup %q of %q: %w", name, instance, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "create backup %q of %q", name, instance)
 }
 
 func (b *incusBackend) DeleteInstanceBackup(ctx context.Context, instance, backup string) error {
 	op, err := b.project(ctx).DeleteInstanceBackup(instance, backup)
-	if err != nil {
-		return fmt.Errorf("delete backup %q of %q: %w", backup, instance, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("delete backup %q of %q: %w", backup, instance, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "delete backup %q of %q", backup, instance)
 }
 
 // ExportInstanceBackup spools the stored backup to a temp file (the client
@@ -113,13 +101,7 @@ func (b *incusBackend) RestoreInstanceBackup(ctx context.Context, instance, back
 		BackupFile: contextReader{ctx: ctx, Reader: tmp},
 		Name:       newName,
 	})
-	if err != nil {
-		return fmt.Errorf("restore backup %q as %q: %w", backup, newName, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("restore backup %q as %q: %w", backup, newName, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "restore backup %q as %q", backup, newName)
 }
 
 // spoolBackup downloads a stored backup into a rewound temp file. The caller

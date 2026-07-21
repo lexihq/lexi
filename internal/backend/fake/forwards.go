@@ -39,28 +39,14 @@ func (f *Fake) ListNetworkLeases(ctx context.Context, network string) ([]backend
 	return leases, nil
 }
 
-// instanceOnNetwork reports whether the instance has a NIC on the network,
-// checking local devices first, then assigned profiles. Callers must hold
-// the mutex.
+// instanceOnNetwork reports whether the instance has a NIC on the network
+// (instanceUsesNetwork), extended with lease parity for the fake's create
+// default: no NICs anywhere means the default profile's bridge. Callers must
+// hold the mutex.
 func (f *Fake) instanceOnNetwork(sp *space, in *instance, network string) bool {
-	for _, dev := range in.devices {
-		if dev["type"] == "nic" && dev["network"] == network {
-			return true
-		}
+	if instanceUsesNetwork(sp, in, network) {
+		return true
 	}
-	for _, profName := range in.Profiles {
-		prof, ok := sp.profiles[profName]
-		if !ok {
-			continue
-		}
-		for _, dev := range prof.Devices {
-			if dev["type"] == "nic" && dev["network"] == network {
-				return true
-			}
-		}
-	}
-	// Parity with the fake's create default: no NICs anywhere means the
-	// default profile's bridge.
 	return len(in.Profiles) == 0 && len(in.devices) == 0 && network == "incusbr0"
 }
 

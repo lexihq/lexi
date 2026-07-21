@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/lxc/incus/v6/shared/api"
@@ -31,6 +32,7 @@ func (b *incusBackend) ListNetworkLeases(ctx context.Context, network string) ([
 			Type:     l.Type,
 		})
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Hostname < out[j].Hostname })
 	return out, nil
 }
 
@@ -55,6 +57,7 @@ func (b *incusBackend) ListNetworkForwards(ctx context.Context, network string) 
 	for i := range fws {
 		out = append(out, forwardView(fws[i]))
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ListenAddress < out[j].ListenAddress })
 	return out, nil
 }
 
@@ -67,7 +70,7 @@ func forwardView(fw api.NetworkForward) backend.NetworkForward {
 	for _, p := range fw.Ports {
 		out.Ports = append(out.Ports, backend.ForwardPort{
 			Description:   p.Description,
-			Protocol:      p.Protocol,
+			Protocol:      backend.ForwardProtocol(p.Protocol),
 			ListenPort:    p.ListenPort,
 			TargetAddress: p.TargetAddress,
 			TargetPort:    p.TargetPort,
@@ -87,7 +90,7 @@ func forwardPut(fw backend.NetworkForward) api.NetworkForwardPut {
 	for _, p := range fw.Ports {
 		put.Ports = append(put.Ports, api.NetworkForwardPort{
 			Description:   p.Description,
-			Protocol:      p.Protocol,
+			Protocol:      string(p.Protocol),
 			ListenPort:    p.ListenPort,
 			TargetAddress: p.TargetAddress,
 			TargetPort:    p.TargetPort,

@@ -99,7 +99,7 @@ templ Sidebar(caps backend.Capabilities, nav Nav) {
 	<div class="mt-4">
 		<p class="px-3 pb-1 text-xs font-medium uppercase text-muted-foreground">Instances</p>
 		<div
-			hx-get={ "/partials/sidebar?active=" + nav.Instance }
+			hx-get={ "/partials/sidebar?active=" + url.QueryEscape(nav.Instance) }
 			hx-trigger="every 10s"
 			hx-swap="innerHTML"
 		>

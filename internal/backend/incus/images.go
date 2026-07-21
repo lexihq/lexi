@@ -141,9 +141,22 @@ func (b *incusBackend) ListLocalImages(ctx context.Context) ([]backend.LocalImag
 
 // PublishImage creates a local image from the instance, then tags it with
 // alias when one is given. The daemon's image handler does not reject a running
-// instance (only the incus CLI does, via --force), so "publish while stopped"
-// is the caller's responsibility, not an enforced precondition.
+// instance (only the incus CLI does, via --force), and publishing a running one
+// packs a live, possibly-inconsistent rootfs — so a running instance is
+// rejected here with ErrInvalid.
 func (b *incusBackend) PublishImage(ctx context.Context, instance, alias string) error {
+	inst, _, err := b.project(ctx).GetInstance(instance)
+	if err != nil {
+		return fmt.Errorf("publish image from %q: %w", instance, mapErr(err))
+	}
+	// Defensive at the boundary: the client can return a nil instance with no
+	// error (the Metrics state fetch guards the same).
+	if inst == nil {
+		return fmt.Errorf("publish image from %q: daemon returned no instance", instance)
+	}
+	if inst.StatusCode == api.Running {
+		return fmt.Errorf("publish image from %q: instance is running; stop it first: %w", instance, backend.ErrInvalid)
+	}
 	op, err := b.project(ctx).CreateImage(api.ImagesPost{
 		Source: &api.ImagesPostSource{Type: "instance", Name: instance},
 	}, nil)
@@ -519,11 +532,5 @@ func (b *incusBackend) UpdateImage(ctx context.Context, fingerprint string, edit
 // the daemon rejects images without one (mapped to ErrInvalid).
 func (b *incusBackend) RefreshImage(ctx context.Context, fingerprint string) error {
 	op, err := b.project(ctx).RefreshImage(fingerprint)
-	if err != nil {
-		return fmt.Errorf("refresh image %q: %w", fingerprint, mapErr(err))
-	}
-	if err := op.WaitContext(ctx); err != nil {
-		return fmt.Errorf("refresh image %q: %w", fingerprint, mapErr(err))
-	}
-	return nil
+	return waitOp(ctx, op, err, "refresh image %q", fingerprint)
 }

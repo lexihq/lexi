@@ -13,6 +13,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,7 @@ func (b *incusBackend) ListStoragePools(ctx context.Context) ([]backend.StorageP
 	for i := range ps {
 		out = append(out, toPool(&ps[i]))
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	// Capacity is best-effort: the list must render even when a pool's
 	// resources endpoint fails (e.g. an unavailable remote ceph pool). Fetched
 	// concurrently — this list also feeds the instance page's create dialog,
@@ -70,7 +72,7 @@ func (b *incusBackend) GetStoragePool(ctx context.Context, pool string) (backend
 		return backend.StoragePool{}, fmt.Errorf("get storage pool %q: %w", pool, mapErr(err))
 	}
 	out := toPool(p)
-	out.Version = etag
+	out.Version = backend.Version(etag)
 	// Same best-effort capacity as the list (the detail header shows it too).
 	if res, err := client.GetStoragePoolResources(pool); err == nil {
 		out.SpaceUsed = clampToInt64(res.Space.Used)
@@ -86,7 +88,7 @@ func (b *incusBackend) GetStoragePool(ctx context.Context, pool string) (backend
 // rejects the PUT with 412 (mapped to ErrConflict) when the pool changed since
 // that read. An empty version updates unconditionally. Immutable config keys
 // (driver-specific, e.g. zfs.pool_name) are rejected by the daemon with a 400.
-func (b *incusBackend) UpdateStoragePool(ctx context.Context, name, description string, config map[string]string, version string) error {
+func (b *incusBackend) UpdateStoragePool(ctx context.Context, name, description string, config map[string]string, version backend.Version) error {
 	p, _, err := b.project(ctx).GetStoragePool(name)
 	if err != nil {
 		return fmt.Errorf("get storage pool %q: %w", name, mapErr(err))
@@ -94,7 +96,7 @@ func (b *incusBackend) UpdateStoragePool(ctx context.Context, name, description 
 	put := p.Writable()
 	put.Description = description
 	put.Config = config
-	if err := b.project(ctx).UpdateStoragePool(name, put, version); err != nil {
+	if err := b.project(ctx).UpdateStoragePool(name, put, string(version)); err != nil {
 		return fmt.Errorf("update storage pool %q: %w", name, mapErr(err))
 	}
 	return nil
@@ -138,6 +140,7 @@ func (b *incusBackend) ListVolumes(ctx context.Context, pool string) ([]backend.
 			out = append(out, toVolume(pool, &vs[i]))
 		}
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
@@ -147,7 +150,7 @@ func (b *incusBackend) GetVolume(ctx context.Context, pool, name string) (backen
 		return backend.StorageVolume{}, fmt.Errorf("get volume %q/%q: %w", pool, name, mapErr(err))
 	}
 	out := toVolume(pool, v)
-	out.Version = etag
+	out.Version = backend.Version(etag)
 	return out, nil
 }
 
@@ -157,7 +160,7 @@ func (b *incusBackend) GetVolume(ctx context.Context, pool, name string) (backen
 // unconditionally. The daemon computes the volume etag from name/type/config
 // only — description is excluded — so concurrent description-only edits cannot
 // conflict and are last-write-wins.
-func (b *incusBackend) UpdateVolume(ctx context.Context, pool, name, description string, config map[string]string, version string) error {
+func (b *incusBackend) UpdateVolume(ctx context.Context, pool, name, description string, config map[string]string, version backend.Version) error {
 	v, _, err := b.project(ctx).GetStoragePoolVolume(pool, "custom", name)
 	if err != nil {
 		return fmt.Errorf("get volume %q/%q: %w", pool, name, mapErr(err))
@@ -165,7 +168,7 @@ func (b *incusBackend) UpdateVolume(ctx context.Context, pool, name, description
 	put := v.Writable()
 	put.Description = description
 	put.Config = config
-	if err := b.project(ctx).UpdateStoragePoolVolume(pool, "custom", name, put, version); err != nil {
+	if err := b.project(ctx).UpdateStoragePoolVolume(pool, "custom", name, put, string(version)); err != nil {
 		return fmt.Errorf("update volume %q/%q: %w", pool, name, mapErr(err))
 	}
 	return nil
@@ -232,6 +235,7 @@ func (b *incusBackend) ListVolumeSnapshots(ctx context.Context, pool, volume str
 	for i := range ss {
 		out = append(out, toVolumeSnapshot(&ss[i]))
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 

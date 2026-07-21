@@ -50,8 +50,12 @@ func (f *Fake) PublishImage(ctx context.Context, instance, alias string) error {
 	// The source instance lives in the request's project; the image lands in
 	// the image-owning space (default when features.images is off).
 	sp := f.featureSpace(ctx, "features.images")
-	if _, ok := f.space(ctx).instances[instance]; !ok {
+	in, ok := f.space(ctx).instances[instance]
+	if !ok {
 		return notFound(instance)
+	}
+	if in.Status == backend.StatusRunning {
+		return invalid("instance %q is running; stop it first", instance)
 	}
 	if alias != "" {
 		if owner := aliasOwner(sp, alias); owner != nil {

@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -39,7 +40,7 @@ func (f *Fake) GetNetworkZone(ctx context.Context, name string) (backend.Network
 		return backend.NetworkZone{}, notFoundf("network zone %q", name)
 	}
 	z := f.zoneView(ctx, sp, name)
-	z.Version = strconv.Itoa(sp.zoneVersions[name])
+	z.Version = backend.Version(strconv.Itoa(sp.zoneVersions[name]))
 	return z, nil
 }
 
@@ -58,7 +59,7 @@ func (f *Fake) CreateNetworkZone(ctx context.Context, zone backend.NetworkZone) 
 	return nil
 }
 
-func (f *Fake) UpdateNetworkZone(ctx context.Context, name, description string, config map[string]string, version string) error {
+func (f *Fake) UpdateNetworkZone(ctx context.Context, name, description string, config map[string]string, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.zoneSpace(ctx)
@@ -69,7 +70,7 @@ func (f *Fake) UpdateNetworkZone(ctx context.Context, name, description string, 
 	}
 	// Empty version = unconditional, mirroring the Incus client's If-Match
 	// semantics; a stale version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(sp.zoneVersions[name]) {
+	if version != "" && string(version) != strconv.Itoa(sp.zoneVersions[name]) {
 		return conflict("network zone %q version %s", name, version)
 	}
 	z.Description = description
@@ -175,7 +176,7 @@ func (f *Fake) zoneUsedBy(ctx context.Context, name string) []string {
 	var used []string
 	for netName, n := range f.networkSpace(ctx).networks {
 		for _, key := range []string{"dns.zone.forward", "dns.zone.reverse.ipv4", "dns.zone.reverse.ipv6"} {
-			if splitsContain(n.Config[key], name) {
+			if slices.Contains(splitCommaList(n.Config[key]), name) {
 				used = append(used, "/1.0/networks/"+netName)
 				break
 			}
@@ -183,16 +184,6 @@ func (f *Fake) zoneUsedBy(ctx context.Context, name string) []string {
 	}
 	sort.Strings(used)
 	return used
-}
-
-// splitsContain reports whether the comma-separated list contains name.
-func splitsContain(list, name string) bool {
-	for part := range strings.SplitSeq(list, ",") {
-		if strings.TrimSpace(part) == name {
-			return true
-		}
-	}
-	return false
 }
 
 // validZoneName mirrors the daemon's zone validation closely enough for the

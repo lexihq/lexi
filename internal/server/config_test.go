@@ -153,7 +153,7 @@ func TestUpdateDeviceMergesKnownFieldsPreservesUnknown(t *testing.T) {
 	// New listen value, blank connect (= remove), bind untouched-blank (absent
 	// before, stays absent).
 	res := formRequest(t, New(b), "/instances/demo/devices/web",
-		url.Values{"version": {cfg.Version}, "listen": {"tcp:0.0.0.0:8080"}, "connect": {""}, "bind": {""}}, true)
+		url.Values{"version": {string(cfg.Version)}, "listen": {"tcp:0.0.0.0:8080"}, "connect": {""}, "bind": {""}}, true)
 	assertStatus(t, res, http.StatusOK)
 
 	got, err := b.GetInstanceConfig(t.Context(), "demo")
@@ -174,7 +174,7 @@ func TestUpdateDeviceHandlerStaleVersionIs409(t *testing.T) {
 	require.NoError(t, b.UpdateDevice(t.Context(), "demo", "web", map[string]string{"type": "proxy", "listen": "b"}, cfg.Version))
 
 	res := formRequest(t, New(b), "/instances/demo/devices/web",
-		url.Values{"version": {cfg.Version}, "listen": {"c"}}, true)
+		url.Values{"version": {string(cfg.Version)}, "listen": {"c"}}, true)
 	assertStatus(t, res, http.StatusConflict)
 }
 
@@ -218,7 +218,7 @@ func TestUpdateOptionsMergesToggleKeys(t *testing.T) {
 	require.NoError(t, err)
 
 	res := formRequest(t, New(b), "/instances/demo/options",
-		url.Values{"version": {cfg.Version}, "boot.autostart": {"on"}}, true)
+		url.Values{"version": {string(cfg.Version)}, "boot.autostart": {"on"}}, true)
 	assertStatus(t, res, http.StatusOK)
 
 	cfg, err = b.GetInstanceConfig(t.Context(), "demo")
@@ -246,7 +246,7 @@ func TestUpdateOptionsPreservesTruthySpellingsAndFalseOverrides(t *testing.T) {
 	// The browser resubmits autostart checked (it renders checked for "1");
 	// nesting stays unchecked. Nothing was actually changed by the operator.
 	res := formRequest(t, New(b), "/instances/demo/options",
-		url.Values{"version": {cfg.Version}, "boot.autostart": {"on"}}, true)
+		url.Values{"version": {string(cfg.Version)}, "boot.autostart": {"on"}}, true)
 	assertStatus(t, res, http.StatusOK)
 
 	cfg, err = b.GetInstanceConfig(t.Context(), "demo")
@@ -259,7 +259,7 @@ func TestUpdateOptionsPreservesTruthySpellingsAndFalseOverrides(t *testing.T) {
 	cfg, err = b.GetInstanceConfig(t.Context(), "demo")
 	require.NoError(t, err)
 	res = formRequest(t, New(b), "/instances/demo/options",
-		url.Values{"version": {cfg.Version}, "security.privileged": {"false"}, "boot.autostart": {"on"}}, true)
+		url.Values{"version": {string(cfg.Version)}, "security.privileged": {"false"}, "boot.autostart": {"on"}}, true)
 	assertStatus(t, res, http.StatusOK)
 	cfg, err = b.GetInstanceConfig(t.Context(), "demo")
 	require.NoError(t, err)

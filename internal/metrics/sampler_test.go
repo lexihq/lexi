@@ -17,7 +17,7 @@ func TestSamplerRecordsRunningInstances(t *testing.T) {
 	require.NoError(t, b.StartInstance(context.Background(), "up"))
 	require.NoError(t, b.CreateInstance(context.Background(), backend.CreateOptions{Name: "down", Image: "debian/12"}))
 
-	store := NewStore(10)
+	store := NewStore(10, 0, 0)
 	s := NewSampler(b, store, time.Second)
 
 	s.sampleOnce(context.Background())
@@ -36,7 +36,7 @@ func TestSamplerRunStopsOnContextCancel(t *testing.T) {
 	require.NoError(t, b.CreateInstance(context.Background(), backend.CreateOptions{Name: "up", Image: "debian/12"}))
 	require.NoError(t, b.StartInstance(context.Background(), "up"))
 
-	store := NewStore(10)
+	store := NewStore(10, 0, 0)
 	s := NewSampler(b, store, time.Millisecond)
 
 	ctx, cancel := context.WithCancel(context.Background())

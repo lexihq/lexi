@@ -74,6 +74,15 @@ func TestPublishImageAppliesAndRedirects(t *testing.T) {
 	assert.Contains(t, localAliases(t, b), "demo-snap")
 }
 
+func TestPublishImageRunningInstanceIs400(t *testing.T) {
+	b := fake.New()
+	require.NoError(t, b.CreateInstance(t.Context(), backend.CreateOptions{Name: "demo", Image: "debian/12"}))
+	require.NoError(t, b.StartInstance(t.Context(), "demo"))
+	res := formRequest(t, New(b), "/images/publish",
+		url.Values{"instance": {"demo"}, "alias": {"live-snap"}}, false)
+	assertStatus(t, res, http.StatusBadRequest)
+}
+
 func TestPublishImageBlankInstanceIs400(t *testing.T) {
 	res := formRequest(t, New(fake.New()), "/images/publish", url.Values{"instance": {" "}}, false)
 	assertStatus(t, res, http.StatusBadRequest)

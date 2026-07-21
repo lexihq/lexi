@@ -22,8 +22,9 @@ func (f *Fake) Metrics(ctx context.Context, name string) (backend.Metrics, error
 	// climb monotonically, mirroring real cumulative byte counters.
 	n := int64(in.metricsTick)
 	in.metricsTick++
+	cpu := 12.5 + float64((n*7)%40)
 	return backend.Metrics{
-		CPUPercent:  12.5 + float64((n*7)%40),
+		CPUPercent:  &cpu,
 		MemoryUsage: (256 + (n%8)*16) << 20,
 		MemoryTotal: 1024 << 20,
 		DiskUsage:   (512 + (n%4)*8) << 20,

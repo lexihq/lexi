@@ -105,9 +105,12 @@ func (h handlers) consoleWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// closeAndLog closes a resource whose close error can only be logged (the
+// response is already committed or the resource is best-effort); name says
+// what was being closed so the log entry identifies the right resource.
 func closeAndLog(name string, closer io.Closer) {
 	if err := closer.Close(); err != nil {
-		slog.Warn("close console session", "name", name, "err", err)
+		slog.Warn("close "+name, "err", err)
 	}
 }
 

@@ -111,7 +111,7 @@ func TestProjectsPageAndLifecycle(t *testing.T) {
 
 	// Detail: versioned config update.
 	res = projectRequest(t, srv, "POST", "/projects/dev/config",
-		url.Values{"description": {"edited"}, "version": {p.Version}, "key": {"features.profiles"}, "value": {"true"}}.Encode(), "")
+		url.Values{"description": {"edited"}, "version": {string(p.Version)}, "key": {"features.profiles"}, "value": {"true"}}.Encode(), "")
 	assertStatus(t, res, http.StatusSeeOther)
 	p2, err := b.GetProject(t.Context(), "dev")
 	require.NoError(t, err)

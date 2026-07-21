@@ -18,7 +18,7 @@ func TestGetProjectCarriesEtagAsVersion(t *testing.T) {
 
 	got, err := b.GetProject(t.Context(), "dev")
 	require.NoError(t, err)
-	assert.Equal(t, "project-etag", got.Version)
+	assert.Equal(t, backend.Version("project-etag"), got.Version)
 	assert.Equal(t, "dev project", got.Description)
 	assert.Equal(t, "true", got.Config["features.profiles"])
 }

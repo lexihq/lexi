@@ -95,7 +95,7 @@ func (h handlers) updateNetworkForward(w http.ResponseWriter, r *http.Request) {
 		}
 		p := backend.ForwardPort{ListenPort: strings.TrimSpace(lp)}
 		if i < len(protos) {
-			p.Protocol = protos[i]
+			p.Protocol = backend.ForwardProtocol(protos[i])
 		}
 		if i < len(targets) {
 			p.TargetAddress = strings.TrimSpace(targets[i])
@@ -162,7 +162,7 @@ func (h handlers) updateNetwork(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
-	if err := h.backend.UpdateNetwork(r.Context(), name, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateNetwork(r.Context(), name, r.Form.Get("description"), config, backend.Version(r.Form.Get("version"))); err != nil {
 		h.fail(w, r, err)
 		return
 	}

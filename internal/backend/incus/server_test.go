@@ -89,7 +89,7 @@ func TestServerConfigGetAndReplace(t *testing.T) {
 	cfg, version, err := b.GetServerConfig(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"core.https_address": ":8443"}, cfg)
-	assert.Equal(t, "server-etag", version, "version must carry the server etag")
+	assert.Equal(t, backend.Version("server-etag"), version, "version must carry the server etag")
 
 	require.NoError(t, b.UpdateServerConfig(context.Background(), map[string]string{"user.x": "1"}, version))
 	require.NotNil(t, srv.updatedServer)
@@ -110,9 +110,9 @@ func TestListCertificatesMaps(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "laptop", got[0].Name)
-	assert.Equal(t, "client", got[0].Type)
+	assert.Equal(t, backend.CertificateClient, got[0].Type)
 	assert.Equal(t, "abc123", got[0].Fingerprint)
-	assert.True(t, got[0].Restricted)
+	assert.True(t, got[0].Restricted())
 }
 
 func TestListCertificatesMapsProjects(t *testing.T) {
@@ -125,7 +125,8 @@ func TestListCertificatesMapsProjects(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Len(t, got, 1)
-	assert.Equal(t, []string{"default", "dev"}, got[0].Projects)
+	assert.True(t, got[0].Restricted())
+	assert.Equal(t, []string{"default", "dev"}, got[0].ProjectList())
 }
 
 func TestUpdateCertificateSendsEtagAndKeepsTypeAndCert(t *testing.T) {
@@ -135,7 +136,7 @@ func TestUpdateCertificateSendsEtagAndKeepsTypeAndCert(t *testing.T) {
 	}, certificateEtag: "cert-etag"}
 	b := &incusBackend{srv: srv}
 
-	require.NoError(t, b.UpdateCertificate(context.Background(), "abc123", "renamed", true, []string{"dev"}))
+	require.NoError(t, b.UpdateCertificate(context.Background(), "abc123", "renamed", &[]string{"dev"}))
 
 	require.NotNil(t, srv.updatedCert)
 	// Type and the certificate body must survive the read-modify-write; only
@@ -155,7 +156,7 @@ func TestUpdateCertificateUnrestrictClearsProjects(t *testing.T) {
 	}}
 	b := &incusBackend{srv: srv}
 
-	require.NoError(t, b.UpdateCertificate(context.Background(), "abc123", "ci", false, []string{"dev"}))
+	require.NoError(t, b.UpdateCertificate(context.Background(), "abc123", "ci", nil))
 
 	require.NotNil(t, srv.updatedCert)
 	assert.False(t, srv.updatedCert.Restricted)
@@ -164,7 +165,7 @@ func TestUpdateCertificateUnrestrictClearsProjects(t *testing.T) {
 
 func TestUpdateCertificateEmptyNameIsInvalid(t *testing.T) {
 	b := &incusBackend{srv: &instanceServerStub{}}
-	err := b.UpdateCertificate(context.Background(), "abc123", "", false, nil)
+	err := b.UpdateCertificate(context.Background(), "abc123", "", nil)
 	require.ErrorIs(t, err, backend.ErrInvalid)
 }
 
@@ -181,7 +182,7 @@ func TestListWarningsMapsAndSortsNewestFirst(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 2)
 	assert.Equal(t, "w-new", got[0].UUID)
-	assert.Equal(t, "high", got[0].Severity)
+	assert.Equal(t, backend.WarningSeverityHigh, got[0].Severity)
 	assert.Equal(t, backend.WarningAcknowledged, got[0].Status)
 	assert.Equal(t, "m2", got[0].LastMessage)
 	assert.Equal(t, newer, got[0].LastSeenAt)

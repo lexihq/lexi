@@ -19,6 +19,7 @@ func (b *incusBackend) ListProjects(ctx context.Context) ([]backend.Project, err
 	for i := range ps {
 		out = append(out, toProject(&ps[i], ""))
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
@@ -58,9 +59,9 @@ func (b *incusBackend) CreateProject(ctx context.Context, project backend.Projec
 // UpdateProject replaces the project's description and config under the
 // caller's version token (the GetProject etag); ProjectPut has no other
 // fields, so there is nothing to GET-preserve.
-func (b *incusBackend) UpdateProject(ctx context.Context, name, description string, config map[string]string, version string) error {
+func (b *incusBackend) UpdateProject(ctx context.Context, name, description string, config map[string]string, version backend.Version) error {
 	put := api.ProjectPut{Description: description, Config: config}
-	if err := b.server(ctx).UpdateProject(name, put, version); err != nil {
+	if err := b.server(ctx).UpdateProject(name, put, string(version)); err != nil {
 		return fmt.Errorf("update project %q: %w", name, mapErr(err))
 	}
 	return nil
@@ -108,6 +109,6 @@ func toProject(p *api.Project, etag string) backend.Project {
 		Description: p.Description,
 		Config:      p.Config,
 		UsedBy:      p.UsedBy,
-		Version:     etag,
+		Version:     backend.Version(etag),
 	}
 }

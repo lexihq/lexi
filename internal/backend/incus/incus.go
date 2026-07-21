@@ -58,7 +58,6 @@ type incusBackend struct {
 
 	cpuMu        sync.Mutex
 	cpuSamples   map[string]cpuSample
-	cpuEpoch     uint64
 	cpuLastSweep time.Time
 }
 

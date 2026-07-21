@@ -110,7 +110,7 @@ func (f *Fake) ListBucketKeys(ctx context.Context, pool, bucket string) ([]backe
 	return out, nil
 }
 
-func (f *Fake) CreateBucketKey(ctx context.Context, pool, bucket, name, description, role string) (backend.BucketKey, error) {
+func (f *Fake) CreateBucketKey(ctx context.Context, pool, bucket, name, description string, role backend.BucketKeyRole) (backend.BucketKey, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -123,8 +123,8 @@ func (f *Fake) CreateBucketKey(ctx context.Context, pool, bucket, name, descript
 	}
 	switch role {
 	case "":
-		role = "read-only" // contract default; the driver now applies the same
-	case "admin", "read-only":
+		role = backend.BucketKeyReadOnly // contract default; the driver applies the same
+	case backend.BucketKeyAdmin, backend.BucketKeyReadOnly:
 	default:
 		return backend.BucketKey{}, invalid("bucket key role %q must be admin or read-only", role)
 	}
@@ -166,7 +166,7 @@ func (f *Fake) lookupBucket(ctx context.Context, pool, bucket string) (*fakeBuck
 
 // newBucketKey mints a credential with unique fake access/secret keys.
 // Callers must hold the mutex.
-func (f *Fake) newBucketKey(name, description, role string) backend.BucketKey {
+func (f *Fake) newBucketKey(name, description string, role backend.BucketKeyRole) backend.BucketKey {
 	f.bucketKeySeq++
 	return backend.BucketKey{
 		Name:        name,

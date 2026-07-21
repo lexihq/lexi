@@ -340,7 +340,9 @@
       const value = e.target.getAttribute('data-tui-selectbox-value');
       const trigger = e.target.closest('button.select-trigger');
       const content = trigger ? getContentFromTrigger(trigger) : null;
-      const item = content?.querySelector(`.select-item[data-tui-selectbox-value="${value}"]`);
+      // CSS.escape: a value containing `"` or `]` would otherwise break the
+      // selector and throw instead of resolving the item.
+      const item = content?.querySelector(`.select-item[data-tui-selectbox-value="${CSS.escape(value)}"]`);
       if (item) toggleItem(item);
       return;
     }

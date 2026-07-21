@@ -100,7 +100,7 @@ templ NetworkZoneDetailPage(caps backend.Capabilities, zone backend.NetworkZone,
 			<h2 class="mb-1 text-lg font-medium">Config</h2>
 			<p class="mb-3 text-sm text-muted-foreground">Zone keys like <span class="font-mono">dns.nameservers</span> or <span class="font-mono">peers.*</span>. Clearing a key's name removes it on apply.</p>
 			<form method="post" action={ templ.URL(base + "/config") } class="max-w-xl space-y-2">
-				<input type="hidden" name="version" value={ zone.Version }/>
+				<input type="hidden" name="version" value={ string(zone.Version) }/>
 				<div>
 					<label class="mb-1 block text-sm font-medium">Description</label>
 					<input name="description" value={ zone.Description } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>

@@ -33,7 +33,7 @@ func (f *Fake) GetProfile(ctx context.Context, name string) (backend.Profile, er
 		return backend.Profile{}, notFoundf("profile %q", name)
 	}
 	p := f.profileView(ctx, sp, name)
-	p.Version = strconv.Itoa(sp.profileVersions[name])
+	p.Version = backend.Version(strconv.Itoa(sp.profileVersions[name]))
 	return p, nil
 }
 
@@ -57,7 +57,7 @@ func (f *Fake) CreateProfile(ctx context.Context, name, description string) erro
 	return nil
 }
 
-func (f *Fake) UpdateProfile(ctx context.Context, name, description string, config map[string]string, version string) error {
+func (f *Fake) UpdateProfile(ctx context.Context, name, description string, config map[string]string, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.featureSpace(ctx, "features.profiles")
@@ -68,7 +68,7 @@ func (f *Fake) UpdateProfile(ctx context.Context, name, description string, conf
 	}
 	// Empty version = unconditional, mirroring UpdateServerConfig; a stale
 	// version means a concurrent writer landed first.
-	if version != "" && version != strconv.Itoa(sp.profileVersions[name]) {
+	if version != "" && string(version) != strconv.Itoa(sp.profileVersions[name]) {
 		return conflict("profile %q version %s", name, version)
 	}
 	p.Description = description
@@ -172,7 +172,7 @@ func (f *Fake) AddProfileDevice(ctx context.Context, profile, device string, con
 	return nil
 }
 
-func (f *Fake) UpdateProfileDevice(ctx context.Context, profile, device string, config map[string]string, version string) error {
+func (f *Fake) UpdateProfileDevice(ctx context.Context, profile, device string, config map[string]string, version backend.Version) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	sp := f.featureSpace(ctx, "features.profiles")
@@ -184,7 +184,7 @@ func (f *Fake) UpdateProfileDevice(ctx context.Context, profile, device string, 
 	if _, ok := p.Devices[device]; !ok {
 		return notFoundf("device %q on profile %q", device, profile)
 	}
-	if version != "" && version != strconv.Itoa(sp.profileVersions[profile]) {
+	if version != "" && string(version) != strconv.Itoa(sp.profileVersions[profile]) {
 		return conflict("profile %q version %s", profile, version)
 	}
 	p.Devices[device] = maps.Clone(config)

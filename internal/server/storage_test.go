@@ -176,7 +176,7 @@ func TestUpdatePoolAppliesAndRedirects(t *testing.T) {
 	require.NoError(t, err)
 
 	res := formRequest(t, New(b), "/storage/default/config",
-		url.Values{"description": {"edited"}, "version": {p.Version},
+		url.Values{"description": {"edited"}, "version": {string(p.Version)},
 			"key": {"rsync.bwlimit", ""}, "value": {"10MiB", ""}}, false)
 	assertStatus(t, res, http.StatusSeeOther)
 	assert.Equal(t, "/storage/default", res.Header().Get("Location"))
@@ -194,7 +194,7 @@ func TestUpdatePoolStaleVersionIs409(t *testing.T) {
 	require.NoError(t, b.UpdateStoragePool(t.Context(), "default", "racer", nil, p.Version))
 
 	res := formRequest(t, New(b), "/storage/default/config",
-		url.Values{"description": {"stale"}, "version": {p.Version}}, true)
+		url.Values{"description": {"stale"}, "version": {string(p.Version)}}, true)
 	assertStatus(t, res, http.StatusConflict)
 }
 
@@ -209,7 +209,7 @@ func TestUpdateVolumeAppliesAndRedirects(t *testing.T) {
 	require.NoError(t, err)
 
 	res := formRequest(t, New(b), "/storage/default/volumes/vol1/config",
-		url.Values{"description": {"edited"}, "version": {v.Version},
+		url.Values{"description": {"edited"}, "version": {string(v.Version)},
 			"key": {"size", ""}, "value": {"2GiB", ""}}, false)
 	assertStatus(t, res, http.StatusSeeOther)
 	assert.Equal(t, "/storage/default/volumes/vol1", res.Header().Get("Location"))
@@ -224,10 +224,12 @@ func TestUpdateVolumeStaleVersionIs409(t *testing.T) {
 	b := newVolume(t)
 	v, err := b.GetVolume(t.Context(), "default", "vol1")
 	require.NoError(t, err)
-	require.NoError(t, b.UpdateVolume(t.Context(), "default", "vol1", "racer", nil, v.Version))
+	// The racer must change config: the volume etag ignores the description,
+	// so only a config change invalidates the outstanding token.
+	require.NoError(t, b.UpdateVolume(t.Context(), "default", "vol1", "racer", map[string]string{"size": "9GiB"}, v.Version))
 
 	res := formRequest(t, New(b), "/storage/default/volumes/vol1/config",
-		url.Values{"description": {"stale"}, "version": {v.Version}}, true)
+		url.Values{"description": {"stale"}, "version": {string(v.Version)}}, true)
 	assertStatus(t, res, http.StatusConflict)
 }
 

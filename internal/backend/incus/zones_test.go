@@ -18,7 +18,7 @@ func TestGetNetworkZoneCarriesEtagAsVersion(t *testing.T) {
 
 	got, err := b.GetNetworkZone(t.Context(), "incus.example.org")
 	require.NoError(t, err)
-	assert.Equal(t, "zone-etag", got.Version)
+	assert.Equal(t, backend.Version("zone-etag"), got.Version)
 	assert.Equal(t, "forward zone", got.Description)
 	assert.Equal(t, "ns1.example.org", got.Config["dns.nameservers"])
 	assert.Equal(t, []string{"/1.0/networks/incusbr0"}, got.UsedBy)

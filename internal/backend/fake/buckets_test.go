@@ -43,14 +43,14 @@ func TestBucketKeysLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, keys, 1)
 	assert.Equal(t, "admin", keys[0].Name)
-	assert.Equal(t, "admin", keys[0].Role)
+	assert.Equal(t, backend.BucketKeyAdmin, keys[0].Role)
 	assert.NotEmpty(t, keys[0].AccessKey)
 	assert.NotEmpty(t, keys[0].SecretKey)
 
 	// New keys default to read-only and return generated credentials.
 	key, err := f.CreateBucketKey(ctx(), "default", "media", "ci", "ci reader", "")
 	require.NoError(t, err)
-	assert.Equal(t, "read-only", key.Role)
+	assert.Equal(t, backend.BucketKeyReadOnly, key.Role)
 	assert.NotEmpty(t, key.AccessKey)
 	assert.NotEmpty(t, key.SecretKey)
 	assert.NotEqual(t, keys[0].AccessKey, key.AccessKey, "credentials must be unique")

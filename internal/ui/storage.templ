@@ -114,7 +114,7 @@ templ StoragePoolPage(caps backend.Capabilities, pool backend.StoragePool, volum
 			<h2 class="mb-1 text-lg font-medium">Config</h2>
 			<p class="mb-3 text-sm text-muted-foreground">Clearing a key's name removes it on apply. Some keys are fixed after creation and are rejected by the daemon.</p>
 			<form method="post" action={ templ.URL("/storage/" + url.PathEscape(pool.Name) + "/config") } class="max-w-xl space-y-2">
-				<input type="hidden" name="version" value={ pool.Version }/>
+				<input type="hidden" name="version" value={ string(pool.Version) }/>
 				<div>
 					<label class="mb-1 block text-sm font-medium">Description</label>
 					<input name="description" value={ pool.Description } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>
@@ -431,7 +431,7 @@ templ StorageVolumePage(caps backend.Capabilities, v backend.StorageVolume, snap
 			<h2 class="mb-1 text-lg font-medium">Config</h2>
 			<p class="mb-3 text-sm text-muted-foreground">Clearing a key's name removes it on apply. Resize with the size key.</p>
 			<form method="post" action={ templ.URL(volBase + "/config") } class="max-w-xl space-y-2">
-				<input type="hidden" name="version" value={ v.Version }/>
+				<input type="hidden" name="version" value={ string(v.Version) }/>
 				<div>
 					<label class="mb-1 block text-sm font-medium">Description</label>
 					<input name="description" value={ v.Description } class="h-9 w-full rounded-md border bg-background px-3 text-sm"/>

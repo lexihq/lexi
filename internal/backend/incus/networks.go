@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/lexihq/lexi/internal/backend"
 	"github.com/lxc/incus/v6/shared/api"
@@ -17,6 +18,7 @@ func (b *incusBackend) ListNetworks(ctx context.Context) ([]backend.Network, err
 	for i := range ns {
 		out = append(out, toNetwork(&ns[i]))
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
@@ -26,7 +28,7 @@ func (b *incusBackend) GetNetwork(ctx context.Context, name string) (backend.Net
 		return backend.Network{}, fmt.Errorf("get network %q: %w", name, mapErr(err))
 	}
 	out := toNetwork(n)
-	out.Version = etag
+	out.Version = backend.Version(etag)
 	return out, nil
 }
 
@@ -36,7 +38,7 @@ func (b *incusBackend) GetNetwork(ctx context.Context, name string) (backend.Net
 // etag from GetNetwork; the daemon rejects the PUT with 412 (mapped to
 // ErrConflict) when the network changed since that read. An empty version
 // sends no If-Match and updates unconditionally.
-func (b *incusBackend) UpdateNetwork(ctx context.Context, name, description string, config map[string]string, version string) error {
+func (b *incusBackend) UpdateNetwork(ctx context.Context, name, description string, config map[string]string, version backend.Version) error {
 	n, _, err := b.project(ctx).GetNetwork(name)
 	if err != nil {
 		return fmt.Errorf("get network %q: %w", name, mapErr(err))
@@ -47,7 +49,7 @@ func (b *incusBackend) UpdateNetwork(ctx context.Context, name, description stri
 	put := n.Writable()
 	put.Description = description
 	put.Config = config
-	if err := b.project(ctx).UpdateNetwork(name, put, version); err != nil {
+	if err := b.project(ctx).UpdateNetwork(name, put, string(version)); err != nil {
 		return fmt.Errorf("update network %q: %w", name, mapErr(err))
 	}
 	return nil

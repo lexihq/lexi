@@ -52,8 +52,8 @@ func (h handlers) createBucketKey(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, fmt.Errorf("key name is required: %w", backend.ErrInvalid))
 		return
 	}
-	role := r.Form.Get("role")
-	if role != "" && role != "admin" && role != "read-only" {
+	role := backend.BucketKeyRole(r.Form.Get("role"))
+	if role != "" && role != backend.BucketKeyAdmin && role != backend.BucketKeyReadOnly {
 		h.fail(w, r, fmt.Errorf("key role %q must be admin or read-only: %w", role, backend.ErrInvalid))
 		return
 	}

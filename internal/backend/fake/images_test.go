@@ -106,6 +106,18 @@ func TestPublishImageGhostInstance(t *testing.T) {
 	}
 }
 
+func TestPublishImageRunningInstanceIsInvalid(t *testing.T) {
+	b := New()
+	mustCreate(t, b, "src")
+	if err := b.StartInstance(ctx(), "src"); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	err := b.PublishImage(ctx(), "src", "live-snap")
+	if !errors.Is(err, backend.ErrInvalid) {
+		t.Fatalf("want ErrInvalid, got %v", err)
+	}
+}
+
 func TestPublishImageAliasConflict(t *testing.T) {
 	b := New()
 	mustCreate(t, b, "src")

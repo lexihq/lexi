@@ -61,7 +61,7 @@ func TestUpdateNetworkZoneConfigVersioned(t *testing.T) {
 		"description": {"edited"},
 		"key":         {"dns.nameservers"},
 		"value":       {"ns1.example.org"},
-		"version":     {z.Version},
+		"version":     {string(z.Version)},
 	}
 	res := formRequest(t, New(b), "/network-zones/incus.example.org/config", form, false)
 	assertStatus(t, res, http.StatusSeeOther)

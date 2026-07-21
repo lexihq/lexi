@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/lexihq/lexi/internal/backend"
@@ -18,6 +19,7 @@ func (b *incusBackend) ListProfiles(ctx context.Context) ([]backend.Profile, err
 	for i := range ps {
 		out = append(out, toProfile(&ps[i]))
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
 
@@ -27,7 +29,7 @@ func (b *incusBackend) GetProfile(ctx context.Context, name string) (backend.Pro
 		return backend.Profile{}, fmt.Errorf("get profile %q: %w", name, mapErr(err))
 	}
 	out := toProfile(p)
-	out.Version = etag
+	out.Version = backend.Version(etag)
 	return out, nil
 }
 
@@ -45,7 +47,7 @@ func (b *incusBackend) CreateProfile(ctx context.Context, name, description stri
 // so its devices are never dropped. The version is the etag from GetProfile;
 // the daemon rejects the PUT with 412 (mapped to ErrConflict) when the profile
 // changed since that read. An empty version updates unconditionally.
-func (b *incusBackend) UpdateProfile(ctx context.Context, name, description string, config map[string]string, version string) error {
+func (b *incusBackend) UpdateProfile(ctx context.Context, name, description string, config map[string]string, version backend.Version) error {
 	p, _, err := b.project(ctx).GetProfile(name)
 	if err != nil {
 		return fmt.Errorf("get profile %q: %w", name, mapErr(err))
@@ -53,7 +55,7 @@ func (b *incusBackend) UpdateProfile(ctx context.Context, name, description stri
 	put := p.Writable()
 	put.Description = description
 	put.Config = config
-	if err := b.project(ctx).UpdateProfile(name, put, version); err != nil {
+	if err := b.project(ctx).UpdateProfile(name, put, string(version)); err != nil {
 		return fmt.Errorf("update profile %q: %w", name, mapErr(err))
 	}
 	return nil
@@ -110,7 +112,7 @@ func (b *incusBackend) AddProfileDevice(ctx context.Context, profile, device str
 
 // UpdateProfileDevice replaces an existing device's config map, conditionally on
 // the profile version (etag).
-func (b *incusBackend) UpdateProfileDevice(ctx context.Context, profile, device string, config map[string]string, version string) error {
+func (b *incusBackend) UpdateProfileDevice(ctx context.Context, profile, device string, config map[string]string, version backend.Version) error {
 	return b.mutateProfile(ctx, profile, version, func(put *api.ProfilePut) error {
 		if _, ok := put.Devices[device]; !ok {
 			return fmt.Errorf("device %q on profile %q: %w", device, profile, backend.ErrNotFound)
@@ -134,7 +136,7 @@ func (b *incusBackend) RemoveProfileDevice(ctx context.Context, profile, device 
 // mutateProfile GETs the profile, applies mutate to its writable copy, and PUTs
 // it back conditionally on version (empty version uses the fresh etag). mutate
 // may return a sentinel error (e.g. ErrNotFound) to abort before the PUT.
-func (b *incusBackend) mutateProfile(ctx context.Context, name, version string, mutate func(*api.ProfilePut) error, action string, args ...any) error {
+func (b *incusBackend) mutateProfile(ctx context.Context, name string, version backend.Version, mutate func(*api.ProfilePut) error, action string, args ...any) error {
 	p, etag, err := b.project(ctx).GetProfile(name)
 	if err != nil {
 		return fmt.Errorf("get profile %q: %w", name, mapErr(err))
@@ -144,9 +146,9 @@ func (b *incusBackend) mutateProfile(ctx context.Context, name, version string, 
 		return err
 	}
 	if version == "" {
-		version = etag
+		version = backend.Version(etag)
 	}
-	if err := b.project(ctx).UpdateProfile(name, put, version); err != nil {
+	if err := b.project(ctx).UpdateProfile(name, put, string(version)); err != nil {
 		return fmt.Errorf(action+": %w", append(args, mapErr(err))...)
 	}
 	return nil

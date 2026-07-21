@@ -48,7 +48,7 @@ func TestNetworkACLAddAndDeleteRule(t *testing.T) {
 
 	res := formRequest(t, New(b), "/network-acls/web/rules", url.Values{
 		"direction": {"ingress"}, "action": {"allow"}, "protocol": {"tcp"},
-		"destination_port": {"443"}, "state": {"enabled"}, "version": {acl.Version},
+		"destination_port": {"443"}, "state": {"enabled"}, "version": {string(acl.Version)},
 	}, false)
 	assertStatus(t, res, http.StatusSeeOther)
 
@@ -68,7 +68,7 @@ func TestNetworkACLAddAndDeleteRule(t *testing.T) {
 	assertStatus(t, noToken, http.StatusBadRequest)
 
 	res = formRequest(t, New(b), "/network-acls/web/rules/delete", url.Values{
-		"direction": {"ingress"}, "index": {"0"}, "version": {acl.Version},
+		"direction": {"ingress"}, "index": {"0"}, "version": {string(acl.Version)},
 	}, false)
 	assertStatus(t, res, http.StatusSeeOther)
 	acl, err = b.GetNetworkACL(t.Context(), "web")
@@ -76,7 +76,7 @@ func TestNetworkACLAddAndDeleteRule(t *testing.T) {
 	assert.Empty(t, acl.Ingress)
 
 	oob := formRequest(t, New(b), "/network-acls/web/rules/delete", url.Values{
-		"direction": {"ingress"}, "index": {"5"}, "version": {acl.Version},
+		"direction": {"ingress"}, "index": {"5"}, "version": {string(acl.Version)},
 	}, true)
 	assertStatus(t, oob, http.StatusBadRequest)
 }

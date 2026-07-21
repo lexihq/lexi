@@ -60,7 +60,7 @@ func TestUpdateNetworkAppliesAndRedirects(t *testing.T) {
 	require.NoError(t, err)
 
 	res := formRequest(t, New(b), "/networks/incusbr0/config",
-		url.Values{"description": {"lab bridge"}, "version": {n.Version},
+		url.Values{"description": {"lab bridge"}, "version": {string(n.Version)},
 			"key": {"ipv4.nat", ""}, "value": {"false", ""}}, false)
 	assertStatus(t, res, http.StatusSeeOther)
 	assert.Equal(t, "/networks/incusbr0", res.Header().Get("Location"))
@@ -78,7 +78,7 @@ func TestUpdateNetworkStaleVersionIs409(t *testing.T) {
 	require.NoError(t, b.UpdateNetwork(t.Context(), "incusbr0", "racer", nil, n.Version))
 
 	res := formRequest(t, New(b), "/networks/incusbr0/config",
-		url.Values{"description": {"stale"}, "version": {n.Version}}, true)
+		url.Values{"description": {"stale"}, "version": {string(n.Version)}}, true)
 	assertStatus(t, res, http.StatusConflict)
 }
 

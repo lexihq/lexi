@@ -22,6 +22,23 @@ func TestMapErrUsesStructuredStatus(t *testing.T) {
 	assert.True(t, api.StatusErrorCheck(mapErr(notFound), http.StatusNotFound))
 }
 
+func TestMapErrMapsEtagRaceToConflict(t *testing.T) {
+	// The real optimistic-concurrency failure: a conditional PUT against a
+	// stale etag comes back as 412, which must surface as ErrConflict (409)
+	// like the fake's fabricated conflicts do.
+	err := api.StatusErrorf(http.StatusPreconditionFailed, "ETag doesn't match")
+
+	require.ErrorIs(t, mapErr(err), backend.ErrConflict)
+}
+
+func TestMapErrMapsUniqueConstraintTextToConflict(t *testing.T) {
+	// Some create paths (projects, raced volume imports) surface the database
+	// constraint as flattened operation text with no HTTP status.
+	err := errors.New(`Failed creating project: UNIQUE constraint failed: projects.name`)
+
+	require.ErrorIs(t, mapErr(err), backend.ErrConflict)
+}
+
 func TestMapErrMapsInvalidConfigOperationError(t *testing.T) {
 	err := errors.New("Invalid config: Invalid CPU limit syntax")
 

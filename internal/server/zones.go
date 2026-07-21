@@ -63,7 +63,7 @@ func (h handlers) updateNetworkZone(w http.ResponseWriter, r *http.Request) {
 	}
 	name := r.PathValue("name")
 	config := zipConfigPairs(r.Form["key"], r.Form["value"])
-	if err := h.backend.UpdateNetworkZone(r.Context(), name, r.Form.Get("description"), config, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateNetworkZone(r.Context(), name, r.Form.Get("description"), config, backend.Version(r.Form.Get("version"))); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -86,7 +86,7 @@ func (h handlers) addZoneRecord(w http.ResponseWriter, r *http.Request) {
 	}
 	zone := r.PathValue("name")
 	record := strings.TrimSpace(r.Form.Get("record"))
-	entryType := r.Form.Get("type")
+	entryType := backend.ZoneEntryType(r.Form.Get("type"))
 	value := strings.TrimSpace(r.Form.Get("value"))
 	if record == "" || entryType == "" || value == "" {
 		h.fail(w, r, fmt.Errorf("record name, type, and value are required: %w", backend.ErrInvalid))

@@ -188,6 +188,26 @@ func TestUpdateVolumeReplacesConfigAndDescription(t *testing.T) {
 	require.ErrorIs(t, f.UpdateVolume(ctx(), "default", "ghost", "", nil, ""), backend.ErrNotFound)
 }
 
+func TestUpdateVolumeDescriptionOnlyEditKeepsTokensValid(t *testing.T) {
+	// The daemon's volume etag excludes the description, so a concurrent
+	// description-only edit must not invalidate an outstanding token
+	// (last-write-wins per the contract); only a config change conflicts.
+	f := New()
+	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "vol1", ContentType: "filesystem", Config: map[string]string{"size": "1GiB"}}))
+	v, err := f.GetVolume(ctx(), "default", "vol1")
+	require.NoError(t, err)
+
+	// A description-only concurrent edit lands first (same config).
+	require.NoError(t, f.UpdateVolume(ctx(), "default", "vol1", "other editor", map[string]string{"size": "1GiB"}, ""))
+
+	// The stale token still writes — description edits are last-write-wins.
+	require.NoError(t, f.UpdateVolume(ctx(), "default", "vol1", "mine", map[string]string{"size": "1GiB"}, v.Version))
+
+	// A config change bumps the token, so the now-stale one conflicts.
+	require.NoError(t, f.UpdateVolume(ctx(), "default", "vol1", "resized", map[string]string{"size": "2GiB"}, ""))
+	require.ErrorIs(t, f.UpdateVolume(ctx(), "default", "vol1", "late", map[string]string{"size": "3GiB"}, v.Version), backend.ErrConflict)
+}
+
 func TestRenameVolume(t *testing.T) {
 	f := New()
 	require.NoError(t, f.CreateVolume(ctx(), "default", backend.StorageVolume{Name: "vol1", ContentType: "filesystem"}))

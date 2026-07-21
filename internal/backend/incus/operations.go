@@ -3,6 +3,7 @@ package incus
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sort"
 	"sync"
 
@@ -36,9 +37,11 @@ func (b *incusBackend) ListOperations(ctx context.Context) ([]backend.Operation,
 
 // WatchOperations subscribes to the daemon's events API and ticks the
 // returned channel on every "operation" event. One listener per call; it is
-// disconnected and the channel closed when ctx ends. The mutex serializes
-// late handler fires against the close — the events client doesn't join
-// in-flight handlers on Disconnect.
+// disconnected and the channel closed when ctx ends — or when the daemon
+// drops the events stream (restart, network blip), so the consumer sees the
+// closed channel and reconnects instead of holding a silently frozen watch.
+// The mutex serializes late handler fires against the close — the events
+// client doesn't join in-flight handlers on Disconnect.
 func (b *incusBackend) WatchOperations(ctx context.Context) (<-chan struct{}, error) {
 	listener, err := b.project(ctx).GetEvents()
 	if err != nil {
@@ -66,7 +69,15 @@ func (b *incusBackend) WatchOperations(ctx context.Context) (<-chan struct{}, er
 
 	go func() {
 		<-ctx.Done()
-		listener.Disconnect()
+		listener.Disconnect() // unblocks the Wait below
+	}()
+	go func() {
+		// Wait returns when the listener dies for any reason: a clean
+		// Disconnect from the goroutine above, or the daemon dropping the
+		// stream. Either way the channel closes so the consumer can react.
+		if err := listener.Wait(); err != nil && ctx.Err() == nil {
+			slog.Warn("watch operations: events stream dropped", "err", err)
+		}
 		mu.Lock()
 		closed = true
 		close(ch)

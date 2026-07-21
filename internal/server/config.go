@@ -60,8 +60,8 @@ func (h handlers) updateOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := r.PathValue("name")
-	if r.Form.Get("version") == "" {
-		h.fail(w, r, fmt.Errorf("missing config version token: %w", backend.ErrInvalid))
+	version, ok := h.requireVersion(w, r, "config")
+	if !ok {
 		return
 	}
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
@@ -82,7 +82,7 @@ func (h handlers) updateOptions(w http.ResponseWriter, r *http.Request) {
 			next[opt.Key] = "false"
 		}
 	}
-	if err := h.backend.UpdateInstanceConfig(r.Context(), name, next, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateInstanceConfig(r.Context(), name, next, version); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -112,11 +112,11 @@ func (h handlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("name")
 	// The editor always carries the token; a request without one would write
 	// unconditionally, defeating the conflict protection.
-	if r.Form.Get("version") == "" {
-		h.fail(w, r, fmt.Errorf("missing config version token: %w", backend.ErrInvalid))
+	version, ok := h.requireVersion(w, r, "config")
+	if !ok {
 		return
 	}
-	if err := h.backend.UpdateInstanceConfig(r.Context(), name, zipConfigPairs(r.Form["key"], r.Form["value"]), r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateInstanceConfig(r.Context(), name, zipConfigPairs(r.Form["key"], r.Form["value"]), version); err != nil {
 		h.fail(w, r, err)
 		return
 	}
@@ -162,8 +162,8 @@ func (h handlers) updateDevice(w http.ResponseWriter, r *http.Request) {
 	device := r.PathValue("device")
 	// The edit form always carries the token; a request without one would
 	// write unconditionally, defeating the conflict protection.
-	if r.Form.Get("version") == "" {
-		h.fail(w, r, fmt.Errorf("missing config version token: %w", backend.ErrInvalid))
+	version, ok := h.requireVersion(w, r, "config")
+	if !ok {
 		return
 	}
 	cfg, err := h.backend.GetInstanceConfig(r.Context(), name)
@@ -177,7 +177,7 @@ func (h handlers) updateDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next := mergeDeviceFields(current, r.Form)
-	if err := h.backend.UpdateDevice(r.Context(), name, device, next, r.Form.Get("version")); err != nil {
+	if err := h.backend.UpdateDevice(r.Context(), name, device, next, version); err != nil {
 		h.fail(w, r, err)
 		return
 	}
